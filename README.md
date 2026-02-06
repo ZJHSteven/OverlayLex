@@ -19,8 +19,8 @@ OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。
 - `src/packages/obr-room-core.json`  
   第一版房间页示例翻译包。
 
-- `src/tools/extract-visible-texts.js`  
-  HTML 候选文本抽取工具，用于快速整理待翻译词条。
+- `src/packages/overlaylex-domain-seeds.json`  
+  本地种子域名规则（用于脚本冷启动前的毫秒级门禁判断）。
 
 ## 最小可运行示例（本地流程）
 
@@ -63,24 +63,24 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 ## 当前运行策略
 
 1. 用户脚本 `@match *://*/*`，确保主页面和 iframe 页面都能触发。  
-2. 启动后先拉域名准入包，若当前域名不匹配则直接退出（最小性能损耗）。  
+2. 门禁策略：
+   - 本地有域名包缓存时：直接按缓存允许/拒绝，不发网络请求。
+   - 本地无缓存时：先过本地种子域名规则，命中后才拉一次域名包。
 3. 通过 manifest 只加载翻译包，域名包独立处理。  
 4. 翻译正文从 R2 读取；R2 异常时 Worker 才回退到内置最小包。  
 5. 顶层页面注入悬浮球；iframe 页面不重复注入控制台，但仍执行翻译逻辑。
+6. 内置实时采集器：自动去重、按域名分层、支持增量复制与 iframe 域名记录。
 
-## 快速抽词工作流（以 room 页面为例）
+## 运行期采集工作流（推荐）
 
-1. 从浏览器保存页面 HTML 到本地（你已放在 `html/owlbear.rodeo/room/.html`）。  
-2. 执行抽词命令：
-
-```bash
-node src/tools/extract-visible-texts.js html/owlbear.rodeo/room/.html
-```
-
-3. 得到 `src/packages/room-candidates.json`，其中 `translations` 的 value 为空字符串。  
-4. 你把该 JSON（或其中部分词条）发给我，我按你要的术语体系翻译。  
-5. 翻译后将结果并入正式包（如 `src/packages/obr-room-core.json`）。  
-6. 更新后端包版本号，再在页面里点击“检查更新”完成热更新。
+1. 在目标页面正常操作（点击菜单、悬浮提示、打开插件 iframe）。  
+2. 打开悬浮球面板，在“自动采集器”里使用：
+   - `复制本域增量`：仅复制当前域名下“未导出过”的新词条。
+   - `复制本域全量`：复制当前域名下所有已采集词条。
+   - `复制 iframe 域名`：复制当前页面观察到的 iframe 域名列表。
+3. 复制结果直接粘贴给我翻译。  
+4. 翻译后并入正式包（如 `src/packages/obr-room-core.json`）。  
+5. 更新后端包版本号，再在页面里点击“检查更新”完成热更新。
 
 ## 当前实现的取舍
 

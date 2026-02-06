@@ -27,3 +27,7 @@
   - 更新 `.gitignore`：忽略 `src/worker/node_modules/` 与 `src/worker/.wrangler/`。
   - 云端部署：Worker `overlaylex-demo-api` 已发布到 `https://overlaylex-demo-api.zhangjiahe0830.workers.dev`，R2 桶 `overlaylex-packages-bfdcb419` 已绑定并上传两个包对象。
   - 远程验证：`/health`、`/manifest`、`/packages`、`/packages/obr-room-core.json`、`/packages/overlaylex-domain-allowlist.json`、`/domain-package.json` 均可返回有效数据。
+  - 更新 `src/userscript/overlaylex.user.js`：新增本地种子域名冷启动门禁、缓存优先拒绝策略、运行期自动采集器（按域名分层、跨会话去重、增量复制、iframe 域名记录）。
+  - 新增 `src/packages/overlaylex-domain-seeds.json`：仓库内维护种子域名规则说明。
+  - 删除 `src/tools/extract-visible-texts.js`：废弃静态 HTML 抽词流程，改为用户脚本实时采集。
+  - 更新 `README.md`：抽词流程改为“运行期自动采集器”使用说明。

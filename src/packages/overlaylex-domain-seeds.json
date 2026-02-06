@@ -1,0 +1,29 @@
+{
+  "id": "overlaylex-domain-seeds",
+  "name": "OverlayLex 本地种子域名",
+  "kind": "domain-seeds",
+  "version": "0.1.0",
+  "rules": [
+    {
+      "type": "exact",
+      "value": "owlbear.rodeo",
+      "comment": "OBR 主站"
+    },
+    {
+      "type": "exact",
+      "value": "www.owlbear.rodeo",
+      "comment": "OBR 主站 www"
+    },
+    {
+      "type": "suffix",
+      "value": ".owlbear.rodeo",
+      "comment": "OBR 子域名"
+    },
+    {
+      "type": "suffix",
+      "value": ".owlbear.app",
+      "comment": "OBR 生态域名"
+    }
+  ],
+  "note": "该文件用于仓库内维护种子规则；用户脚本内置同款规则用于毫秒级门禁，不依赖网络。"
+}

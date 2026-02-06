@@ -34,7 +34,20 @@
     USER_SWITCHES: "overlaylex:user-switches:v2",
     UI_STATE: "overlaylex:ui-state:v2",
     DOMAIN_PACKAGE_CACHE: "overlaylex:domain-package-cache:v1",
+    COLLECTOR_STORE: "overlaylex:collector-store:v1",
   };
+  /**
+   * 种子域名规则（硬编码最小集合）：
+   * - 目标：在“绝大多数非目标网页”里，几毫秒内直接退出且不发任何网络请求。
+   * - 说明：只有命中种子规则，脚本才会继续执行域名包判断与后续流程。
+   */
+  const SEED_DOMAIN_RULES = [
+    { type: "exact", value: "owlbear.rodeo" },
+    { type: "exact", value: "www.owlbear.rodeo" },
+    { type: "suffix", value: ".owlbear.rodeo" },
+    { type: "suffix", value: ".owlbear.app" },
+  ];
+  const COLLECTOR_MESSAGE_TYPE = "overlaylex:collector:v1";
   const CONFIG = {
     /**
      * 这里会在部署后替换成真实 worker URL。
@@ -103,15 +116,18 @@
     domainPackage: safeLocalStorageGet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, null),
     packageCache: safeLocalStorageGet(STORAGE_KEYS.PACKAGE_CACHE, {}),
     userSwitches: safeLocalStorageGet(STORAGE_KEYS.USER_SWITCHES, {}),
+    collectorStore: safeLocalStorageGet(STORAGE_KEYS.COLLECTOR_STORE, null),
     translationMap: new Map(),
     observer: null,
     isApplyingTranslation: false,
     iframeObserverMap: new WeakMap(),
+    collectorPersistTimerId: null,
     ui: {
       floatingBall: null,
       panel: null,
       packageListRoot: null,
       statusText: null,
+      collectorStatusText: null,
     },
   };
 
@@ -290,26 +306,425 @@
     return rules.some((rule) => isHostMatchedByRule(hostname, rule));
   }
 
+  function isHostMatchedBySeed(hostname) {
+    return SEED_DOMAIN_RULES.some((rule) => isHostMatchedByRule(hostname, rule));
+  }
+
   async function ensureCurrentHostAllowed() {
     const hostname = window.location.hostname.toLowerCase();
 
-    // 先用缓存快速判断，减少每次页面打开都阻塞网络。
-    if (state.domainPackage && isHostAllowedByDomainPackage(hostname, state.domainPackage)) {
-      return true;
+    // 缓存存在时，无论命中与否都以缓存为准，避免非目标站点发网络请求。
+    if (state.domainPackage) {
+      return isHostAllowedByDomainPackage(hostname, state.domainPackage);
     }
 
-    // 缓存命不中，再请求最新域名包。
+    // 仅在“缓存缺失”时拉取一次域名包（冷启动兜底）。
     try {
       const remoteDomainPackage = await fetchDomainPackageByBestUrl();
       setCachedDomainPackage(remoteDomainPackage);
       return isHostAllowedByDomainPackage(hostname, remoteDomainPackage);
     } catch (error) {
-      Logger.warn("域名包拉取失败，回退到缓存判断。", error);
-      // 网络失败时，如果缓存存在就按缓存兜底，否则 fail-close。
-      if (state.domainPackage) {
-        return isHostAllowedByDomainPackage(hostname, state.domainPackage);
-      }
+      Logger.warn("域名包冷启动拉取失败，当前页面按不放行处理。", error);
       return false;
+    }
+  }
+
+  // ------------------------------
+  // 自动采集器（按域名分层、跨会话去重、增量复制）
+  // ------------------------------
+  function createEmptyCollectorStore() {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      byHost: {},
+    };
+  }
+
+  function getCollectorStore() {
+    if (!state.collectorStore || typeof state.collectorStore !== "object") {
+      state.collectorStore = createEmptyCollectorStore();
+    }
+    if (state.collectorStore.version !== 1 || typeof state.collectorStore.byHost !== "object") {
+      state.collectorStore = createEmptyCollectorStore();
+    }
+    return state.collectorStore;
+  }
+
+  function ensureCollectorHostBucket(hostname) {
+    const store = getCollectorStore();
+    if (!store.byHost[hostname]) {
+      store.byHost[hostname] = {
+        texts: {},
+        exportedTexts: {},
+        iframeHosts: {},
+        lastUpdatedAt: new Date().toISOString(),
+      };
+    }
+    return store.byHost[hostname];
+  }
+
+  function scheduleCollectorPersist() {
+    if (state.collectorPersistTimerId !== null) {
+      return;
+    }
+    state.collectorPersistTimerId = window.setTimeout(() => {
+      state.collectorPersistTimerId = null;
+      const store = getCollectorStore();
+      store.updatedAt = new Date().toISOString();
+      safeLocalStorageSet(STORAGE_KEYS.COLLECTOR_STORE, store);
+      refreshCollectorStatus();
+    }, 120);
+  }
+
+  function shouldCollectTextCandidate(text) {
+    const normalized = normalizeText(text);
+    if (!normalized || normalized.length < 2) {
+      return false;
+    }
+    // 只采集含英文字母的文本，减少无关噪声。
+    if (!/[A-Za-z]/.test(normalized)) {
+      return false;
+    }
+    // 过滤过长 URL/代码片段。
+    if (/^https?:\/\//i.test(normalized)) {
+      return false;
+    }
+    return true;
+  }
+
+  function reportCollectorCandidateToTop(payload) {
+    if (isTopWindow) {
+      return;
+    }
+    try {
+      window.top.postMessage(
+        {
+          __overlaylex: COLLECTOR_MESSAGE_TYPE,
+          ...payload,
+        },
+        "*"
+      );
+    } catch (error) {
+      // 某些嵌套上下文可能限制 top 访问，失败时忽略即可。
+    }
+  }
+
+  function collectTextCandidate(rawText, sourceType = "text", hostOverride = null) {
+    if (!shouldCollectTextCandidate(rawText)) {
+      return false;
+    }
+    const normalized = normalizeText(rawText);
+    const host = (hostOverride || window.location.hostname || "").toLowerCase();
+    if (!host) {
+      return false;
+    }
+
+    const bucket = ensureCollectorHostBucket(host);
+    const existing = bucket.texts[normalized];
+    const now = new Date().toISOString();
+    const isNew = !existing;
+
+    if (!existing) {
+      bucket.texts[normalized] = {
+        firstSeenAt: now,
+        lastSeenAt: now,
+        count: 1,
+        sources: { [sourceType]: true },
+      };
+    } else {
+      existing.lastSeenAt = now;
+      existing.count += 1;
+      existing.sources[sourceType] = true;
+    }
+    bucket.lastUpdatedAt = now;
+    scheduleCollectorPersist();
+
+    // iframe 页面把新增候选上报给顶层，便于统一导出。
+    if (isNew) {
+      reportCollectorCandidateToTop({
+        event: "candidate",
+        host,
+        text: normalized,
+        sourceType,
+        pageUrl: window.location.href,
+      });
+    }
+    return isNew;
+  }
+
+  function collectIframeHost(iframeHost, ownerHost = window.location.hostname.toLowerCase()) {
+    const host = String(iframeHost || "").toLowerCase().trim();
+    if (!host) {
+      return;
+    }
+    const bucket = ensureCollectorHostBucket(ownerHost);
+    const now = new Date().toISOString();
+    const existing = bucket.iframeHosts[host];
+    if (!existing) {
+      bucket.iframeHosts[host] = { firstSeenAt: now, lastSeenAt: now, count: 1 };
+    } else {
+      existing.lastSeenAt = now;
+      existing.count += 1;
+    }
+    bucket.lastUpdatedAt = now;
+    scheduleCollectorPersist();
+  }
+
+  function collectIframeHostFromElement(iframeElement) {
+    if (!(iframeElement instanceof HTMLIFrameElement)) {
+      return;
+    }
+    const src = iframeElement.getAttribute("src") || "";
+    if (src) {
+      try {
+        const parsed = new URL(src, window.location.href);
+        if (parsed.hostname) {
+          collectIframeHost(parsed.hostname);
+        }
+      } catch (error) {
+        // 非法 src 时忽略。
+      }
+    }
+    try {
+      const doc = iframeElement.contentDocument;
+      const frameHost = doc?.location?.hostname;
+      if (frameHost) {
+        collectIframeHost(frameHost);
+      }
+    } catch (error) {
+      // 跨域 iframe 读取 location 会抛异常，忽略即可。
+    }
+  }
+
+  function setupCollectorMessageBridge() {
+    if (!isTopWindow) {
+      return;
+    }
+    window.addEventListener("message", (event) => {
+      const data = event.data;
+      if (!data || typeof data !== "object") {
+        return;
+      }
+      if (data.__overlaylex !== COLLECTOR_MESSAGE_TYPE) {
+        return;
+      }
+
+      if (data.event === "candidate" && typeof data.text === "string" && typeof data.host === "string") {
+        collectTextCandidate(data.text, data.sourceType || "text", data.host);
+        return;
+      }
+      if (data.event === "iframe-host" && typeof data.host === "string") {
+        collectIframeHost(data.host, window.location.hostname.toLowerCase());
+      }
+    });
+  }
+
+  function collectCandidatesFromSubtree(rootNode) {
+    if (!rootNode) {
+      return 0;
+    }
+
+    const ownerDocument = rootNode.ownerDocument || document;
+    const ownerWindow = ownerDocument.defaultView || window;
+    const nodeConst = ownerWindow.Node;
+    const nodeFilterConst = ownerWindow.NodeFilter;
+
+    let count = 0;
+    if (rootNode.nodeType === nodeConst.TEXT_NODE) {
+      const text = rootNode.nodeValue || "";
+      if (collectTextCandidate(text, "text")) {
+        count += 1;
+      }
+      return count;
+    }
+
+    if (rootNode.nodeType === nodeConst.ELEMENT_NODE) {
+      const element = rootNode;
+      const placeholder = element.getAttribute?.("placeholder");
+      if (placeholder && collectTextCandidate(placeholder, "placeholder")) {
+        count += 1;
+      }
+      const title = element.getAttribute?.("title");
+      if (title && collectTextCandidate(title, "title")) {
+        count += 1;
+      }
+      if (element.tagName === "IFRAME") {
+        collectIframeHostFromElement(element);
+      }
+    }
+
+    const walker = ownerDocument.createTreeWalker(
+      rootNode,
+      nodeFilterConst.SHOW_TEXT | nodeFilterConst.SHOW_ELEMENT,
+      null
+    );
+
+    let current = walker.currentNode;
+    while (current) {
+      if (current.nodeType === nodeConst.TEXT_NODE) {
+        if (collectTextCandidate(current.nodeValue || "", "text")) {
+          count += 1;
+        }
+      } else if (current.nodeType === nodeConst.ELEMENT_NODE) {
+        const placeholder = current.getAttribute?.("placeholder");
+        if (placeholder && collectTextCandidate(placeholder, "placeholder")) {
+          count += 1;
+        }
+        const title = current.getAttribute?.("title");
+        if (title && collectTextCandidate(title, "title")) {
+          count += 1;
+        }
+        if (current.tagName === "IFRAME") {
+          collectIframeHostFromElement(current);
+        }
+      }
+      current = walker.nextNode();
+    }
+    return count;
+  }
+
+  async function copyTextWithFallback(text) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (error) {
+      // 浏览器权限限制时回退到 execCommand。
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-99999px";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const success = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return success;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function buildCollectorExportPayload(options) {
+    const { host, incremental } = options;
+    const bucket = ensureCollectorHostBucket(host);
+    const allTexts = Object.keys(bucket.texts);
+    const exportTexts = incremental
+      ? allTexts.filter((text) => !bucket.exportedTexts[text])
+      : allTexts;
+
+    const translations = {};
+    exportTexts.sort((a, b) => a.localeCompare(b, "en")).forEach((text) => {
+      translations[text] = "";
+    });
+
+    return {
+      id: `collector-${host}`,
+      name: `自动采集候选词条-${host}`,
+      host,
+      exportedAt: new Date().toISOString(),
+      mode: incremental ? "incremental" : "full",
+      totalTextsInHost: allTexts.length,
+      exportedTextsCount: exportTexts.length,
+      iframeHosts: Object.keys(bucket.iframeHosts).sort(),
+      translations,
+    };
+  }
+
+  async function copyCollectorPayload(options) {
+    const host = window.location.hostname.toLowerCase();
+    const payload = buildCollectorExportPayload({
+      host,
+      incremental: Boolean(options.incremental),
+    });
+
+    const serialized = JSON.stringify(payload, null, 2);
+    const copied = await copyTextWithFallback(serialized);
+    if (!copied) {
+      setCollectorStatus("复制失败：请检查浏览器剪贴板权限。");
+      return;
+    }
+
+    if (options.incremental) {
+      const bucket = ensureCollectorHostBucket(host);
+      for (const text of Object.keys(payload.translations)) {
+        bucket.exportedTexts[text] = true;
+      }
+      scheduleCollectorPersist();
+    }
+
+    setCollectorStatus(
+      `复制完成：${options.incremental ? "本域增量" : "本域全量"} ${payload.exportedTextsCount} 条。`
+    );
+  }
+
+  async function copyCurrentHostIframeDomains() {
+    const host = window.location.hostname.toLowerCase();
+    const bucket = ensureCollectorHostBucket(host);
+    const payload = {
+      host,
+      exportedAt: new Date().toISOString(),
+      iframeHosts: Object.keys(bucket.iframeHosts).sort(),
+    };
+    const copied = await copyTextWithFallback(JSON.stringify(payload, null, 2));
+    if (!copied) {
+      setCollectorStatus("复制 iframe 域名失败：请检查剪贴板权限。");
+      return;
+    }
+    setCollectorStatus(`复制 iframe 域名完成，共 ${payload.iframeHosts.length} 个。`);
+  }
+
+  function setCollectorStatus(text) {
+    if (state.ui.collectorStatusText) {
+      state.ui.collectorStatusText.textContent = text;
+    }
+  }
+
+  function refreshCollectorStatus() {
+    const host = window.location.hostname.toLowerCase();
+    const bucket = ensureCollectorHostBucket(host);
+    const total = Object.keys(bucket.texts).length;
+    const pending = Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
+    const iframeCount = Object.keys(bucket.iframeHosts).length;
+    setCollectorStatus(`采集统计：总计 ${total}，未导出 ${pending}，iframe 域名 ${iframeCount}。`);
+  }
+
+  function setupCollectorActivityHooks() {
+    // 通过交互事件补采集短暂 UI（菜单、tooltip、hover 面板等）。
+    const eventNames = ["click", "mouseenter", "focusin"];
+    let timerId = null;
+    let pendingTarget = null;
+
+    function flush() {
+      timerId = null;
+      if (pendingTarget) {
+        collectCandidatesFromSubtree(pendingTarget);
+      }
+      collectCandidatesFromSubtree(document.body);
+      pendingTarget = null;
+    }
+
+    function schedule(target) {
+      pendingTarget = target || pendingTarget;
+      if (timerId !== null) {
+        return;
+      }
+      // 留一点延迟，等组件完成渲染后再采集。
+      timerId = window.setTimeout(flush, 90);
+    }
+
+    for (const eventName of eventNames) {
+      document.addEventListener(
+        eventName,
+        (event) => {
+          const target = event.target && event.target.nodeType === Node.ELEMENT_NODE ? event.target : document.body;
+          schedule(target);
+        },
+        true
+      );
     }
   }
 
@@ -358,6 +773,7 @@
       return false;
     }
     const original = textNode.nodeValue;
+    collectTextCandidate(original, "text");
     const translated = translateByMap(original);
     if (!translated || translated === original) {
       return false;
@@ -374,6 +790,7 @@
       if (!original) {
         continue;
       }
+      collectTextCandidate(original, attrName);
       const translated = translateByMap(original);
       if (!translated || translated === original) {
         continue;
@@ -447,6 +864,7 @@
     queueMicrotask(() => {
       try {
         let changedCount = 0;
+        collectCandidatesFromSubtree(document.body);
         changedCount += translateSubtree(document.body);
         changedCount += translateSameOriginIframes();
         setStatus(`重注入完成，替换 ${changedCount} 处文本。`);
@@ -482,14 +900,17 @@
           let frameChangedCount = 0;
           for (const mutation of mutations) {
             if (mutation.type === "characterData" && mutation.target) {
+              collectCandidatesFromSubtree(mutation.target);
               frameChangedCount += translateSubtree(mutation.target);
             }
             if (mutation.type === "childList") {
               for (const node of mutation.addedNodes) {
+                collectCandidatesFromSubtree(node);
                 frameChangedCount += translateSubtree(node);
               }
             }
             if (mutation.type === "attributes" && mutation.target) {
+              collectCandidatesFromSubtree(mutation.target);
               frameChangedCount += translateSubtree(mutation.target);
             }
           }
@@ -519,11 +940,13 @@
     let changedCount = 0;
     const iframes = document.querySelectorAll("iframe");
     for (const iframeElement of iframes) {
+      collectIframeHostFromElement(iframeElement);
       try {
         const frameDoc = iframeElement.contentDocument;
         if (!frameDoc || !frameDoc.body) {
           continue;
         }
+        collectCandidatesFromSubtree(frameDoc.body);
         changedCount += translateSubtree(frameDoc.body);
         observeSingleIframe(iframeElement);
       } catch (error) {
@@ -550,12 +973,17 @@
       let totalChanged = 0;
 
       for (const node of pendingNodes) {
+        collectCandidatesFromSubtree(node);
         totalChanged += translateSubtree(node);
         if (node instanceof HTMLIFrameElement) {
+          collectIframeHostFromElement(node);
           observeSingleIframe(node);
         } else if (node?.nodeType === Node.ELEMENT_NODE) {
           const nestedIframes = node.querySelectorAll?.("iframe") || [];
-          nestedIframes.forEach((frame) => observeSingleIframe(frame));
+          nestedIframes.forEach((frame) => {
+            collectIframeHostFromElement(frame);
+            observeSingleIframe(frame);
+          });
         }
       }
       pendingNodes.clear();
@@ -675,6 +1103,11 @@
         margin-top: 8px;
         padding-top: 8px;
       }
+      .overlaylex-collector {
+        border-top: 1px dashed #d0d7de;
+        margin-top: 8px;
+        padding-top: 8px;
+      }
       .overlaylex-package-item {
         display: flex;
         align-items: center;
@@ -785,6 +1218,17 @@
         <div style="margin-bottom:6px;font-weight:600;">翻译包开关</div>
         <div id="overlaylex-package-list"></div>
       </div>
+      <div class="overlaylex-collector">
+        <div style="margin-bottom:6px;font-weight:600;">自动采集器</div>
+        <div class="overlaylex-row">
+          <button id="overlaylex-copy-increment-btn">复制本域增量</button>
+          <button id="overlaylex-copy-full-btn">复制本域全量</button>
+        </div>
+        <div class="overlaylex-row">
+          <button id="overlaylex-copy-iframe-hosts-btn">复制 iframe 域名</button>
+        </div>
+        <div class="overlaylex-status" id="overlaylex-collector-status">采集器初始化中...</div>
+      </div>
       <div class="overlaylex-status" id="overlaylex-status">初始化中...</div>
     `;
 
@@ -795,13 +1239,24 @@
     state.ui.panel = panel;
     state.ui.packageListRoot = panel.querySelector("#overlaylex-package-list");
     state.ui.statusText = panel.querySelector("#overlaylex-status");
+    state.ui.collectorStatusText = panel.querySelector("#overlaylex-collector-status");
     renderPackageList();
+    refreshCollectorStatus();
 
     panel.querySelector("#overlaylex-reapply-btn")?.addEventListener("click", () => {
       scheduleFullReapply();
     });
     panel.querySelector("#overlaylex-update-btn")?.addEventListener("click", async () => {
       await handleManualUpdateCheck();
+    });
+    panel.querySelector("#overlaylex-copy-increment-btn")?.addEventListener("click", async () => {
+      await copyCollectorPayload({ incremental: true });
+    });
+    panel.querySelector("#overlaylex-copy-full-btn")?.addEventListener("click", async () => {
+      await copyCollectorPayload({ incremental: false });
+    });
+    panel.querySelector("#overlaylex-copy-iframe-hosts-btn")?.addEventListener("click", async () => {
+      await copyCurrentHostIframeDomains();
     });
     panel.querySelector("#overlaylex-close-btn")?.addEventListener("click", () => {
       panel.hidden = true;
@@ -910,21 +1365,45 @@
       return;
     }
 
-    // 第一步：先拿到 manifest（缓存优先），用于定位域名包 URL。
-    await bootManifestFromCacheFirst();
+    const hostname = window.location.hostname.toLowerCase();
+    // 第一步：域名包门禁。
+    // 策略：
+    // - 若本地有域名包缓存：直接以缓存为准（允许/拒绝都立即决策，不发网络请求）。
+    // - 若本地无缓存：先走种子域名快速门禁，命中后才拉一次远端域名包（冷启动）。
+    if (state.domainPackage) {
+      const allowedByCache = isHostAllowedByDomainPackage(hostname, state.domainPackage);
+      if (!allowedByCache) {
+        return;
+      }
+    } else {
+      if (!isHostMatchedBySeed(hostname)) {
+        return;
+      }
+      const allowedByRemote = await ensureCurrentHostAllowed();
+      if (!allowedByRemote) {
+        Logger.info(`当前域名不在 OverlayLex 域名包白名单内，已退出。hostname=${location.hostname}`);
+        return;
+      }
+    }
 
-    // 第二步：域名门禁。未命中白名单则立刻结束，避免全站额外开销。
-    const allowed = await ensureCurrentHostAllowed();
-    if (!allowed) {
-      Logger.info(`当前域名不在 OverlayLex 域名包白名单内，已退出。hostname=${location.hostname}`);
-      return;
+    // iframe 页面启动后向顶层上报自身域名，便于主页面统一记录插件来源域名。
+    if (!isTopWindow) {
+      reportCollectorCandidateToTop({
+        event: "iframe-host",
+        host: hostname,
+        pageUrl: window.location.href,
+      });
     }
 
     // 第三步：进入正常翻译链路。
+    setupCollectorMessageBridge();
+    setupCollectorActivityHooks();
+    await bootManifestFromCacheFirst();
     await reloadEnabledPackages();
     createFloatingUi();
     setupMutationObserver();
     scheduleFullReapply();
+    refreshCollectorStatus();
     setStatus("OverlayLex 已启动。");
 
     // 后台异步更新，不阻塞首屏。
