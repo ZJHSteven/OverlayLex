@@ -537,6 +537,21 @@
     schedulePersistStore();
   }
 
+  function clearCurrentHostData() {
+    const host = window.location.hostname.toLowerCase();
+    if (!state.store.hosts[host]) {
+      return false;
+    }
+    delete state.store.hosts[host];
+    schedulePersistStore();
+    return true;
+  }
+
+  function clearAllCollectorData() {
+    state.store = createEmptyStore();
+    schedulePersistStore();
+  }
+
   function setStatusText(text) {
     if (state.ui.status) {
       state.ui.status.textContent = text;
@@ -641,6 +656,10 @@
       <div class="${UI_ID_PREFIX}-row">
         <button id="${UI_ID_PREFIX}-copy-iframe-hosts">复制本域 iframe 域名</button>
         <button id="${UI_ID_PREFIX}-reset-exported">重置本域增量游标</button>
+      </div>
+      <div class="${UI_ID_PREFIX}-row">
+        <button id="${UI_ID_PREFIX}-clear-current-host">清空当前域数据</button>
+        <button id="${UI_ID_PREFIX}-clear-all-hosts">清空全部采集数据</button>
       </div>
       <div class="${UI_ID_PREFIX}-row">
         <button id="${UI_ID_PREFIX}-close">关闭</button>
@@ -761,6 +780,32 @@
       bucket.exportedTexts = {};
       schedulePersistStore();
       setStatusText("已重置本域增量游标。");
+    });
+
+    panel.querySelector(`#${UI_ID_PREFIX}-clear-current-host`)?.addEventListener("click", () => {
+      const host = window.location.hostname.toLowerCase();
+      const confirmed = window.confirm(`确认清空当前域名（${host}）的全部采集数据吗？`);
+      if (!confirmed) {
+        return;
+      }
+      const removed = clearCurrentHostData();
+      refreshStatusText();
+      if (!removed) {
+        setStatusText(`当前域名（${host}）没有可清空的数据。`);
+        return;
+      }
+      setStatusText(`已清空当前域名（${host}）的采集数据。`);
+    });
+
+    panel.querySelector(`#${UI_ID_PREFIX}-clear-all-hosts`)?.addEventListener("click", () => {
+      const hostCount = Object.keys(state.store.hosts).length;
+      const confirmed = window.confirm(`确认清空全部采集数据吗？当前包含 ${hostCount} 个域名。`);
+      if (!confirmed) {
+        return;
+      }
+      clearAllCollectorData();
+      refreshStatusText();
+      setStatusText("已清空全部采集数据。");
     });
 
     refreshStatusText();
