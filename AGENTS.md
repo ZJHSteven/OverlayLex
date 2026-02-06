@@ -38,3 +38,4 @@
   - 更新 `src/userscript/overlaylex.collector.user.js`：采集仅保留“纯英文向”词条（过滤中文/无字母噪声），并排除采集器自身 UI 文案，修复计数自循环增长问题。
   - 更新 `src/userscript/overlaylex.collector.user.js`：复制导出改为简洁行格式 `"英文",""`，新增“一键复制全部合并”按钮（跨域名去重合并导出）。
   - 更新 `src/userscript/overlaylex.collector.user.js`：新增“清空当前域数据 / 清空全部采集数据”按钮，并加入二次确认，便于快速清理历史缓存。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：修复误采集脚本/CSS 代码文本（过滤 script/style 等节点及代码特征），并将复制格式改为“按域名分组 + 词条逗号串”（`"A","B","C"`）；新增域名下拉与“复制选定域名”按钮。

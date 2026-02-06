@@ -34,6 +34,7 @@
   const OBSERVER_DEBOUNCE_MS = 80;
   const ACTIVITY_CAPTURE_DELAY_MS = 90;
   const CJK_REGEX = /[\u3400-\u9fff]/;
+  const IGNORED_TEXT_PARENT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "TEMPLATE"]);
 
   // ------------------------------
   // 日志工具
@@ -117,6 +118,7 @@
       ball: null,
       panel: null,
       status: null,
+      hostSelect: null,
     },
   };
 
@@ -164,6 +166,26 @@
       return false;
     }
     if (/^https?:\/\//i.test(normalized)) {
+      return false;
+    }
+    // 过滤明显的脚本/CSS 片段，避免把运行时代码误当成翻译词条。
+    if (
+      /[{};]/.test(normalized) &&
+      /(function\s*\(|=>|var\s+|let\s+|const\s+|document\.|window\.|createElement|appendChild|scrollbar-width|@media)/i.test(
+        normalized
+      )
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  function canCollectFromTextNode(textNode) {
+    const parent = textNode?.parentElement;
+    if (!parent) {
+      return false;
+    }
+    if (IGNORED_TEXT_PARENT_TAGS.has(parent.tagName)) {
       return false;
     }
     return true;
@@ -322,6 +344,9 @@
       if (isNodeInsideCollectorUI(rootNode)) {
         return;
       }
+      if (!canCollectFromTextNode(rootNode)) {
+        return;
+      }
       collectTextCandidate(rootNode.nodeValue || "", "text");
       return;
     }
@@ -351,6 +376,10 @@
     while (current) {
       if (current.nodeType === NodeConst.TEXT_NODE) {
         if (isNodeInsideCollectorUI(current)) {
+          current = walker.nextNode();
+          continue;
+        }
+        if (!canCollectFromTextNode(current)) {
           current = walker.nextNode();
           continue;
         }
@@ -501,8 +530,8 @@
 
   function formatTextLine(text) {
     const escaped = String(text).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    // 按你的要求：只输出简洁的 “引号,引号” 结构，不带完整 JSON 外壳。
-    return `"${escaped}",""`;
+    // 按你的要求：只保留英文词条本身，不再输出空翻译占位。
+    return `"${escaped}"`;
   }
 
   function collectHostTexts(host, incremental) {
@@ -525,6 +554,26 @@
     }
     const merged = [...mergedSet].sort((a, b) => a.localeCompare(b, "en"));
     return { merged, selectedByHost };
+  }
+
+  function buildHostScopedExport(hosts, incremental) {
+    const sortedHosts = [...hosts].sort((a, b) => a.localeCompare(b, "en"));
+    const sectionList = [];
+    const selectedByHost = {};
+    for (const host of sortedHosts) {
+      const texts = collectHostTexts(host, incremental);
+      selectedByHost[host] = texts;
+      const joinedTexts = texts.map((text) => formatTextLine(text)).join(",");
+      sectionList.push(`${host}:\n${joinedTexts}`);
+    }
+    return {
+      serialized: sectionList.join("\n\n"),
+      selectedByHost,
+    };
+  }
+
+  function getSortedHostList() {
+    return Object.keys(state.store.hosts).sort((a, b) => a.localeCompare(b, "en"));
   }
 
   function markExportedByHost(selectedByHost) {
@@ -568,6 +617,40 @@
     const pending = Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
     const iframeHosts = Object.keys(bucket.iframeHosts).length;
     setStatusText(`当前域名：总计 ${total}，未导出 ${pending}，iframe 域名 ${iframeHosts}。`);
+    refreshHostSelectorOptions();
+  }
+
+  function refreshHostSelectorOptions(preferredHost = null) {
+    const selector = state.ui.hostSelect;
+    if (!selector) {
+      return;
+    }
+
+    const currentValue = preferredHost || selector.value || window.location.hostname.toLowerCase();
+    const hosts = getSortedHostList();
+    selector.innerHTML = "";
+
+    if (hosts.length === 0) {
+      const emptyOption = document.createElement("option");
+      emptyOption.value = "";
+      emptyOption.textContent = "（暂无域名数据）";
+      selector.appendChild(emptyOption);
+      selector.value = "";
+      return;
+    }
+
+    for (const host of hosts) {
+      const option = document.createElement("option");
+      option.value = host;
+      option.textContent = host;
+      selector.appendChild(option);
+    }
+
+    if (hosts.includes(currentValue)) {
+      selector.value = currentValue;
+      return;
+    }
+    selector.value = hosts[0];
   }
 
   // ------------------------------
@@ -651,7 +734,11 @@
         <button id="${UI_ID_PREFIX}-copy-full">复制本域全量</button>
       </div>
       <div class="${UI_ID_PREFIX}-row">
-        <button id="${UI_ID_PREFIX}-copy-all-merged">一键复制全部合并</button>
+        <button id="${UI_ID_PREFIX}-copy-all-merged">一键复制全部域名</button>
+      </div>
+      <div class="${UI_ID_PREFIX}-row">
+        <select id="${UI_ID_PREFIX}-host-select" style="flex:1;border:1px solid #d0d7de;border-radius:8px;padding:6px;"></select>
+        <button id="${UI_ID_PREFIX}-copy-selected-host">复制选定域名</button>
       </div>
       <div class="${UI_ID_PREFIX}-row">
         <button id="${UI_ID_PREFIX}-copy-iframe-hosts">复制本域 iframe 域名</button>
@@ -672,6 +759,8 @@
     state.ui.ball = ball;
     state.ui.panel = panel;
     state.ui.status = panel.querySelector(`#${UI_ID_PREFIX}-status`);
+    state.ui.hostSelect = panel.querySelector(`#${UI_ID_PREFIX}-host-select`);
+    refreshHostSelectorOptions(window.location.hostname.toLowerCase());
 
     let lastPointerWasDrag = false;
     ball.addEventListener("click", () => {
@@ -726,36 +815,51 @@
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-increment`)?.addEventListener("click", () => {
       const host = window.location.hostname.toLowerCase();
-      const { merged, selectedByHost } = buildMergedTextsFromHosts([host], true);
-      const copied = copyToClipboard(merged.map((text) => formatTextLine(text)).join("\n"));
+      const { serialized, selectedByHost } = buildHostScopedExport([host], true);
+      const copied = copyToClipboard(serialized);
       if (!copied) {
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
       markExportedByHost(selectedByHost);
-      setStatusText(`复制本域增量成功：${merged.length} 条。`);
+      setStatusText(`复制本域增量成功：${selectedByHost[host]?.length || 0} 条。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-full`)?.addEventListener("click", () => {
       const host = window.location.hostname.toLowerCase();
-      const { merged } = buildMergedTextsFromHosts([host], false);
-      const copied = copyToClipboard(merged.map((text) => formatTextLine(text)).join("\n"));
+      const { serialized, selectedByHost } = buildHostScopedExport([host], false);
+      const copied = copyToClipboard(serialized);
       if (!copied) {
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
-      setStatusText(`复制本域全量成功：${merged.length} 条。`);
+      setStatusText(`复制本域全量成功：${selectedByHost[host]?.length || 0} 条。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-all-merged`)?.addEventListener("click", () => {
-      const allHosts = Object.keys(state.store.hosts);
-      const { merged } = buildMergedTextsFromHosts(allHosts, false);
-      const copied = copyToClipboard(merged.map((text) => formatTextLine(text)).join("\n"));
+      const allHosts = getSortedHostList();
+      const { serialized } = buildHostScopedExport(allHosts, false);
+      const copied = copyToClipboard(serialized);
       if (!copied) {
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
-      setStatusText(`一键复制全部合并成功：${merged.length} 条（跨 ${allHosts.length} 域名）。`);
+      setStatusText(`一键复制全部域名成功：跨 ${allHosts.length} 个域名。`);
+    });
+
+    panel.querySelector(`#${UI_ID_PREFIX}-copy-selected-host`)?.addEventListener("click", () => {
+      const selectedHost = state.ui.hostSelect?.value || "";
+      if (!selectedHost) {
+        setStatusText("没有可复制的域名数据。");
+        return;
+      }
+      const { serialized, selectedByHost } = buildHostScopedExport([selectedHost], false);
+      const copied = copyToClipboard(serialized);
+      if (!copied) {
+        setStatusText("复制失败：请检查剪贴板权限。");
+        return;
+      }
+      setStatusText(`复制选定域名成功：${selectedByHost[selectedHost]?.length || 0} 条。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-iframe-hosts`)?.addEventListener("click", () => {
