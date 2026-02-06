@@ -10,3 +10,4 @@
 ## 变更日志
 - 2026-02-06
   - 新增 `src/userscript/overlaylex.user.js`：实现 OverlayLex 用户脚本首版（缓存、包加载、增量翻译、悬浮面板、手动更新）。
+  - 新增 `src/worker/src/data.js`：实现 Worker 侧翻译包注册表与 manifest 生成函数。
