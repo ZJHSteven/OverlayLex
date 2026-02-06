@@ -20,3 +20,4 @@
   - 更新 `src/worker/src/data.js`：升级 manifest 为“翻译包 + 域名包”，并添加 R2 失败时内置回退包。
   - 更新 `src/worker/src/index.js`：新增 `/packages`、`/domain-package.json`，并改为优先从 R2 读取包正文。
   - 更新 `src/worker/wrangler.toml`：绑定 R2 桶 `PACKAGES_BUCKET`。
+  - 重写 `src/userscript/overlaylex.user.js`：实现全站 match、域名包门禁、iframe 补充翻译、顶层独立控制台与新版 manifest 适配。
