@@ -32,3 +32,4 @@
   - 删除 `src/tools/extract-visible-texts.js`：废弃静态 HTML 抽词流程，改为用户脚本实时采集。
   - 更新 `README.md`：抽词流程改为“运行期自动采集器”使用说明。
   - 回退 `src/userscript/overlaylex.user.js`：移除采集逻辑，恢复主脚本“仅负责翻译注入”的单一职责。
+  - 新增 `src/userscript/overlaylex.collector.user.js`：独立实时采集脚本（全站运行、按域名去重、增量复制、iframe 域名记录）。
