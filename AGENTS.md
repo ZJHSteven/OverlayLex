@@ -25,3 +25,5 @@
   - 更新 `README.md`：补充线上 API 地址、R2 桶信息、新增接口与运行策略说明。
   - 更新 `src/packages/obr-room-core.json`：纳入用户手动翻译修订（`Owlbear Rodeo -> 枭熊VTT`）。
   - 更新 `.gitignore`：忽略 `src/worker/node_modules/` 与 `src/worker/.wrangler/`。
+  - 云端部署：Worker `overlaylex-demo-api` 已发布到 `https://overlaylex-demo-api.zhangjiahe0830.workers.dev`，R2 桶 `overlaylex-packages-bfdcb419` 已绑定并上传两个包对象。
+  - 远程验证：`/health`、`/manifest`、`/packages`、`/packages/obr-room-core.json`、`/packages/overlaylex-domain-allowlist.json`、`/domain-package.json` 均可返回有效数据。
