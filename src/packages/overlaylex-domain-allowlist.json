@@ -1,0 +1,28 @@
+{
+  "id": "overlaylex-domain-allowlist",
+  "name": "OverlayLex 域名准入包",
+  "kind": "domain-allowlist",
+  "version": "0.1.0",
+  "rules": [
+    {
+      "type": "exact",
+      "value": "owlbear.rodeo",
+      "comment": "OBR 主域名"
+    },
+    {
+      "type": "exact",
+      "value": "www.owlbear.rodeo",
+      "comment": "OBR 主域名（www）"
+    },
+    {
+      "type": "suffix",
+      "value": ".owlbear.rodeo",
+      "comment": "OBR 相关子域名"
+    },
+    {
+      "type": "suffix",
+      "value": ".owlbear.app",
+      "comment": "OBR 生态域名"
+    }
+  ]
+}

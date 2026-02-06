@@ -16,3 +16,4 @@
   - 新增 `src/packages/obr-room-core.json`：提供房间页第一版示例翻译包。
   - 新增 `src/tools/extract-visible-texts.js`：提供 HTML 候选文本抽取工具，用于快速建词典。
   - 新增 `README.md`：补充最小可运行步骤、API 说明与抽词翻译工作流。
+  - 新增 `src/packages/overlaylex-domain-allowlist.json`：补充域名准入包，用于全站触发后的快速放行判断。
