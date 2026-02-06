@@ -31,3 +31,4 @@
   - 新增 `src/packages/overlaylex-domain-seeds.json`：仓库内维护种子域名规则说明。
   - 删除 `src/tools/extract-visible-texts.js`：废弃静态 HTML 抽词流程，改为用户脚本实时采集。
   - 更新 `README.md`：抽词流程改为“运行期自动采集器”使用说明。
+  - 回退 `src/userscript/overlaylex.user.js`：移除采集逻辑，恢复主脚本“仅负责翻译注入”的单一职责。
