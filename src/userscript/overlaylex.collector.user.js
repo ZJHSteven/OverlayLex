@@ -529,7 +529,7 @@
         background: #0e9f6e;
         color: #fff;
         font-weight: 700;
-        cursor: pointer;
+        cursor: move;
         box-shadow: 0 6px 18px rgba(0,0,0,.22);
       }
       #${UI_ID_PREFIX}-panel {
@@ -607,9 +607,51 @@
     state.ui.panel = panel;
     state.ui.status = panel.querySelector(`#${UI_ID_PREFIX}-status`);
 
+    let lastPointerWasDrag = false;
     ball.addEventListener("click", () => {
+      // 拖拽释放后会触发 click，这里要跳过一次，避免“拖一下就误打开面板”。
+      if (lastPointerWasDrag) {
+        lastPointerWasDrag = false;
+        return;
+      }
       panel.hidden = !panel.hidden;
       refreshStatusText();
+    });
+
+    // 悬浮球拖拽：支持拖到任意边缘，方便不遮挡页面内容。
+    let drag = null;
+    ball.addEventListener("pointerdown", (event) => {
+      const style = window.getComputedStyle(ball);
+      drag = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startTop: parseFloat(style.top || "170"),
+        startRight: parseFloat(style.right || "16"),
+        moved: false,
+      };
+      ball.setPointerCapture(event.pointerId);
+    });
+    ball.addEventListener("pointermove", (event) => {
+      if (!drag) {
+        return;
+      }
+      const dy = event.clientY - drag.startY;
+      const dx = event.clientX - drag.startX;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        drag.moved = true;
+      }
+      const nextTop = Math.max(4, Math.min(window.innerHeight - 48, drag.startTop + dy));
+      const nextRight = Math.max(4, Math.min(window.innerWidth - 48, drag.startRight - dx));
+      ball.style.top = `${nextTop}px`;
+      ball.style.right = `${nextRight}px`;
+    });
+    ball.addEventListener("pointerup", (event) => {
+      if (!drag) {
+        return;
+      }
+      lastPointerWasDrag = drag.moved;
+      ball.releasePointerCapture(event.pointerId);
+      drag = null;
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-close`)?.addEventListener("click", () => {
