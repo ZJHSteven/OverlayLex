@@ -1,0 +1,16 @@
+{
+  "id": "obr-room-core",
+  "name": "OBR 房间核心中文包",
+  "target": {
+    "host": "owlbear.rodeo",
+    "pathPrefix": "/room"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Owlbear Rodeo": "枭熊旅馆",
+    "You need to enable JavaScript to run this app.": "你需要启用 JavaScript 才能运行此应用。",
+    "Players": "玩家",
+    "Search": "搜索",
+    "5ft": "5英尺"
+  }
+}
