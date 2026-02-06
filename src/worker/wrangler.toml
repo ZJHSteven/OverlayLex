@@ -2,3 +2,7 @@ name = "overlaylex-demo-api"
 main = "src/index.js"
 compatibility_date = "2026-02-06"
 workers_dev = true
+
+[[r2_buckets]]
+binding = "PACKAGES_BUCKET"
+bucket_name = "overlaylex-packages-bfdcb419"

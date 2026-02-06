@@ -17,3 +17,6 @@
   - 新增 `src/tools/extract-visible-texts.js`：提供 HTML 候选文本抽取工具，用于快速建词典。
   - 新增 `README.md`：补充最小可运行步骤、API 说明与抽词翻译工作流。
   - 新增 `src/packages/overlaylex-domain-allowlist.json`：补充域名准入包，用于全站触发后的快速放行判断。
+  - 更新 `src/worker/src/data.js`：升级 manifest 为“翻译包 + 域名包”，并添加 R2 失败时内置回退包。
+  - 更新 `src/worker/src/index.js`：新增 `/packages`、`/domain-package.json`，并改为优先从 R2 读取包正文。
+  - 更新 `src/worker/wrangler.toml`：绑定 R2 桶 `PACKAGES_BUCKET`。
