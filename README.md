@@ -24,6 +24,21 @@ OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。
 - `src/packages/obr-room-core.json`  
   第一版房间页示例翻译包。
 
+- `src/packages/obr-www-owlbear-rodeo.json`  
+  OBR 主站（`www.owlbear.rodeo`）中文包。
+
+- `src/packages/obr-clash-battle-system-com.json`  
+  Clash 插件（`clash.battle-system.com`）中文包。
+
+- `src/packages/obr-smoke-battle-system-com.json`  
+  Smoke 插件（`smoke.battle-system.com`）中文包。
+
+- `src/packages/obr-outliner-owlbear-rodeo.json`  
+  Outliner 插件（`outliner.owlbear.rodeo`）中文包。
+
+- `src/packages/obr-owlbear-hp-tracker-pages-dev.json`  
+  HP Tracker 插件（`owlbear-hp-tracker.pages.dev`）中文包。
+
 - `src/packages/overlaylex-domain-seeds.json`  
   本地种子域名规则（用于脚本冷启动前的毫秒级门禁判断）。
 
@@ -61,6 +76,7 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 - 点击“检查更新”，确认状态提示成功。  
 - 点击“重新注入翻译”，观察文本替换。  
 - 在“翻译包开关”里勾选/取消，观察是否即时生效。
+- 同时验证“仅当前域名包生效”：切换到不同插件域名时，词条按域名包自动切换。
 
 ## API 说明
 

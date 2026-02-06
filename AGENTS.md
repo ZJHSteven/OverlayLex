@@ -39,3 +39,7 @@
   - 更新 `src/userscript/overlaylex.collector.user.js`：复制导出改为简洁行格式 `"英文",""`，新增“一键复制全部合并”按钮（跨域名去重合并导出）。
   - 更新 `src/userscript/overlaylex.collector.user.js`：新增“清空当前域数据 / 清空全部采集数据”按钮，并加入二次确认，便于快速清理历史缓存。
   - 更新 `src/userscript/overlaylex.collector.user.js`：修复误采集脚本/CSS 代码文本（过滤 script/style 等节点及代码特征），并将复制格式改为“按域名分组 + 词条逗号串”（`"A","B","C"`）；新增域名下拉与“复制选定域名”按钮。
+  - 新增 `src/packages/obr-www-owlbear-rodeo.json`、`src/packages/obr-clash-battle-system-com.json`、`src/packages/obr-smoke-battle-system-com.json`、`src/packages/obr-outliner-owlbear-rodeo.json`、`src/packages/obr-owlbear-hp-tracker-pages-dev.json`：将 `采集数据.csv` 的 5 个域名词条按域名拆包并批量翻译为中英映射。
+  - 更新 `src/userscript/overlaylex.user.js`：新增按包 `target.host/pathPrefix` 的命中判断，只加载当前页面命中的域名包，避免跨域包混载污染翻译结果。
+  - 更新 `src/packages/overlaylex-domain-allowlist.json`：扩充插件域名白名单（Battle-System、DDDice、AoE、HP Tracker、GitLab 插件域名），版本升至 `0.2.0`。
+  - 更新 `src/worker/src/data.js`：补充 5 个域名翻译包目录元信息，并同步域名准入包版本与回退规则为 `0.2.0`。

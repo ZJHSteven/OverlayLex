@@ -232,6 +232,9 @@
         if (!packageData || typeof packageData !== "object") {
           continue;
         }
+        if (!isPackageTargetMatched(packageData)) {
+          continue;
+        }
         const translations = packageData.translations || {};
         for (const [sourceText, targetText] of Object.entries(translations)) {
           if (typeof sourceText !== "string" || typeof targetText !== "string") {
@@ -245,6 +248,26 @@
     }
 
     state.translationMap = nextMap;
+  }
+
+  function isPackageTargetMatched(packageData) {
+    const target = packageData?.target;
+    if (!target || typeof target !== "object") {
+      return true;
+    }
+
+    const currentHost = window.location.hostname.toLowerCase();
+    const currentPath = window.location.pathname || "/";
+    const targetHost = String(target.host || "").toLowerCase().trim();
+    const targetPathPrefix = String(target.pathPrefix || "").trim();
+
+    if (targetHost && currentHost !== targetHost) {
+      return false;
+    }
+    if (targetPathPrefix && !currentPath.startsWith(targetPathPrefix)) {
+      return false;
+    }
+    return true;
   }
 
   // ------------------------------

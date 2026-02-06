@@ -2,7 +2,7 @@
   "id": "overlaylex-domain-allowlist",
   "name": "OverlayLex 域名准入包",
   "kind": "domain-allowlist",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "rules": [
     {
       "type": "exact",
@@ -23,6 +23,31 @@
       "type": "suffix",
       "value": ".owlbear.app",
       "comment": "OBR 生态域名"
+    },
+    {
+      "type": "suffix",
+      "value": ".battle-system.com",
+      "comment": "Battle-System 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "dddice.com",
+      "comment": "DDDice 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "aoe.owlbear.davidsev.co.uk",
+      "comment": "AoE 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "owlbear-hp-tracker.pages.dev",
+      "comment": "HP Tracker 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "resident-uhlig.gitlab.io",
+      "comment": "resident-uhlig 插件域名"
     }
   ]
 }
