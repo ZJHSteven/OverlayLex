@@ -21,3 +21,7 @@
   - 更新 `src/worker/src/index.js`：新增 `/packages`、`/domain-package.json`，并改为优先从 R2 读取包正文。
   - 更新 `src/worker/wrangler.toml`：绑定 R2 桶 `PACKAGES_BUCKET`。
   - 重写 `src/userscript/overlaylex.user.js`：实现全站 match、域名包门禁、iframe 补充翻译、顶层独立控制台与新版 manifest 适配。
+  - 更新 `src/userscript/overlaylex.user.js`：回填已部署 Worker 地址 `overlaylex-demo-api.zhangjiahe0830.workers.dev`。
+  - 更新 `README.md`：补充线上 API 地址、R2 桶信息、新增接口与运行策略说明。
+  - 更新 `src/packages/obr-room-core.json`：纳入用户手动翻译修订（`Owlbear Rodeo -> 枭熊VTT`）。
+  - 更新 `.gitignore`：忽略 `src/worker/node_modules/` 与 `src/worker/.wrangler/`。

@@ -1,2 +1,4 @@
 .vscode/
 html/
+src/worker/node_modules/
+src/worker/.wrangler/

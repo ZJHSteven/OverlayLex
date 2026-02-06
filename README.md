@@ -3,6 +3,11 @@
 OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。  
 当前版本实现了“主脚本 + 包化词典 + 更新 API + 增量翻译 + 悬浮控制台”的完整最小闭环。
 
+## 线上 API（已部署）
+
+- Worker 地址：`https://overlaylex-demo-api.zhangjiahe0830.workers.dev`
+- R2 桶：`overlaylex-packages-bfdcb419`
+
 ## 目录结构
 
 - `src/userscript/overlaylex.user.js`  
@@ -51,7 +56,17 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 
 - `GET /health`：健康检查。  
 - `GET /manifest`：返回所有翻译包版本与 URL。  
+- `GET /packages`：返回包目录元信息。  
 - `GET /packages/{id}.json`：返回指定翻译包正文。
+- `GET /domain-package.json`：返回域名准入包（调试用）。
+
+## 当前运行策略
+
+1. 用户脚本 `@match *://*/*`，确保主页面和 iframe 页面都能触发。  
+2. 启动后先拉域名准入包，若当前域名不匹配则直接退出（最小性能损耗）。  
+3. 通过 manifest 只加载翻译包，域名包独立处理。  
+4. 翻译正文从 R2 读取；R2 异常时 Worker 才回退到内置最小包。  
+5. 顶层页面注入悬浮球；iframe 页面不重复注入控制台，但仍执行翻译逻辑。
 
 ## 快速抽词工作流（以 room 页面为例）
 

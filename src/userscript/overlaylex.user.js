@@ -40,7 +40,7 @@
      * 这里会在部署后替换成真实 worker URL。
      * 你可以先手动改成你自己的 workers.dev 地址。
      */
-    apiBaseUrl: "https://overlaylex-demo-api.example.workers.dev",
+    apiBaseUrl: "https://overlaylex-demo-api.zhangjiahe0830.workers.dev",
     manifestPath: "/manifest",
     packagePathPrefix: "/packages/",
     domainPackagePath: "/domain-package.json",
