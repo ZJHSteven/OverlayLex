@@ -35,3 +35,5 @@
   - 新增 `src/userscript/overlaylex.collector.user.js`：独立实时采集脚本（全站运行、按域名去重、增量复制、iframe 域名记录）。
   - 更新 `README.md`：改为双脚本说明，明确“主翻译脚本”与“独立采集脚本”分离安装与使用流程。
   - 更新 `src/userscript/overlaylex.collector.user.js`：采集脚本悬浮球支持拖动，并避免拖拽后误触发点击开关面板。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：采集仅保留“纯英文向”词条（过滤中文/无字母噪声），并排除采集器自身 UI 文案，修复计数自循环增长问题。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：复制导出改为简洁行格式 `"英文",""`，新增“一键复制全部合并”按钮（跨域名去重合并导出）。

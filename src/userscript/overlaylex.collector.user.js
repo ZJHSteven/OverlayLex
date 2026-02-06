@@ -33,6 +33,7 @@
   const UI_ID_PREFIX = "overlaylex-collector";
   const OBSERVER_DEBOUNCE_MS = 80;
   const ACTIVITY_CAPTURE_DELAY_MS = 90;
+  const CJK_REGEX = /[\u3400-\u9fff]/;
 
   // ------------------------------
   // 日志工具
@@ -154,7 +155,12 @@
     if (!normalized || normalized.length < 2) {
       return false;
     }
+    // 必须包含英文字母，否则不采集。
     if (!/[A-Za-z]/.test(normalized)) {
+      return false;
+    }
+    // 含中文的混合字符串直接过滤，只保留“纯英文向”词条。
+    if (CJK_REGEX.test(normalized)) {
       return false;
     }
     if (/^https?:\/\//i.test(normalized)) {
@@ -303,6 +309,9 @@
     if (!rootNode) {
       return;
     }
+    if (isNodeInsideCollectorUI(rootNode)) {
+      return;
+    }
 
     const ownerDocument = rootNode.ownerDocument || document;
     const ownerWindow = ownerDocument.defaultView || window;
@@ -310,6 +319,9 @@
     const NodeFilterConst = ownerWindow.NodeFilter;
 
     if (rootNode.nodeType === NodeConst.TEXT_NODE) {
+      if (isNodeInsideCollectorUI(rootNode)) {
+        return;
+      }
       collectTextCandidate(rootNode.nodeValue || "", "text");
       return;
     }
@@ -338,8 +350,16 @@
     let current = walker.currentNode;
     while (current) {
       if (current.nodeType === NodeConst.TEXT_NODE) {
+        if (isNodeInsideCollectorUI(current)) {
+          current = walker.nextNode();
+          continue;
+        }
         collectTextCandidate(current.nodeValue || "", "text");
       } else if (current.nodeType === NodeConst.ELEMENT_NODE) {
+        if (isNodeInsideCollectorUI(current)) {
+          current = walker.nextNode();
+          continue;
+        }
         const placeholder = current.getAttribute?.("placeholder");
         if (placeholder) {
           collectTextCandidate(placeholder, "placeholder");
@@ -368,6 +388,9 @@
     function flush() {
       timerId = null;
       for (const node of pendingNodes) {
+        if (isNodeInsideCollectorUI(node)) {
+          continue;
+        }
         collectFromNode(node);
       }
       pendingNodes.clear();
@@ -418,6 +441,9 @@
     }
 
     function schedule(target) {
+      if (isNodeInsideCollectorUI(target)) {
+        return;
+      }
       pendingTarget = target || pendingTarget;
       if (timerId !== null) {
         return;
@@ -462,33 +488,51 @@
     return false;
   }
 
-  function buildHostPayload(host, incremental) {
-    const bucket = ensureHostBucket(host);
-    const allTexts = Object.keys(bucket.texts);
-    const exportTexts = incremental ? allTexts.filter((text) => !bucket.exportedTexts[text]) : allTexts;
-    exportTexts.sort((a, b) => a.localeCompare(b, "en"));
-
-    const translations = {};
-    for (const text of exportTexts) {
-      translations[text] = "";
+  function isNodeInsideCollectorUI(node) {
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    if (!element) {
+      return false;
     }
-
-    return {
-      id: `collector-${host}`,
-      host,
-      mode: incremental ? "incremental" : "full",
-      exportedAt: new Date().toISOString(),
-      totalTextsInHost: allTexts.length,
-      exportedTextsCount: exportTexts.length,
-      iframeHosts: Object.keys(bucket.iframeHosts).sort(),
-      translations,
-    };
+    if (typeof element.id === "string" && element.id.startsWith(UI_ID_PREFIX)) {
+      return true;
+    }
+    return Boolean(element.closest?.(`[id^="${UI_ID_PREFIX}"]`));
   }
 
-  function markExported(host, payload) {
+  function formatTextLine(text) {
+    const escaped = String(text).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    // 按你的要求：只输出简洁的 “引号,引号” 结构，不带完整 JSON 外壳。
+    return `"${escaped}",""`;
+  }
+
+  function collectHostTexts(host, incremental) {
     const bucket = ensureHostBucket(host);
-    for (const text of Object.keys(payload.translations)) {
-      bucket.exportedTexts[text] = true;
+    const allTexts = Object.keys(bucket.texts);
+    const picked = incremental ? allTexts.filter((text) => !bucket.exportedTexts[text]) : allTexts;
+    picked.sort((a, b) => a.localeCompare(b, "en"));
+    return picked;
+  }
+
+  function buildMergedTextsFromHosts(hosts, incremental) {
+    const mergedSet = new Set();
+    const selectedByHost = {};
+    for (const host of hosts) {
+      const texts = collectHostTexts(host, incremental);
+      selectedByHost[host] = texts;
+      for (const text of texts) {
+        mergedSet.add(text);
+      }
+    }
+    const merged = [...mergedSet].sort((a, b) => a.localeCompare(b, "en"));
+    return { merged, selectedByHost };
+  }
+
+  function markExportedByHost(selectedByHost) {
+    for (const [host, texts] of Object.entries(selectedByHost)) {
+      const bucket = ensureHostBucket(host);
+      for (const text of texts) {
+        bucket.exportedTexts[text] = true;
+      }
     }
     schedulePersistStore();
   }
@@ -592,6 +636,9 @@
         <button id="${UI_ID_PREFIX}-copy-full">复制本域全量</button>
       </div>
       <div class="${UI_ID_PREFIX}-row">
+        <button id="${UI_ID_PREFIX}-copy-all-merged">一键复制全部合并</button>
+      </div>
+      <div class="${UI_ID_PREFIX}-row">
         <button id="${UI_ID_PREFIX}-copy-iframe-hosts">复制本域 iframe 域名</button>
         <button id="${UI_ID_PREFIX}-reset-exported">重置本域增量游标</button>
       </div>
@@ -660,25 +707,36 @@
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-increment`)?.addEventListener("click", () => {
       const host = window.location.hostname.toLowerCase();
-      const payload = buildHostPayload(host, true);
-      const copied = copyToClipboard(JSON.stringify(payload, null, 2));
+      const { merged, selectedByHost } = buildMergedTextsFromHosts([host], true);
+      const copied = copyToClipboard(merged.map((text) => formatTextLine(text)).join("\n"));
       if (!copied) {
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
-      markExported(host, payload);
-      setStatusText(`复制本域增量成功：${payload.exportedTextsCount} 条。`);
+      markExportedByHost(selectedByHost);
+      setStatusText(`复制本域增量成功：${merged.length} 条。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-full`)?.addEventListener("click", () => {
       const host = window.location.hostname.toLowerCase();
-      const payload = buildHostPayload(host, false);
-      const copied = copyToClipboard(JSON.stringify(payload, null, 2));
+      const { merged } = buildMergedTextsFromHosts([host], false);
+      const copied = copyToClipboard(merged.map((text) => formatTextLine(text)).join("\n"));
       if (!copied) {
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
-      setStatusText(`复制本域全量成功：${payload.exportedTextsCount} 条。`);
+      setStatusText(`复制本域全量成功：${merged.length} 条。`);
+    });
+
+    panel.querySelector(`#${UI_ID_PREFIX}-copy-all-merged`)?.addEventListener("click", () => {
+      const allHosts = Object.keys(state.store.hosts);
+      const { merged } = buildMergedTextsFromHosts(allHosts, false);
+      const copied = copyToClipboard(merged.map((text) => formatTextLine(text)).join("\n"));
+      if (!copied) {
+        setStatusText("复制失败：请检查剪贴板权限。");
+        return;
+      }
+      setStatusText(`一键复制全部合并成功：${merged.length} 条（跨 ${allHosts.length} 域名）。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-iframe-hosts`)?.addEventListener("click", () => {
