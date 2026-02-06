@@ -1,7 +1,9 @@
 # OverlayLex Demo
 
 OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。  
-当前版本实现了“主脚本 + 包化词典 + 更新 API + 增量翻译 + 悬浮控制台”的完整最小闭环。
+当前采用“双脚本模式”：
+- 主翻译脚本：只负责翻译注入与更新策略。
+- 独立采集脚本：只负责实时抽词采集与导出，不参与翻译流程。
 
 ## 线上 API（已部署）
 
@@ -11,7 +13,10 @@ OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。
 ## 目录结构
 
 - `src/userscript/overlaylex.user.js`  
-  主用户脚本，负责缓存、加载、翻译、监听、UI 控制台。
+  主翻译脚本（生产脚本）：负责缓存、加载、翻译、监听、UI 控制台。
+
+- `src/userscript/overlaylex.collector.user.js`  
+  采集脚本（测试脚本）：全站实时采集、按域名去重、增量复制、记录 iframe 域名。
 
 - `src/worker/`  
   Cloudflare Worker demo 后端，提供 `manifest` 与 `package` API。
@@ -41,12 +46,17 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 
 改成你本地 `wrangler dev` 提供的地址（通常是 `http://127.0.0.1:8787`）。
 
-3. 安装用户脚本  
+3. 安装主翻译脚本  
 - 打开 Tampermonkey（或 Violentmonkey）新建脚本。  
 - 复制 `src/userscript/overlaylex.user.js` 全文并保存。  
 - 打开 OBR 页面后，右侧会出现蓝色“译”悬浮球。
 
-4. 验证功能  
+4. （可选）安装采集脚本  
+- 再新建一个脚本。  
+- 复制 `src/userscript/overlaylex.collector.user.js` 全文并保存。  
+- 任意页面右侧会出现绿色“采”悬浮球（仅顶层窗口显示一个）。
+
+5. 验证主翻译功能  
 - 点击悬浮球，打开控制台。  
 - 点击“检查更新”，确认状态提示成功。  
 - 点击“重新注入翻译”，观察文本替换。  
@@ -62,19 +72,17 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 
 ## 当前运行策略
 
-1. 用户脚本 `@match *://*/*`，确保主页面和 iframe 页面都能触发。  
-2. 门禁策略：
-   - 本地有域名包缓存时：直接按缓存允许/拒绝，不发网络请求。
-   - 本地无缓存时：先过本地种子域名规则，命中后才拉一次域名包。
+1. 主翻译脚本 `overlaylex.user.js` 只负责翻译流程。  
+2. 通过域名包做放行判断，未命中时主脚本立即退出。  
 3. 通过 manifest 只加载翻译包，域名包独立处理。  
 4. 翻译正文从 R2 读取；R2 异常时 Worker 才回退到内置最小包。  
-5. 顶层页面注入悬浮球；iframe 页面不重复注入控制台，但仍执行翻译逻辑。
-6. 内置实时采集器：自动去重、按域名分层、支持增量复制与 iframe 域名记录。
+5. 顶层页面注入“译”悬浮球；iframe 页面不重复注入主控制台，但仍可执行翻译。
+6. 采集逻辑全部放在 `overlaylex.collector.user.js`，与主翻译脚本彻底分离。
 
 ## 运行期采集工作流（推荐）
 
-1. 在目标页面正常操作（点击菜单、悬浮提示、打开插件 iframe）。  
-2. 打开悬浮球面板，在“自动采集器”里使用：
+1. 启用 `overlaylex.collector.user.js` 后，在目标页面正常操作（点击菜单、悬浮提示、打开插件 iframe）。  
+2. 打开绿色“采”悬浮球，在采集面板里使用：
    - `复制本域增量`：仅复制当前域名下“未导出过”的新词条。
    - `复制本域全量`：复制当前域名下所有已采集词条。
    - `复制 iframe 域名`：复制当前页面观察到的 iframe 域名列表。
