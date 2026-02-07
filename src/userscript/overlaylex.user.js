@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex
 // @namespace    https://overlaylex.local
-// @version      0.2.0
+// @version      0.2.1
 // @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
 // @author       OverlayLex
 // @match        *://*/*
@@ -27,7 +27,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.0";
+  const SCRIPT_VERSION = "0.2.1";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -258,10 +258,22 @@
 
     const currentHost = window.location.hostname.toLowerCase();
     const currentPath = window.location.pathname || "/";
+    // 兼容两种写法：
+    // 1) 旧写法: target.host（单个域名）
+    // 2) 新写法: target.hosts（多个域名数组）
     const targetHost = String(target.host || "").toLowerCase().trim();
+    const targetHosts = Array.isArray(target.hosts)
+      ? target.hosts
+          .map((item) => String(item || "").toLowerCase().trim())
+          .filter((item) => Boolean(item))
+      : [];
     const targetPathPrefix = String(target.pathPrefix || "").trim();
 
-    if (targetHost && currentHost !== targetHost) {
+    if (targetHosts.length > 0) {
+      if (!targetHosts.includes(currentHost)) {
+        return false;
+      }
+    } else if (targetHost && currentHost !== targetHost) {
       return false;
     }
     if (targetPathPrefix && !currentPath.startsWith(targetPathPrefix)) {
@@ -893,11 +905,11 @@
       },
       packages: [
         {
-          id: "obr-room-core",
-          name: "OBR 房间核心中文包",
+          id: "obr-www-owlbear-rodeo",
+          name: "OBR 主站与房间中文包（owlbear.rodeo）",
           kind: "translation",
-          version: "0.1.0",
-          url: `${CONFIG.apiBaseUrl}/packages/obr-room-core.json`,
+          version: "0.2.0",
+          url: `${CONFIG.apiBaseUrl}/packages/obr-www-owlbear-rodeo.json`,
           enabledByDefault: true,
         },
       ],

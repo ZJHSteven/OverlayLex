@@ -21,11 +21,8 @@ OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。
 - `src/worker/`  
   Cloudflare Worker demo 后端，提供 `manifest` 与 `package` API。
 
-- `src/packages/obr-room-core.json`  
-  第一版房间页示例翻译包。
-
 - `src/packages/obr-www-owlbear-rodeo.json`  
-  OBR 主站（`www.owlbear.rodeo`）中文包。
+  OBR 主站与房间共用中文包（`owlbear.rodeo` + `www.owlbear.rodeo`）。
 
 - `src/packages/obr-clash-battle-system-com.json`  
   Clash 插件（`clash.battle-system.com`）中文包。
@@ -103,7 +100,7 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
    - `复制本域全量`：复制当前域名下所有已采集词条。
    - `复制 iframe 域名`：复制当前页面观察到的 iframe 域名列表。
 3. 复制结果直接粘贴给我翻译。  
-4. 翻译后并入正式包（如 `src/packages/obr-room-core.json`）。  
+4. 翻译后并入正式包（如 `src/packages/obr-www-owlbear-rodeo.json`）。  
 5. 更新后端包版本号，再在页面里点击“检查更新”完成热更新。
 
 ## 当前实现的取舍

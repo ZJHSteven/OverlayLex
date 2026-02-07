@@ -13,7 +13,7 @@
 /**
  * SCRIPT_VERSION: 主 API 脚本版本（用于主脚本感知服务端策略变化）。
  */
-export const SCRIPT_VERSION = "0.2.0";
+export const SCRIPT_VERSION = "0.2.1";
 
 /**
  * DOMAIN_PACKAGE_ID: 域名准入包 ID。
@@ -27,21 +27,13 @@ export const DOMAIN_PACKAGE_ID = "overlaylex-domain-allowlist";
  * - kind=domain-allowlist: 域名准入包
  */
 export const PACKAGE_CATALOG = {
-  "obr-room-core": {
-    id: "obr-room-core",
-    name: "OBR 房间核心中文包",
-    kind: "translation",
-    version: "0.1.0",
-    enabledByDefault: true,
-    description: "OBR 房间主界面翻译包（示例）",
-  },
   "obr-www-owlbear-rodeo": {
     id: "obr-www-owlbear-rodeo",
-    name: "OBR 主站中文包（www.owlbear.rodeo）",
+    name: "OBR 主站与房间中文包（owlbear.rodeo）",
     kind: "translation",
-    version: "0.1.0",
+    version: "0.2.0",
     enabledByDefault: true,
-    description: "OBR 主站界面翻译包（自动采集生成）",
+    description: "OBR 主站与房间统一翻译包（已合并 room-core）",
   },
   "obr-clash-battle-system-com": {
     id: "obr-clash-battle-system-com",
@@ -92,14 +84,30 @@ export const PACKAGE_CATALOG = {
  * - 正式生产仍应以 R2 中的对象为准。
  */
 export const BUILTIN_PACKAGE_FALLBACKS = {
+  "obr-www-owlbear-rodeo": {
+    id: "obr-www-owlbear-rodeo",
+    name: "OBR 主站与房间中文包（owlbear.rodeo）",
+    target: {
+      hosts: ["owlbear.rodeo", "www.owlbear.rodeo"],
+      pathPrefix: "/",
+    },
+    version: "0.2.0",
+    translations: {
+      "Owlbear Rodeo": "枭熊VTT",
+      "You need to enable JavaScript to run this app.": "你需要启用 JavaScript 才能运行此应用。",
+      Players: "玩家",
+      Search: "搜索",
+      "5ft": "5英尺",
+    },
+  },
   "obr-room-core": {
     id: "obr-room-core",
-    name: "OBR 房间核心中文包",
+    name: "OBR 房间核心中文包（兼容别名）",
     target: {
       host: "owlbear.rodeo",
       pathPrefix: "/room",
     },
-    version: "0.1.0",
+    version: "0.2.0",
     translations: {
       "Owlbear Rodeo": "枭熊VTT",
       "You need to enable JavaScript to run this app.": "你需要启用 JavaScript 才能运行此应用。",
@@ -130,8 +138,8 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
 /**
  * buildPackageObjectKey: 将包 ID 转成 R2 对象键。
  * 例子：
- * - 输入: obr-room-core
- * - 输出: packages/obr-room-core.json
+ * - 输入: obr-www-owlbear-rodeo
+ * - 输出: packages/obr-www-owlbear-rodeo.json
  */
 export function buildPackageObjectKey(packageId) {
   return `packages/${packageId}.json`;

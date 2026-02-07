@@ -45,7 +45,7 @@ function jsonResponse(data, status = 200) {
 }
 
 function parsePackageId(pathname) {
-  // 例子：/packages/obr-room-core.json -> obr-room-core
+  // 例子：/packages/obr-www-owlbear-rodeo.json -> obr-www-owlbear-rodeo
   const match = pathname.match(/^\/packages\/([^/]+)\.json$/);
   if (!match) {
     return null;
