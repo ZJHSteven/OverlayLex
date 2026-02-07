@@ -1,0 +1,4 @@
+interface:
+  display_name: "ParaTranz API"
+  short_description: "调用 ParaTranz 全量接口并提供教学向示例"
+  default_prompt: "Use $paratranz-api to call ParaTranz OpenAPI endpoints by operationId and provide runnable command examples."
