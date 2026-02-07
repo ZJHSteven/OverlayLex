@@ -1,11 +1,14 @@
-﻿{
+{
   "id": "obr-www-owlbear-rodeo",
-  "name": "OBR 自动翻译包 - www.owlbear.rodeo",
+  "name": "OBR 主站与房间中文包（owlbear.rodeo）",
   "target": {
-    "host": "www.owlbear.rodeo",
+    "hosts": [
+      "owlbear.rodeo",
+      "www.owlbear.rodeo"
+    ],
     "pathPrefix": "/"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "translations": {
     "0–0 of 0": "0–0 共 0",
     "1–48 of 48": "第 1–48 条，共 48 条",
@@ -208,7 +211,7 @@
     "Outliner": "大纲",
     "outliner.owlbear.rodeo": "大纲.owlbear.rodeo",
     "Overlay Effect": "叠加效果",
-    "Owlbear Rodeo": "枭熊牛仔竞技表演",
+    "Owlbear Rodeo": "枭熊VTT",
     "Owlbear Rodeo 2.0": "枭熊竞技 2.0",
     "Owlbear Rodeo 2.0 has officially launched 🎉": "猫头鹰竞技2.0正式上线🎉",
     "Owlbear Rodeo 2.1": "枭熊竞技 2.1",
@@ -315,6 +318,7 @@
     "www.owlbear.rodeo": "www.owlbear.rodeo",
     "ZJHSteven": "史蒂文·ZJH",
     "Zoom": "飞涨",
-    "Zoom Sensitivity": "变焦灵敏度"
+    "Zoom Sensitivity": "变焦灵敏度",
+    "You need to enable JavaScript to run this app.": "你需要启用 JavaScript 才能运行此应用。"
   }
 }

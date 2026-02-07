@@ -8,6 +8,10 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-02-07
+  - 合并 `src/packages/obr-room-core.json` 与 `src/packages/obr-www-owlbear-rodeo.json`：统一保留 `obr-www-owlbear-rodeo`，并合并词条。
+  - 更新 `src/packages/obr-www-owlbear-rodeo.json`：升级为主站与房间共用包，`target` 改为 `hosts` 双域名匹配，版本升至 `0.2.0`。
+  - 删除 `src/packages/obr-room-core.json`：移除重复翻译包，避免同站点重复加载与冲突覆盖。
 - 2026-02-06
   - 新增 `src/userscript/overlaylex.user.js`：实现 OverlayLex 用户脚本首版（缓存、包加载、增量翻译、悬浮面板、手动更新）。
   - 新增 `src/worker/src/data.js`：实现 Worker 侧翻译包注册表与 manifest 生成函数。
