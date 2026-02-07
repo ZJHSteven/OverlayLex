@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-07
+  - 更新 `AGENTS.md`：补充本次 `paratranz-api` skill 提交记录，确保协作日志与仓库提交保持一致。
   - 新增 `skills/paratranz-api/SKILL.md`：创建 ParaTranz API 交互技能，明确触发条件、标准工作流、错误处理和最小可运行示例。
   - 新增 `skills/paratranz-api/agents/openai.yaml`：补充技能 UI 元信息与默认提示词，便于在 Codex 技能列表中触发。
   - 新增 `skills/paratranz-api/scripts/paratranz-api-client.mjs`：实现通用 API CLI（按 operationId 调用、支持 path/query/header/json/form/raw-body、dry-run 与输出落盘）。
