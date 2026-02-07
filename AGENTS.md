@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-07
+  - 更新 `src/userscript/overlaylex.user.js`：重构主控制台 UI 为新玻璃态浮窗风格（亮色/暗色双主题），新增“明亮/暗夜/跟随系统”主题设置与系统主题联动监听，同时保持包列表、按钮、状态文本等业务内容动态渲染，不再使用示例写死文案。
+  - 更新 `src/userscript/overlaylex.user.js`：保留并强化“域名门禁优先”启动顺序，确保仅在命中域名包白名单后才注入悬浮球与控制面板，未命中域名直接退出。
   - 合并 `src/packages/obr-room-core.json` 与 `src/packages/obr-www-owlbear-rodeo.json`：统一保留 `obr-www-owlbear-rodeo`，并合并词条。
   - 更新 `src/packages/obr-www-owlbear-rodeo.json`：升级为主站与房间共用包，`target` 改为 `hosts` 双域名匹配，版本升至 `0.2.0`。
   - 删除 `src/packages/obr-room-core.json`：移除重复翻译包，避免同站点重复加载与冲突覆盖。

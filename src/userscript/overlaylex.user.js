@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex
 // @namespace    https://overlaylex.local
-// @version      0.2.1
+// @version      0.2.2
 // @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
 // @author       OverlayLex
 // @match        *://*/*
@@ -27,12 +27,12 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.1";
+  const SCRIPT_VERSION = "0.2.2";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
     USER_SWITCHES: "overlaylex:user-switches:v2",
-    UI_STATE: "overlaylex:ui-state:v2",
+    UI_STATE: "overlaylex:ui-state:v3",
     DOMAIN_PACKAGE_CACHE: "overlaylex:domain-package-cache:v1",
   };
   const CONFIG = {
@@ -112,6 +112,10 @@
       panel: null,
       packageListRoot: null,
       statusText: null,
+      settingsPanel: null,
+      themeSelect: null,
+      themeMediaQuery: null,
+      themeChangeHandler: null,
     },
   };
 
@@ -633,93 +637,533 @@
   // ------------------------------
   // UI 层（仅顶层窗口注入）
   // ------------------------------
+  /**
+   * 统一规范主题模式枚举值。
+   * 输入：
+   * - rawMode: 本地缓存或 UI 控件传入的原始值
+   * 输出：
+   * - "light" | "dark" | "system"
+   * 核心逻辑：
+   * - 若值非法，自动回退到 "system"，避免旧缓存/异常值导致 UI 失效。
+   */
+  function normalizeUiThemeMode(rawMode) {
+    if (rawMode === "light" || rawMode === "dark" || rawMode === "system") {
+      return rawMode;
+    }
+    return "system";
+  }
+
   function getUiState() {
     return safeLocalStorageGet(STORAGE_KEYS.UI_STATE, {
       ballTop: 120,
       ballRight: 16,
       panelOpen: false,
+      themeMode: "system",
     });
   }
 
   function setUiState(patch) {
     const next = { ...getUiState(), ...patch };
+    next.themeMode = normalizeUiThemeMode(next.themeMode);
     safeLocalStorageSet(STORAGE_KEYS.UI_STATE, next);
     return next;
+  }
+
+  /**
+   * 读取系统主题偏好。
+   * 输出：
+   * - "light" | "dark"
+   * 说明：
+   * - 浏览器不支持 matchMedia 时，默认按亮色处理，保证旧环境可用。
+   */
+  function getSystemThemeMode() {
+    if (typeof window.matchMedia !== "function") {
+      return "light";
+    }
+    try {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    } catch (error) {
+      Logger.warn("读取系统主题偏好失败，回退到亮色模式。", error);
+      return "light";
+    }
+  }
+
+  /**
+   * 将“主题选择模式”解析成真正要渲染的样式主题。
+   * 输入：
+   * - themeMode: "light" | "dark" | "system"
+   * 输出：
+   * - "light" | "dark"
+   */
+  function resolveEffectiveTheme(themeMode) {
+    const normalizedMode = normalizeUiThemeMode(themeMode);
+    if (normalizedMode === "system") {
+      return getSystemThemeMode();
+    }
+    return normalizedMode;
+  }
+
+  /**
+   * 应用浮窗与悬浮球主题（仅作用于 OverlayLex 自身 DOM）。
+   * 输入：
+   * - themeMode: "light" | "dark" | "system"
+   * 输出：
+   * - 无
+   */
+  function applyUiTheme(themeMode) {
+    const effectiveTheme = resolveEffectiveTheme(themeMode);
+    if (state.ui.panel) {
+      state.ui.panel.dataset.theme = effectiveTheme;
+    }
+    if (state.ui.floatingBall) {
+      state.ui.floatingBall.dataset.theme = effectiveTheme;
+    }
+  }
+
+  /**
+   * 解绑系统主题监听，避免重复绑定导致同一事件触发多次。
+   */
+  function unbindSystemThemeWatcher() {
+    const mediaQuery = state.ui.themeMediaQuery;
+    const handler = state.ui.themeChangeHandler;
+    if (!mediaQuery || !handler) {
+      return;
+    }
+    if (typeof mediaQuery.removeEventListener === "function") {
+      mediaQuery.removeEventListener("change", handler);
+    } else if (typeof mediaQuery.removeListener === "function") {
+      mediaQuery.removeListener(handler);
+    }
+    state.ui.themeMediaQuery = null;
+    state.ui.themeChangeHandler = null;
+  }
+
+  /**
+   * 监听系统主题变化（仅在“跟随系统”模式下自动切换）。
+   * 兼容性：
+   * - 新浏览器：MediaQueryList.addEventListener("change")
+   * - 旧浏览器：MediaQueryList.addListener
+   */
+  function bindSystemThemeWatcher() {
+    unbindSystemThemeWatcher();
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => {
+      const uiState = getUiState();
+      if (normalizeUiThemeMode(uiState.themeMode) !== "system") {
+        return;
+      }
+      applyUiTheme("system");
+    };
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handler);
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handler);
+    }
+    state.ui.themeMediaQuery = mediaQuery;
+    state.ui.themeChangeHandler = handler;
+  }
+
+  /**
+   * 把主题模式值映射为用于提示的中文文案。
+   */
+  function getThemeModeLabel(themeMode) {
+    const normalizedMode = normalizeUiThemeMode(themeMode);
+    if (normalizedMode === "light") {
+      return "明亮模式";
+    }
+    if (normalizedMode === "dark") {
+      return "暗夜模式";
+    }
+    return "跟随系统";
   }
 
   function injectUiStyles() {
     const style = document.createElement("style");
     style.textContent = `
+      /* OverlayLex UI 样式：只影响带 overlaylex-* 前缀的节点，不污染宿主页面。 */
       .overlaylex-ball {
         position: fixed;
         z-index: 2147483000;
         width: 44px;
         height: 44px;
         border-radius: 50%;
-        border: none;
-        background: #155dfc;
-        color: #fff;
+        border: 1px solid transparent;
+        background: #137fec;
+        color: #ffffff;
         font-weight: 700;
         cursor: move;
-        box-shadow: 0 6px 18px rgba(0,0,0,.22);
+        font: 700 14px/1 "Inter", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+        box-shadow: 0 10px 24px rgba(0,0,0,.24);
+      }
+      .overlaylex-ball[data-theme="dark"] {
+        background: #0f1114;
+        color: #0088ff;
+        border-color: rgba(0, 136, 255, 0.46);
+        box-shadow: 0 0 14px rgba(0, 136, 255, 0.18), 0 12px 28px rgba(0,0,0,.66);
+      }
+      .overlaylex-ball:active {
+        transform: scale(0.97);
       }
       .overlaylex-panel {
         position: fixed;
         z-index: 2147483001;
         top: 72px;
         right: 16px;
-        width: 380px;
+        width: 340px;
         max-height: 72vh;
-        overflow: auto;
+        overflow: hidden;
         border-radius: 12px;
-        border: 1px solid #d0d7de;
-        background: #ffffff;
-        color: #1f2328;
-        font: 14px/1.45 "Microsoft YaHei UI", "PingFang SC", sans-serif;
-        box-shadow: 0 12px 32px rgba(0,0,0,.25);
-        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.82);
+        color: #1f2937;
+        font: 14px/1.45 "Inter", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+        box-shadow: 0 20px 46px rgba(15, 23, 42, 0.26);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        display: flex;
+        flex-direction: column;
       }
-      .overlaylex-panel h3 {
-        margin: 0 0 10px;
-        font-size: 16px;
+      .overlaylex-panel[data-theme="dark"] {
+        border-color: rgba(255, 255, 255, 0.14);
+        background: rgba(10, 10, 12, 0.92);
+        color: #f8fafc;
+        box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
       }
-      .overlaylex-row {
+      .overlaylex-panel-drag-handle {
+        height: 6px;
+        width: 48px;
+        border-radius: 999px;
+        margin: 10px auto 4px;
+        background: rgba(100, 116, 139, 0.36);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-panel-drag-handle {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .overlaylex-panel-header {
+        padding: 10px 18px 14px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-panel-header {
+        border-bottom-color: rgba(255, 255, 255, 0.1);
+      }
+      .overlaylex-panel-header-top {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
       }
-      .overlaylex-row button {
-        border: 1px solid #d0d7de;
-        background: #f6f8fa;
-        padding: 6px 10px;
+      .overlaylex-title-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .overlaylex-title-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(19, 127, 236, 0.15);
+        color: #137fec;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-title-icon {
+        background: rgba(0, 136, 255, 0.2);
+        color: #36a0ff;
+      }
+      .overlaylex-panel-title {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .16em;
+      }
+      .overlaylex-icon-btn {
+        border: none;
+        background: transparent;
+        color: #64748b;
+        width: 30px;
+        height: 30px;
         border-radius: 8px;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
       }
-      .overlaylex-primary {
+      .overlaylex-icon-btn:hover {
+        background: rgba(148, 163, 184, 0.2);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-icon-btn {
+        color: #94a3b8;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-icon-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #f8fafc;
+      }
+      .overlaylex-theme-settings {
+        margin-bottom: 10px;
+        padding: 10px;
+        border-radius: 10px;
+        background: rgba(248, 250, 252, 0.86);
+        border: 1px solid rgba(203, 213, 225, 0.7);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-theme-settings {
+        background: rgba(2, 6, 23, 0.5);
+        border-color: rgba(148, 163, 184, 0.24);
+      }
+      .overlaylex-theme-settings label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-theme-settings label {
+        color: #94a3b8;
+      }
+      .overlaylex-theme-select {
         width: 100%;
-        margin-bottom: 8px;
-        border: none !important;
-        background: #2563eb !important;
-        color: white;
-        font-weight: 600;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.56);
+        background: #ffffff;
+        color: #1f2937;
+        padding: 6px 8px;
+        font-size: 13px;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-theme-select {
+        border-color: rgba(0, 136, 255, 0.45);
+        background: #111111;
+        color: #e2e8f0;
+      }
+      .overlaylex-primary-btn {
+        width: 100%;
+        border: none;
+        border-radius: 10px;
+        background: #137fec;
+        color: #ffffff;
+        font-weight: 700;
+        padding: 11px 12px;
+        cursor: pointer;
+        transition: transform .08s ease, filter .18s ease;
+      }
+      .overlaylex-primary-btn:hover {
+        filter: brightness(0.95);
+      }
+      .overlaylex-primary-btn:active {
+        transform: scale(0.98);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-primary-btn {
+        background: #111111;
+        border: 1px solid rgba(0, 136, 255, 0.4);
+        color: #f8fafc;
+        box-shadow: 0 0 10px rgba(0, 136, 255, 0.1);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-primary-btn:hover {
+        border-color: rgba(0, 136, 255, 0.9);
+        box-shadow: 0 0 15px rgba(0, 136, 255, 0.25);
       }
       .overlaylex-packages {
-        border-top: 1px dashed #d0d7de;
-        margin-top: 8px;
-        padding-top: 8px;
+        display: flex;
+        flex-direction: column;
+        min-height: 120px;
+        max-height: 360px;
+        overflow: hidden;
+        border-top: 1px solid rgba(148, 163, 184, 0.22);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-packages {
+        border-top-color: rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .overlaylex-packages-title {
+        margin: 0;
+        padding: 10px 18px 8px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-packages-title {
+        color: rgba(226, 232, 240, 0.6);
+      }
+      .overlaylex-package-list {
+        overflow-y: auto;
+        padding: 0 18px 8px;
+      }
+      .overlaylex-package-list::-webkit-scrollbar {
+        width: 4px;
+      }
+      .overlaylex-package-list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .overlaylex-package-list::-webkit-scrollbar-thumb {
+        background: rgba(100, 116, 139, 0.35);
+        border-radius: 999px;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-package-list::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
       }
       .overlaylex-package-item {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 6px;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-package-item {
+        border-bottom-color: rgba(255, 255, 255, 0.06);
+      }
+      .overlaylex-package-item:last-child {
+        border-bottom: none;
+      }
+      .overlaylex-package-item[data-enabled="false"] .overlaylex-package-name {
+        opacity: .64;
+      }
+      .overlaylex-package-item[data-enabled="false"] .overlaylex-package-meta {
+        opacity: .62;
+      }
+      .overlaylex-switch {
+        position: relative;
+        width: 38px;
+        height: 22px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.42);
+        cursor: pointer;
+        flex: 0 0 auto;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-switch {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      .overlaylex-switch-input {
+        position: absolute;
+        opacity: 0;
+        width: 1px;
+        height: 1px;
+        pointer-events: none;
+      }
+      .overlaylex-switch-dot {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+        background: #ffffff;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.28);
+        transition: transform .16s ease;
+      }
+      .overlaylex-switch-input:checked + .overlaylex-switch-dot {
+        transform: translateX(16px);
+      }
+      .overlaylex-switch-input:checked ~ .overlaylex-switch-bg {
+        opacity: 1;
+      }
+      .overlaylex-switch-bg {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: #137fec;
+        opacity: 0;
+        transition: opacity .16s ease;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-switch-bg {
+        background: #0088ff;
+      }
+      .overlaylex-package-text {
+        flex: 1;
+        min-width: 0;
+      }
+      .overlaylex-package-name {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .overlaylex-package-meta {
+        margin: 2px 0 0;
+        font-size: 11px;
+        color: #64748b;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-package-meta {
+        color: #94a3b8;
+      }
+      .overlaylex-empty-hint {
+        padding: 6px 2px;
+        font-size: 12px;
+        color: #64748b;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-empty-hint {
+        color: #94a3b8;
       }
       .overlaylex-status {
-        margin-top: 8px;
-        color: #57606a;
-        font-size: 12px;
+        padding: 8px 18px 10px;
+        font-size: 11px;
+        color: #64748b;
+        border-top: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-status {
+        color: #94a3b8;
+        border-top-color: rgba(255, 255, 255, 0.06);
+      }
+      .overlaylex-footer {
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        background: rgba(248, 250, 252, 0.66);
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-footer {
+        background: rgba(0, 0, 0, 0.36);
+        border-top-color: rgba(255, 255, 255, 0.1);
+      }
+      .overlaylex-footer-btn {
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+      }
+      .overlaylex-footer-btn.overlaylex-update {
+        color: #137fec;
+      }
+      .overlaylex-footer-btn.overlaylex-update:hover {
+        background: rgba(19, 127, 236, 0.12);
+      }
+      .overlaylex-footer-btn.overlaylex-close {
+        color: #64748b;
+      }
+      .overlaylex-footer-btn.overlaylex-close:hover {
+        background: rgba(148, 163, 184, 0.18);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-footer-btn.overlaylex-update {
+        color: #0088ff;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-footer-btn.overlaylex-update:hover {
+        background: rgba(0, 136, 255, 0.12);
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-footer-btn.overlaylex-close {
+        color: #94a3b8;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-footer-btn.overlaylex-close:hover {
+        background: rgba(255, 255, 255, 0.1);
       }
     `;
     document.head.appendChild(style);
@@ -732,36 +1176,69 @@
     state.ui.packageListRoot.innerHTML = "";
 
     const packages = Array.isArray(state.manifest.packages) ? state.manifest.packages : [];
+    if (packages.length === 0) {
+      const emptyHint = document.createElement("div");
+      emptyHint.className = "overlaylex-empty-hint";
+      emptyHint.textContent = "当前没有可用翻译包。";
+      state.ui.packageListRoot.appendChild(emptyHint);
+      return;
+    }
+
     for (const pkg of packages) {
       const row = document.createElement("div");
       row.className = "overlaylex-package-item";
 
-      const label = document.createElement("label");
-      label.style.display = "flex";
-      label.style.alignItems = "center";
-      label.style.gap = "6px";
+      // 用 data-enabled 驱动视觉状态，避免把“是否启用”写死在 class 字符串里。
+      const syncEnabledUi = (enabled) => {
+        row.dataset.enabled = enabled ? "true" : "false";
+      };
+
+      const switchLabel = document.createElement("label");
+      switchLabel.className = "overlaylex-switch";
+      switchLabel.title = `启用或禁用翻译包：${pkg.id}`;
 
       const checkbox = document.createElement("input");
+      checkbox.className = "overlaylex-switch-input";
       checkbox.type = "checkbox";
       checkbox.checked = getPackageEnabled(pkg);
+
+      const switchDot = document.createElement("span");
+      switchDot.className = "overlaylex-switch-dot";
+
+      const switchBackground = document.createElement("span");
+      switchBackground.className = "overlaylex-switch-bg";
+
+      switchLabel.appendChild(checkbox);
+      switchLabel.appendChild(switchDot);
+      switchLabel.appendChild(switchBackground);
+
+      const textWrap = document.createElement("div");
+      textWrap.className = "overlaylex-package-text";
+
+      const name = document.createElement("p");
+      name.className = "overlaylex-package-name";
+      name.textContent = pkg.name || pkg.id;
+
+      const meta = document.createElement("p");
+      meta.className = "overlaylex-package-meta";
+      meta.textContent = `v${pkg.version} · ${pkg.id}`;
+
+      textWrap.appendChild(name);
+      textWrap.appendChild(meta);
+
+      row.appendChild(switchLabel);
+      row.appendChild(textWrap);
+      syncEnabledUi(checkbox.checked);
+
       checkbox.addEventListener("change", async () => {
         state.userSwitches[pkg.id] = checkbox.checked;
         safeLocalStorageSet(STORAGE_KEYS.USER_SWITCHES, state.userSwitches);
+        syncEnabledUi(checkbox.checked);
         await reloadEnabledPackages();
         scheduleFullReapply();
         setStatus(`已${checkbox.checked ? "启用" : "禁用"}包: ${pkg.id}`);
       });
 
-      const name = document.createElement("span");
-      name.textContent = pkg.name || pkg.id;
-      label.appendChild(checkbox);
-      label.appendChild(name);
-
-      const version = document.createElement("code");
-      version.textContent = `v${pkg.version}`;
-
-      row.appendChild(label);
-      row.appendChild(version);
       state.ui.packageListRoot.appendChild(row);
     }
   }
@@ -809,18 +1286,36 @@
     const panel = document.createElement("div");
     panel.className = "overlaylex-panel";
     panel.hidden = !uiState.panelOpen;
+    panel.dataset.theme = resolveEffectiveTheme(uiState.themeMode);
     panel.innerHTML = `
-      <h3>OverlayLex 控制台</h3>
-      <button class="overlaylex-row overlaylex-primary" id="overlaylex-reapply-btn">重新注入翻译</button>
-      <div class="overlaylex-row">
-        <button id="overlaylex-update-btn">检查更新</button>
-        <button id="overlaylex-close-btn">关闭面板</button>
+      <div class="overlaylex-panel-drag-handle"></div>
+      <div class="overlaylex-panel-header">
+        <div class="overlaylex-panel-header-top">
+          <div class="overlaylex-title-group">
+            <span class="overlaylex-title-icon">译</span>
+            <h3 class="overlaylex-panel-title">OverlayLex 控制台</h3>
+          </div>
+          <button class="overlaylex-icon-btn" id="overlaylex-settings-btn" type="button" title="显示或隐藏设置">⚙</button>
+        </div>
+        <div class="overlaylex-theme-settings" id="overlaylex-settings-panel" hidden>
+          <label for="overlaylex-theme-select">主题模式</label>
+          <select class="overlaylex-theme-select" id="overlaylex-theme-select">
+            <option value="system">跟随系统</option>
+            <option value="light">明亮模式</option>
+            <option value="dark">暗夜模式</option>
+          </select>
+        </div>
+        <button class="overlaylex-primary-btn" id="overlaylex-reapply-btn" type="button">重新注入翻译</button>
       </div>
       <div class="overlaylex-packages">
-        <div style="margin-bottom:6px;font-weight:600;">翻译包开关</div>
-        <div id="overlaylex-package-list"></div>
+        <p class="overlaylex-packages-title">翻译包列表</p>
+        <div class="overlaylex-package-list" id="overlaylex-package-list"></div>
       </div>
       <div class="overlaylex-status" id="overlaylex-status">初始化中...</div>
+      <div class="overlaylex-footer">
+        <button class="overlaylex-footer-btn overlaylex-update" id="overlaylex-update-btn" type="button">更新云端词典</button>
+        <button class="overlaylex-footer-btn overlaylex-close" id="overlaylex-close-btn" type="button">关闭面板</button>
+      </div>
     `;
 
     document.body.appendChild(ball);
@@ -830,7 +1325,15 @@
     state.ui.panel = panel;
     state.ui.packageListRoot = panel.querySelector("#overlaylex-package-list");
     state.ui.statusText = panel.querySelector("#overlaylex-status");
+    state.ui.settingsPanel = panel.querySelector("#overlaylex-settings-panel");
+    state.ui.themeSelect = panel.querySelector("#overlaylex-theme-select");
     renderPackageList();
+    applyUiTheme(uiState.themeMode);
+    bindSystemThemeWatcher();
+
+    if (state.ui.themeSelect) {
+      state.ui.themeSelect.value = normalizeUiThemeMode(uiState.themeMode);
+    }
 
     panel.querySelector("#overlaylex-reapply-btn")?.addEventListener("click", () => {
       scheduleFullReapply();
@@ -842,19 +1345,27 @@
       panel.hidden = true;
       setUiState({ panelOpen: false });
     });
-    ball.addEventListener("click", () => {
-      const willOpen = panel.hidden;
-      panel.hidden = !willOpen;
-      setUiState({ panelOpen: willOpen });
+    panel.querySelector("#overlaylex-settings-btn")?.addEventListener("click", () => {
+      if (!state.ui.settingsPanel) {
+        return;
+      }
+      state.ui.settingsPanel.hidden = !state.ui.settingsPanel.hidden;
     });
-
+    state.ui.themeSelect?.addEventListener("change", () => {
+      const selectedMode = normalizeUiThemeMode(state.ui.themeSelect?.value);
+      setUiState({ themeMode: selectedMode });
+      applyUiTheme(selectedMode);
+      setStatus(`主题模式已切换为：${getThemeModeLabel(selectedMode)}。`);
+    });
     let drag = null;
+    let suppressClick = false;
     ball.addEventListener("pointerdown", (event) => {
       drag = {
         startX: event.clientX,
         startY: event.clientY,
         startTop: parseFloat(ball.style.top || "120"),
         startRight: parseFloat(ball.style.right || "16"),
+        moved: false,
       };
       ball.setPointerCapture(event.pointerId);
     });
@@ -864,6 +1375,9 @@
       }
       const dy = event.clientY - drag.startY;
       const dx = event.clientX - drag.startX;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        drag.moved = true;
+      }
       const nextTop = Math.max(4, drag.startTop + dy);
       const nextRight = Math.max(4, drag.startRight - dx);
       ball.style.top = `${nextTop}px`;
@@ -878,7 +1392,21 @@
         ballTop: parseFloat(ball.style.top || "120"),
         ballRight: parseFloat(ball.style.right || "16"),
       });
+      suppressClick = drag.moved;
+      queueMicrotask(() => {
+        suppressClick = false;
+      });
       drag = null;
+    });
+    ball.addEventListener("click", (event) => {
+      if (suppressClick) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      const willOpen = panel.hidden;
+      panel.hidden = !willOpen;
+      setUiState({ panelOpen: willOpen });
     });
   }
 
