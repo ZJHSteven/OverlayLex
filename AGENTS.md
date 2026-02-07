@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-07
+  - 更新 `src/userscript/overlaylex.user.js`：将 `translate/language/settings/cloud_sync` 四个手绘图标替换为用户提供的官方 Material Symbols SVG 路径，修复图形风格不一致问题；同时把图标填充色统一为 `currentColor` 以复用亮暗主题配色。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.5`，用于区分“官方 SVG 图标替换”修复版本。
   - 更新 `src/userscript/overlaylex.user.js`：移除外部字体图标依赖，统一改为内置 SVG 图标渲染，修复 `translate/settings/cloud_sync/close/done/cloud_download` 在部分站点显示为英文文本的问题。
   - 更新 `src/userscript/overlaylex.user.js`：重写浮窗显隐控制为 `overlaylex-hidden` 类，规避宿主站样式覆盖 `hidden` 属性导致的“关闭按钮无响应/面板无法收起”问题。
   - 更新 `src/userscript/overlaylex.user.js`：拖拽事件改为 `mousedown/touchstart` 双通道，修复部分设备与页面环境下“显示可拖动手型但实际拖不动”的问题，并保持面板与悬浮球位置一体化。
