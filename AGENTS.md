@@ -9,6 +9,16 @@
 
 ## 变更日志
 - 2026-02-07
+  - 新增 `skills/paratranz-api/SKILL.md`：创建 ParaTranz API 交互技能，明确触发条件、标准工作流、错误处理和最小可运行示例。
+  - 新增 `skills/paratranz-api/agents/openai.yaml`：补充技能 UI 元信息与默认提示词，便于在 Codex 技能列表中触发。
+  - 新增 `skills/paratranz-api/scripts/paratranz-api-client.mjs`：实现通用 API CLI（按 operationId 调用、支持 path/query/header/json/form/raw-body、dry-run 与输出落盘）。
+  - 新增 `skills/paratranz-api/references/api-docs.yml`：收录 ParaTranz OpenAPI 原始文档副本，保证技能自包含。
+  - 新增 `skills/paratranz-api/references/operation-index.json`：从 OpenAPI 自动抽取 48 个接口的机器可读索引，避免遗漏调用方式。
+  - 新增 `skills/paratranz-api/references/endpoints.md`：生成逐接口教学向参考文档，覆盖每个 operationId 的参数、请求体与最小调用示例。
+  - 更新 `src/userscript/overlaylex.user.js`：补齐 Material 图标体系（翻译、设置、更新、关闭、下载/状态图标），修复图标缺失与样式不一致问题。
+  - 更新 `src/userscript/overlaylex.user.js`：修复包开关样式层级，恢复“开启后仍保留白色圆点滑块”的正常开关动画表现。
+  - 更新 `src/userscript/overlaylex.user.js`：新增面板顶部拖动条拖拽能力，并将悬浮球与面板绑定为同一位置锚点；展开面板时隐藏悬浮球，关闭面板时恢复到同位置。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.3`。
   - 更新 `src/userscript/overlaylex.user.js`：重构主控制台 UI 为新玻璃态浮窗风格（亮色/暗色双主题），新增“明亮/暗夜/跟随系统”主题设置与系统主题联动监听，同时保持包列表、按钮、状态文本等业务内容动态渲染，不再使用示例写死文案。
   - 更新 `src/userscript/overlaylex.user.js`：保留并强化“域名门禁优先”启动顺序，确保仅在命中域名包白名单后才注入悬浮球与控制面板，未命中域名直接退出。
   - 合并 `src/packages/obr-room-core.json` 与 `src/packages/obr-www-owlbear-rodeo.json`：统一保留 `obr-www-owlbear-rodeo`，并合并词条。

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex
 // @namespace    https://overlaylex.local
-// @version      0.2.2
+// @version      0.2.3
 // @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
 // @author       OverlayLex
 // @match        *://*/*
@@ -27,7 +27,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.2";
+  const SCRIPT_VERSION = "0.2.3";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -783,7 +783,26 @@
   function injectUiStyles() {
     const style = document.createElement("style");
     style.textContent = `
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+      @import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0");
+
       /* OverlayLex UI 样式：只影响带 overlaylex-* 前缀的节点，不污染宿主页面。 */
+      .overlaylex-ms {
+        font-family: "Material Symbols Outlined";
+        font-weight: 400;
+        font-style: normal;
+        font-size: 18px;
+        line-height: 1;
+        letter-spacing: normal;
+        text-transform: none;
+        display: inline-block;
+        white-space: nowrap;
+        word-wrap: normal;
+        direction: ltr;
+        -webkit-font-feature-settings: "liga";
+        font-feature-settings: "liga";
+        -webkit-font-smoothing: antialiased;
+      }
       .overlaylex-ball {
         position: fixed;
         z-index: 2147483000;
@@ -797,6 +816,15 @@
         cursor: move;
         font: 700 14px/1 "Inter", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
         box-shadow: 0 10px 24px rgba(0,0,0,.24);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .overlaylex-ball-icon {
+        font-size: 20px;
+      }
+      .overlaylex-ball[hidden] {
+        display: none !important;
       }
       .overlaylex-ball[data-theme="dark"] {
         background: #0f1114;
@@ -840,6 +868,10 @@
         border-radius: 999px;
         margin: 10px auto 4px;
         background: rgba(100, 116, 139, 0.36);
+        cursor: grab;
+      }
+      .overlaylex-panel-drag-handle:active {
+        cursor: grabbing;
       }
       .overlaylex-panel[data-theme="dark"] .overlaylex-panel-drag-handle {
         background: rgba(255, 255, 255, 0.2);
@@ -863,16 +895,15 @@
         gap: 8px;
       }
       .overlaylex-title-icon {
-        width: 24px;
-        height: 24px;
-        border-radius: 8px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: rgba(19, 127, 236, 0.15);
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        background: rgba(19, 127, 236, 0.14);
         color: #137fec;
-        font-size: 13px;
-        font-weight: 800;
+        font-size: 18px;
       }
       .overlaylex-panel[data-theme="dark"] .overlaylex-title-icon {
         background: rgba(0, 136, 255, 0.2);
@@ -897,6 +928,9 @@
         align-items: center;
         justify-content: center;
         font-size: 16px;
+      }
+      .overlaylex-icon-btn .overlaylex-ms {
+        font-size: 20px;
       }
       .overlaylex-icon-btn:hover {
         background: rgba(148, 163, 184, 0.2);
@@ -955,6 +989,13 @@
         padding: 11px 12px;
         cursor: pointer;
         transition: transform .08s ease, filter .18s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .overlaylex-primary-btn .overlaylex-ms {
+        font-size: 18px;
       }
       .overlaylex-primary-btn:hover {
         filter: brightness(0.95);
@@ -1040,6 +1081,7 @@
         background: rgba(148, 163, 184, 0.42);
         cursor: pointer;
         flex: 0 0 auto;
+        overflow: hidden;
       }
       .overlaylex-panel[data-theme="dark"] .overlaylex-switch {
         background: rgba(255, 255, 255, 0.1);
@@ -1051,6 +1093,18 @@
         height: 1px;
         pointer-events: none;
       }
+      .overlaylex-switch-bg {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        background: #137fec;
+        opacity: 0;
+        transition: opacity .16s ease;
+        z-index: 0;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-switch-bg {
+        background: #0088ff;
+      }
       .overlaylex-switch-dot {
         position: absolute;
         top: 2px;
@@ -1061,23 +1115,13 @@
         background: #ffffff;
         box-shadow: 0 1px 3px rgba(15, 23, 42, 0.28);
         transition: transform .16s ease;
+        z-index: 1;
       }
-      .overlaylex-switch-input:checked + .overlaylex-switch-dot {
-        transform: translateX(16px);
-      }
-      .overlaylex-switch-input:checked ~ .overlaylex-switch-bg {
+      .overlaylex-switch-input:checked + .overlaylex-switch-bg {
         opacity: 1;
       }
-      .overlaylex-switch-bg {
-        position: absolute;
-        inset: 0;
-        border-radius: 999px;
-        background: #137fec;
-        opacity: 0;
-        transition: opacity .16s ease;
-      }
-      .overlaylex-panel[data-theme="dark"] .overlaylex-switch-bg {
-        background: #0088ff;
+      .overlaylex-switch-input:checked + .overlaylex-switch-bg + .overlaylex-switch-dot {
+        transform: translateX(16px);
       }
       .overlaylex-package-text {
         flex: 1;
@@ -1098,6 +1142,15 @@
       }
       .overlaylex-panel[data-theme="dark"] .overlaylex-package-meta {
         color: #94a3b8;
+      }
+      .overlaylex-package-action {
+        font-size: 18px;
+        color: #137fec;
+        opacity: .85;
+        flex: 0 0 auto;
+      }
+      .overlaylex-panel[data-theme="dark"] .overlaylex-package-action {
+        color: #36a0ff;
       }
       .overlaylex-empty-hint {
         padding: 6px 2px;
@@ -1140,6 +1193,13 @@
         font-weight: 700;
         letter-spacing: .04em;
         text-transform: uppercase;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .overlaylex-footer-btn .overlaylex-ms {
+        font-size: 16px;
       }
       .overlaylex-footer-btn.overlaylex-update {
         color: #137fec;
@@ -1188,9 +1248,14 @@
       const row = document.createElement("div");
       row.className = "overlaylex-package-item";
 
+      const packageActionIcon = document.createElement("span");
+      packageActionIcon.className = "overlaylex-ms overlaylex-package-action";
+
       // 用 data-enabled 驱动视觉状态，避免把“是否启用”写死在 class 字符串里。
       const syncEnabledUi = (enabled) => {
         row.dataset.enabled = enabled ? "true" : "false";
+        packageActionIcon.textContent = enabled ? "done" : "cloud_download";
+        packageActionIcon.title = enabled ? "翻译包已启用" : "翻译包可下载/启用";
       };
 
       const switchLabel = document.createElement("label");
@@ -1202,15 +1267,15 @@
       checkbox.type = "checkbox";
       checkbox.checked = getPackageEnabled(pkg);
 
-      const switchDot = document.createElement("span");
-      switchDot.className = "overlaylex-switch-dot";
-
       const switchBackground = document.createElement("span");
       switchBackground.className = "overlaylex-switch-bg";
 
+      const switchDot = document.createElement("span");
+      switchDot.className = "overlaylex-switch-dot";
+
       switchLabel.appendChild(checkbox);
-      switchLabel.appendChild(switchDot);
       switchLabel.appendChild(switchBackground);
+      switchLabel.appendChild(switchDot);
 
       const textWrap = document.createElement("div");
       textWrap.className = "overlaylex-package-text";
@@ -1228,6 +1293,7 @@
 
       row.appendChild(switchLabel);
       row.appendChild(textWrap);
+      row.appendChild(packageActionIcon);
       syncEnabledUi(checkbox.checked);
 
       checkbox.addEventListener("change", async () => {
@@ -1275,27 +1341,41 @@
 
     injectUiStyles();
     const uiState = getUiState();
+    const EDGE_PADDING = 8;
+    const BALL_SIZE = 44;
+    const FALLBACK_PANEL_WIDTH = 340;
+    const FALLBACK_PANEL_HEIGHT = 460;
+    let anchorTop = Number(uiState.ballTop);
+    let anchorRight = Number(uiState.ballRight);
+
+    if (!Number.isFinite(anchorTop)) {
+      anchorTop = 120;
+    }
+    if (!Number.isFinite(anchorRight)) {
+      anchorRight = 16;
+    }
 
     const ball = document.createElement("button");
     ball.className = "overlaylex-ball";
-    ball.textContent = "译";
-    ball.style.top = `${uiState.ballTop}px`;
-    ball.style.right = `${uiState.ballRight}px`;
-    ball.title = "OverlayLex 设置";
+    ball.type = "button";
+    ball.innerHTML = `<span class="overlaylex-ms overlaylex-ball-icon" aria-hidden="true">g_translate</span>`;
+    ball.title = "展开 OverlayLex 控制台";
 
     const panel = document.createElement("div");
     panel.className = "overlaylex-panel";
-    panel.hidden = !uiState.panelOpen;
+    panel.hidden = true;
     panel.dataset.theme = resolveEffectiveTheme(uiState.themeMode);
     panel.innerHTML = `
-      <div class="overlaylex-panel-drag-handle"></div>
+      <div class="overlaylex-panel-drag-handle" id="overlaylex-panel-drag-handle"></div>
       <div class="overlaylex-panel-header">
         <div class="overlaylex-panel-header-top">
           <div class="overlaylex-title-group">
-            <span class="overlaylex-title-icon">译</span>
+            <span class="overlaylex-ms overlaylex-title-icon" aria-hidden="true">g_translate</span>
             <h3 class="overlaylex-panel-title">OverlayLex 控制台</h3>
           </div>
-          <button class="overlaylex-icon-btn" id="overlaylex-settings-btn" type="button" title="显示或隐藏设置">⚙</button>
+          <button class="overlaylex-icon-btn" id="overlaylex-settings-btn" type="button" title="显示或隐藏设置">
+            <span class="overlaylex-ms" aria-hidden="true">settings</span>
+          </button>
         </div>
         <div class="overlaylex-theme-settings" id="overlaylex-settings-panel" hidden>
           <label for="overlaylex-theme-select">主题模式</label>
@@ -1305,7 +1385,10 @@
             <option value="dark">暗夜模式</option>
           </select>
         </div>
-        <button class="overlaylex-primary-btn" id="overlaylex-reapply-btn" type="button">重新注入翻译</button>
+        <button class="overlaylex-primary-btn" id="overlaylex-reapply-btn" type="button">
+          <span class="overlaylex-ms" aria-hidden="true">language</span>
+          <span>重新注入翻译</span>
+        </button>
       </div>
       <div class="overlaylex-packages">
         <p class="overlaylex-packages-title">翻译包列表</p>
@@ -1313,8 +1396,14 @@
       </div>
       <div class="overlaylex-status" id="overlaylex-status">初始化中...</div>
       <div class="overlaylex-footer">
-        <button class="overlaylex-footer-btn overlaylex-update" id="overlaylex-update-btn" type="button">更新云端词典</button>
-        <button class="overlaylex-footer-btn overlaylex-close" id="overlaylex-close-btn" type="button">关闭面板</button>
+        <button class="overlaylex-footer-btn overlaylex-update" id="overlaylex-update-btn" type="button">
+          <span class="overlaylex-ms" aria-hidden="true">cloud_sync</span>
+          <span>更新云端词典</span>
+        </button>
+        <button class="overlaylex-footer-btn overlaylex-close" id="overlaylex-close-btn" type="button">
+          <span class="overlaylex-ms" aria-hidden="true">close</span>
+          <span>关闭面板</span>
+        </button>
       </div>
     `;
 
@@ -1335,6 +1424,117 @@
       state.ui.themeSelect.value = normalizeUiThemeMode(uiState.themeMode);
     }
 
+    /**
+     * 工具函数：把数值限制在 [min, max] 区间内。
+     */
+    function clampValue(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    /**
+     * 读取当前视口大小（用于拖动边界计算）。
+     */
+    function getViewportSize() {
+      return {
+        width: Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0),
+        height: Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0),
+      };
+    }
+
+    /**
+     * 约束悬浮球位置，防止被拖出可视区域。
+     */
+    function clampBallAnchor(top, right) {
+      const viewport = getViewportSize();
+      const maxTop = Math.max(EDGE_PADDING, viewport.height - BALL_SIZE - EDGE_PADDING);
+      const maxRight = Math.max(EDGE_PADDING, viewport.width - BALL_SIZE - EDGE_PADDING);
+      return {
+        top: clampValue(top, EDGE_PADDING, maxTop),
+        right: clampValue(right, EDGE_PADDING, maxRight),
+      };
+    }
+
+    /**
+     * 约束面板位置，防止拖动后超出屏幕。
+     */
+    function clampPanelAnchor(top, right) {
+      const viewport = getViewportSize();
+      const panelRect = panel.getBoundingClientRect();
+      const panelWidth = panelRect.width > 0 ? panelRect.width : FALLBACK_PANEL_WIDTH;
+      const panelHeight =
+        panelRect.height > 0
+          ? panelRect.height
+          : Math.min(Math.max(320, viewport.height * 0.72), FALLBACK_PANEL_HEIGHT);
+      const maxTop = Math.max(EDGE_PADDING, viewport.height - panelHeight - EDGE_PADDING);
+      const maxRight = Math.max(EDGE_PADDING, viewport.width - panelWidth - EDGE_PADDING);
+      return {
+        top: clampValue(top, EDGE_PADDING, maxTop),
+        right: clampValue(right, EDGE_PADDING, maxRight),
+      };
+    }
+
+    /**
+     * 将当前位置写回 DOM（悬浮球）。
+     */
+    function applyBallPosition() {
+      const next = clampBallAnchor(anchorTop, anchorRight);
+      anchorTop = next.top;
+      anchorRight = next.right;
+      ball.style.top = `${anchorTop}px`;
+      ball.style.right = `${anchorRight}px`;
+    }
+
+    /**
+     * 将当前位置写回 DOM（面板）。
+     */
+    function applyPanelPosition() {
+      const next = clampPanelAnchor(anchorTop, anchorRight);
+      anchorTop = next.top;
+      anchorRight = next.right;
+      panel.style.top = `${anchorTop}px`;
+      panel.style.right = `${anchorRight}px`;
+    }
+
+    /**
+     * 持久化位置与开关状态，保证刷新后恢复。
+     */
+    function persistUiAnchor(panelOpen) {
+      setUiState({
+        ballTop: Math.round(anchorTop),
+        ballRight: Math.round(anchorRight),
+        panelOpen: Boolean(panelOpen),
+      });
+    }
+
+    /**
+     * 把悬浮球展开为面板：二者位置共用同一锚点。
+     */
+    function openPanelFromBall() {
+      panel.hidden = false;
+      applyPanelPosition();
+      ball.hidden = true;
+      persistUiAnchor(true);
+    }
+
+    /**
+     * 把面板收起为悬浮球：保持同一位置，不出现分离感。
+     */
+    function closePanelToBall() {
+      panel.hidden = true;
+      applyBallPosition();
+      ball.hidden = false;
+      persistUiAnchor(false);
+    }
+
+    if (uiState.panelOpen) {
+      openPanelFromBall();
+    } else {
+      applyBallPosition();
+      ball.hidden = false;
+      panel.hidden = true;
+      persistUiAnchor(false);
+    }
+
     panel.querySelector("#overlaylex-reapply-btn")?.addEventListener("click", () => {
       scheduleFullReapply();
     });
@@ -1342,8 +1542,7 @@
       await handleManualUpdateCheck();
     });
     panel.querySelector("#overlaylex-close-btn")?.addEventListener("click", () => {
-      panel.hidden = true;
-      setUiState({ panelOpen: false });
+      closePanelToBall();
     });
     panel.querySelector("#overlaylex-settings-btn")?.addEventListener("click", () => {
       if (!state.ui.settingsPanel) {
@@ -1357,14 +1556,15 @@
       applyUiTheme(selectedMode);
       setStatus(`主题模式已切换为：${getThemeModeLabel(selectedMode)}。`);
     });
+
     let drag = null;
     let suppressClick = false;
     ball.addEventListener("pointerdown", (event) => {
       drag = {
         startX: event.clientX,
         startY: event.clientY,
-        startTop: parseFloat(ball.style.top || "120"),
-        startRight: parseFloat(ball.style.right || "16"),
+        startTop: anchorTop,
+        startRight: anchorRight,
         moved: false,
       };
       ball.setPointerCapture(event.pointerId);
@@ -1378,20 +1578,20 @@
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
         drag.moved = true;
       }
-      const nextTop = Math.max(4, drag.startTop + dy);
-      const nextRight = Math.max(4, drag.startRight - dx);
-      ball.style.top = `${nextTop}px`;
-      ball.style.right = `${nextRight}px`;
+      anchorTop = drag.startTop + dy;
+      anchorRight = drag.startRight - dx;
+      applyBallPosition();
     });
     ball.addEventListener("pointerup", (event) => {
       if (!drag) {
         return;
       }
-      ball.releasePointerCapture(event.pointerId);
-      setUiState({
-        ballTop: parseFloat(ball.style.top || "120"),
-        ballRight: parseFloat(ball.style.right || "16"),
-      });
+      try {
+        ball.releasePointerCapture(event.pointerId);
+      } catch (error) {
+        // 某些浏览器在失焦后 releasePointerCapture 会抛错，忽略即可。
+      }
+      persistUiAnchor(false);
       suppressClick = drag.moved;
       queueMicrotask(() => {
         suppressClick = false;
@@ -1404,9 +1604,54 @@
         event.stopPropagation();
         return;
       }
-      const willOpen = panel.hidden;
-      panel.hidden = !willOpen;
-      setUiState({ panelOpen: willOpen });
+      openPanelFromBall();
+    });
+
+    const panelDragHandle = panel.querySelector("#overlaylex-panel-drag-handle");
+    let panelDrag = null;
+    panelDragHandle?.addEventListener("pointerdown", (event) => {
+      if (panel.hidden) {
+        return;
+      }
+      panelDrag = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startTop: anchorTop,
+        startRight: anchorRight,
+      };
+      panelDragHandle.setPointerCapture(event.pointerId);
+    });
+    panelDragHandle?.addEventListener("pointermove", (event) => {
+      if (!panelDrag || panel.hidden) {
+        return;
+      }
+      const dy = event.clientY - panelDrag.startY;
+      const dx = event.clientX - panelDrag.startX;
+      anchorTop = panelDrag.startTop + dy;
+      anchorRight = panelDrag.startRight - dx;
+      applyPanelPosition();
+    });
+    panelDragHandle?.addEventListener("pointerup", (event) => {
+      if (!panelDrag) {
+        return;
+      }
+      try {
+        panelDragHandle.releasePointerCapture(event.pointerId);
+      } catch (error) {
+        // 与悬浮球同理：释放指针失败不影响主流程。
+      }
+      persistUiAnchor(true);
+      panelDrag = null;
+    });
+
+    window.addEventListener("resize", () => {
+      if (panel.hidden) {
+        applyBallPosition();
+        persistUiAnchor(false);
+        return;
+      }
+      applyPanelPosition();
+      persistUiAnchor(true);
     });
   }
 
