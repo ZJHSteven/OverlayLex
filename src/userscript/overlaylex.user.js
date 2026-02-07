@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex
 // @namespace    https://overlaylex.local
-// @version      0.2.3
+// @version      0.2.4
 // @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
 // @author       OverlayLex
 // @match        *://*/*
@@ -27,7 +27,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.3";
+  const SCRIPT_VERSION = "0.2.4";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -780,57 +780,113 @@
     return "跟随系统";
   }
 
+  /**
+   * 内置 SVG 图标字典（不依赖外部字体，避免 CSP 或字体加载失败导致显示成英文文本）。
+   */
+  const ICON_SVG_MAP = {
+    translate: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h10"/><path d="M9 5c0 6-2.5 10-7 12"/><path d="M4 11c2.8 0 5.6 1.5 8.2 4.5"/><path d="M14 19h6"/><path d="M17 13l3 8"/><path d="M20 13l-3 8"/></svg>`,
+    language: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.6 2.5 4 5.7 4 9s-1.4 6.5-4 9"/><path d="M12 3c-2.6 2.5-4 5.7-4 9s1.4 6.5 4 9"/></svg>`,
+    settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.3"/><path d="M12 18.9v2.3"/><path d="M4.9 4.9l1.6 1.6"/><path d="M17.5 17.5l1.6 1.6"/><path d="M2.8 12h2.3"/><path d="M18.9 12h2.3"/><path d="M4.9 19.1l1.6-1.6"/><path d="M17.5 6.5l1.6-1.6"/></svg>`,
+    cloudSync: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 18H6a4 4 0 0 1-.3-8 5.7 5.7 0 0 1 10.9-1.5A4.1 4.1 0 1 1 18 18h-1.2"/><path d="M9 16.5a3.2 3.2 0 0 0 5.2 1"/><path d="M15.2 16.2v2.6h-2.6"/><path d="M15 13.5a3.2 3.2 0 0 0-5.2-1"/><path d="M8.8 13.8v-2.6h2.6"/></svg>`,
+    close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m6 6 12 12"/><path d="m18 6-12 12"/></svg>`,
+    cloudDownload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 18H6a4 4 0 0 1-.3-8 5.7 5.7 0 0 1 10.9-1.5A4.1 4.1 0 1 1 18 18h-1.2"/><path d="M12 11v6"/><path d="m9.5 14.5 2.5 2.5 2.5-2.5"/></svg>`,
+    done: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4.2 4.2L19 6.5"/></svg>`,
+  };
+
+  /**
+   * 生成图标 HTML，extraClass 用于按场景控制尺寸。
+   */
+  function getIconSvg(iconName, extraClass = "") {
+    const iconSvg = ICON_SVG_MAP[iconName] || "";
+    const safeClass = extraClass ? ` ${extraClass}` : "";
+    return `<span class="overlaylex-icon${safeClass}" aria-hidden="true">${iconSvg}</span>`;
+  }
+
   function injectUiStyles() {
     const style = document.createElement("style");
     style.textContent = `
-      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
-      @import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0");
-
       /* OverlayLex UI 样式：只影响带 overlaylex-* 前缀的节点，不污染宿主页面。 */
-      .overlaylex-ms {
-        font-family: "Material Symbols Outlined";
-        font-weight: 400;
-        font-style: normal;
-        font-size: 18px;
+      .overlaylex-hidden {
+        display: none !important;
+      }
+      .overlaylex-icon {
+        display: inline-flex;
+        width: 1em;
+        height: 1em;
         line-height: 1;
-        letter-spacing: normal;
-        text-transform: none;
-        display: inline-block;
-        white-space: nowrap;
-        word-wrap: normal;
-        direction: ltr;
-        -webkit-font-feature-settings: "liga";
-        font-feature-settings: "liga";
-        -webkit-font-smoothing: antialiased;
+        flex: 0 0 auto;
+      }
+      .overlaylex-icon > svg {
+        width: 100%;
+        height: 100%;
       }
       .overlaylex-ball {
         position: fixed;
         z-index: 2147483000;
-        width: 44px;
-        height: 44px;
+        width: 56px;
+        height: 56px;
         border-radius: 50%;
-        border: 1px solid transparent;
-        background: #137fec;
-        color: #ffffff;
-        font-weight: 700;
+        border: 1px solid rgba(255, 255, 255, 0.38);
+        background: rgba(255, 255, 255, 0.7);
+        color: #137fec;
         cursor: move;
         font: 700 14px/1 "Inter", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
-        box-shadow: 0 10px 24px rgba(0,0,0,.24);
+        box-shadow: 0 12px 26px rgba(15, 23, 42, 0.26);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        overflow: visible;
+        user-select: none;
+      }
+      .overlaylex-ball-core {
+        position: relative;
+        z-index: 2;
         display: inline-flex;
         align-items: center;
         justify-content: center;
       }
       .overlaylex-ball-icon {
-        font-size: 20px;
+        font-size: 28px;
       }
-      .overlaylex-ball[hidden] {
-        display: none !important;
+      .overlaylex-ball-ring {
+        position: absolute;
+        inset: -7px;
+        border-radius: 999px;
+        background: rgba(19, 127, 236, 0.24);
+        filter: blur(9px);
+        opacity: .45;
+        animation: overlaylex-breathe 2.8s ease-in-out infinite;
+        pointer-events: none;
+      }
+      .overlaylex-ball-dot {
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #137fec;
+        border: 2px solid rgba(255, 255, 255, 0.95);
+        z-index: 3;
+      }
+      @keyframes overlaylex-breathe {
+        0% { transform: scale(0.94); opacity: .28; }
+        50% { transform: scale(1.02); opacity: .52; }
+        100% { transform: scale(0.94); opacity: .28; }
       }
       .overlaylex-ball[data-theme="dark"] {
-        background: #0f1114;
-        color: #0088ff;
-        border-color: rgba(0, 136, 255, 0.46);
-        box-shadow: 0 0 14px rgba(0, 136, 255, 0.18), 0 12px 28px rgba(0,0,0,.66);
+        background: rgba(16, 25, 34, 0.82);
+        color: #2f9cff;
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 0 12px rgba(0, 136, 255, 0.2), 0 14px 28px rgba(0,0,0,.62);
+      }
+      .overlaylex-ball[data-theme="dark"] .overlaylex-ball-ring {
+        background: rgba(0, 136, 255, 0.28);
+      }
+      .overlaylex-ball[data-theme="dark"] .overlaylex-ball-dot {
+        border-color: rgba(16, 25, 34, 0.95);
       }
       .overlaylex-ball:active {
         transform: scale(0.97);
@@ -929,7 +985,7 @@
         justify-content: center;
         font-size: 16px;
       }
-      .overlaylex-icon-btn .overlaylex-ms {
+      .overlaylex-icon-btn .overlaylex-icon {
         font-size: 20px;
       }
       .overlaylex-icon-btn:hover {
@@ -994,7 +1050,7 @@
         justify-content: center;
         gap: 8px;
       }
-      .overlaylex-primary-btn .overlaylex-ms {
+      .overlaylex-primary-btn .overlaylex-icon {
         font-size: 18px;
       }
       .overlaylex-primary-btn:hover {
@@ -1144,10 +1200,15 @@
         color: #94a3b8;
       }
       .overlaylex-package-action {
-        font-size: 18px;
         color: #137fec;
         opacity: .85;
         flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .overlaylex-package-action .overlaylex-icon {
+        font-size: 18px;
       }
       .overlaylex-panel[data-theme="dark"] .overlaylex-package-action {
         color: #36a0ff;
@@ -1198,7 +1259,7 @@
         justify-content: center;
         gap: 6px;
       }
-      .overlaylex-footer-btn .overlaylex-ms {
+      .overlaylex-footer-btn .overlaylex-icon {
         font-size: 16px;
       }
       .overlaylex-footer-btn.overlaylex-update {
@@ -1249,12 +1310,12 @@
       row.className = "overlaylex-package-item";
 
       const packageActionIcon = document.createElement("span");
-      packageActionIcon.className = "overlaylex-ms overlaylex-package-action";
+      packageActionIcon.className = "overlaylex-package-action";
 
       // 用 data-enabled 驱动视觉状态，避免把“是否启用”写死在 class 字符串里。
       const syncEnabledUi = (enabled) => {
         row.dataset.enabled = enabled ? "true" : "false";
-        packageActionIcon.textContent = enabled ? "done" : "cloud_download";
+        packageActionIcon.innerHTML = enabled ? getIconSvg("done") : getIconSvg("cloudDownload");
         packageActionIcon.title = enabled ? "翻译包已启用" : "翻译包可下载/启用";
       };
 
@@ -1334,7 +1395,6 @@
   }
 
   function createFloatingUi() {
-    // 只在顶层页面渲染控制台，避免 iframe 内重复弹多个球。
     if (!isTopWindow) {
       return;
     }
@@ -1342,11 +1402,18 @@
     injectUiStyles();
     const uiState = getUiState();
     const EDGE_PADDING = 8;
-    const BALL_SIZE = 44;
+    const BALL_SIZE = 56;
     const FALLBACK_PANEL_WIDTH = 340;
     const FALLBACK_PANEL_HEIGHT = 460;
+    const DRAG_THRESHOLD = 3;
+    const LONG_PRESS_MS = 650;
+
     let anchorTop = Number(uiState.ballTop);
     let anchorRight = Number(uiState.ballRight);
+    let isPanelOpen = false;
+    let suppressOpenUntil = 0;
+    let longPressTimerId = null;
+    let longPressFired = false;
 
     if (!Number.isFinite(anchorTop)) {
       anchorTop = 120;
@@ -1358,26 +1425,29 @@
     const ball = document.createElement("button");
     ball.className = "overlaylex-ball";
     ball.type = "button";
-    ball.innerHTML = `<span class="overlaylex-ms overlaylex-ball-icon" aria-hidden="true">g_translate</span>`;
-    ball.title = "展开 OverlayLex 控制台";
+    ball.innerHTML = `
+      <span class="overlaylex-ball-ring"></span>
+      <span class="overlaylex-ball-core">${getIconSvg("translate", "overlaylex-ball-icon")}</span>
+      <span class="overlaylex-ball-dot"></span>
+    `;
+    ball.title = "点击展开面板；长按重注入翻译";
 
     const panel = document.createElement("div");
-    panel.className = "overlaylex-panel";
-    panel.hidden = true;
+    panel.className = "overlaylex-panel overlaylex-hidden";
     panel.dataset.theme = resolveEffectiveTheme(uiState.themeMode);
     panel.innerHTML = `
       <div class="overlaylex-panel-drag-handle" id="overlaylex-panel-drag-handle"></div>
       <div class="overlaylex-panel-header">
         <div class="overlaylex-panel-header-top">
           <div class="overlaylex-title-group">
-            <span class="overlaylex-ms overlaylex-title-icon" aria-hidden="true">g_translate</span>
+            <span class="overlaylex-title-icon">${getIconSvg("translate")}</span>
             <h3 class="overlaylex-panel-title">OverlayLex 控制台</h3>
           </div>
           <button class="overlaylex-icon-btn" id="overlaylex-settings-btn" type="button" title="显示或隐藏设置">
-            <span class="overlaylex-ms" aria-hidden="true">settings</span>
+            ${getIconSvg("settings")}
           </button>
         </div>
-        <div class="overlaylex-theme-settings" id="overlaylex-settings-panel" hidden>
+        <div class="overlaylex-theme-settings overlaylex-hidden" id="overlaylex-settings-panel">
           <label for="overlaylex-theme-select">主题模式</label>
           <select class="overlaylex-theme-select" id="overlaylex-theme-select">
             <option value="system">跟随系统</option>
@@ -1386,7 +1456,7 @@
           </select>
         </div>
         <button class="overlaylex-primary-btn" id="overlaylex-reapply-btn" type="button">
-          <span class="overlaylex-ms" aria-hidden="true">language</span>
+          ${getIconSvg("language")}
           <span>重新注入翻译</span>
         </button>
       </div>
@@ -1397,11 +1467,11 @@
       <div class="overlaylex-status" id="overlaylex-status">初始化中...</div>
       <div class="overlaylex-footer">
         <button class="overlaylex-footer-btn overlaylex-update" id="overlaylex-update-btn" type="button">
-          <span class="overlaylex-ms" aria-hidden="true">cloud_sync</span>
+          ${getIconSvg("cloudSync")}
           <span>更新云端词典</span>
         </button>
         <button class="overlaylex-footer-btn overlaylex-close" id="overlaylex-close-btn" type="button">
-          <span class="overlaylex-ms" aria-hidden="true">close</span>
+          ${getIconSvg("close")}
           <span>关闭面板</span>
         </button>
       </div>
@@ -1424,16 +1494,34 @@
       state.ui.themeSelect.value = normalizeUiThemeMode(uiState.themeMode);
     }
 
-    /**
-     * 工具函数：把数值限制在 [min, max] 区间内。
-     */
+    function setElementVisible(element, visible) {
+      if (!element) {
+        return;
+      }
+      element.classList.toggle("overlaylex-hidden", !visible);
+    }
+
+    function isElementVisible(element) {
+      return Boolean(element) && !element.classList.contains("overlaylex-hidden");
+    }
+
+    function closeSettingsPanel() {
+      if (state.ui.settingsPanel) {
+        state.ui.settingsPanel.classList.add("overlaylex-hidden");
+      }
+    }
+
+    function toggleSettingsPanel() {
+      if (!state.ui.settingsPanel) {
+        return;
+      }
+      state.ui.settingsPanel.classList.toggle("overlaylex-hidden");
+    }
+
     function clampValue(value, min, max) {
       return Math.min(Math.max(value, min), max);
     }
 
-    /**
-     * 读取当前视口大小（用于拖动边界计算）。
-     */
     function getViewportSize() {
       return {
         width: Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0),
@@ -1441,9 +1529,6 @@
       };
     }
 
-    /**
-     * 约束悬浮球位置，防止被拖出可视区域。
-     */
     function clampBallAnchor(top, right) {
       const viewport = getViewportSize();
       const maxTop = Math.max(EDGE_PADDING, viewport.height - BALL_SIZE - EDGE_PADDING);
@@ -1454,9 +1539,6 @@
       };
     }
 
-    /**
-     * 约束面板位置，防止拖动后超出屏幕。
-     */
     function clampPanelAnchor(top, right) {
       const viewport = getViewportSize();
       const panelRect = panel.getBoundingClientRect();
@@ -1473,9 +1555,6 @@
       };
     }
 
-    /**
-     * 将当前位置写回 DOM（悬浮球）。
-     */
     function applyBallPosition() {
       const next = clampBallAnchor(anchorTop, anchorRight);
       anchorTop = next.top;
@@ -1484,9 +1563,6 @@
       ball.style.right = `${anchorRight}px`;
     }
 
-    /**
-     * 将当前位置写回 DOM（面板）。
-     */
     function applyPanelPosition() {
       const next = clampPanelAnchor(anchorTop, anchorRight);
       anchorTop = next.top;
@@ -1495,9 +1571,6 @@
       panel.style.right = `${anchorRight}px`;
     }
 
-    /**
-     * 持久化位置与开关状态，保证刷新后恢复。
-     */
     function persistUiAnchor(panelOpen) {
       setUiState({
         ballTop: Math.round(anchorTop),
@@ -1506,33 +1579,178 @@
       });
     }
 
-    /**
-     * 把悬浮球展开为面板：二者位置共用同一锚点。
-     */
     function openPanelFromBall() {
-      panel.hidden = false;
+      isPanelOpen = true;
+      closeSettingsPanel();
+      setElementVisible(panel, true);
       applyPanelPosition();
-      ball.hidden = true;
+      setElementVisible(ball, false);
       persistUiAnchor(true);
     }
 
-    /**
-     * 把面板收起为悬浮球：保持同一位置，不出现分离感。
-     */
     function closePanelToBall() {
-      panel.hidden = true;
+      isPanelOpen = false;
+      closeSettingsPanel();
+      setElementVisible(panel, false);
+      setElementVisible(ball, true);
       applyBallPosition();
-      ball.hidden = false;
       persistUiAnchor(false);
+    }
+
+    function getEventPoint(event) {
+      if (event.touches && event.touches.length > 0) {
+        return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+      }
+      if (event.changedTouches && event.changedTouches.length > 0) {
+        return { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
+      }
+      if (typeof event.clientX === "number" && typeof event.clientY === "number") {
+        return { x: event.clientX, y: event.clientY };
+      }
+      return null;
+    }
+
+    function clearLongPressTimer() {
+      if (longPressTimerId !== null) {
+        clearTimeout(longPressTimerId);
+        longPressTimerId = null;
+      }
+    }
+
+    function startBallDrag(startEvent) {
+      if (startEvent.type === "mousedown" && startEvent.button !== 0) {
+        return;
+      }
+      if (!isElementVisible(ball)) {
+        return;
+      }
+      const startPoint = getEventPoint(startEvent);
+      if (!startPoint) {
+        return;
+      }
+
+      if (startEvent.type === "mousedown") {
+        startEvent.preventDefault();
+      }
+
+      const dragState = {
+        startX: startPoint.x,
+        startY: startPoint.y,
+        startTop: anchorTop,
+        startRight: anchorRight,
+        moved: false,
+      };
+      longPressFired = false;
+
+      clearLongPressTimer();
+      longPressTimerId = window.setTimeout(() => {
+        if (dragState.moved || !isElementVisible(ball)) {
+          return;
+        }
+        longPressFired = true;
+        suppressOpenUntil = Date.now() + 500;
+        scheduleFullReapply();
+        setStatus("已长按触发重注入翻译。");
+      }, LONG_PRESS_MS);
+
+      function onMove(moveEvent) {
+        const movePoint = getEventPoint(moveEvent);
+        if (!movePoint) {
+          return;
+        }
+        const dx = movePoint.x - dragState.startX;
+        const dy = movePoint.y - dragState.startY;
+        if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+          dragState.moved = true;
+          clearLongPressTimer();
+        }
+        anchorTop = dragState.startTop + dy;
+        anchorRight = dragState.startRight - dx;
+        applyBallPosition();
+        if (moveEvent.cancelable && moveEvent.type.startsWith("touch")) {
+          moveEvent.preventDefault();
+        }
+      }
+
+      function onEnd() {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onEnd);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onEnd);
+        window.removeEventListener("touchcancel", onEnd);
+
+        clearLongPressTimer();
+        persistUiAnchor(false);
+        if (dragState.moved || longPressFired) {
+          suppressOpenUntil = Date.now() + 320;
+        }
+      }
+
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onEnd);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onEnd);
+      window.addEventListener("touchcancel", onEnd);
+    }
+
+    function startPanelDrag(startEvent) {
+      if (startEvent.type === "mousedown" && startEvent.button !== 0) {
+        return;
+      }
+      if (!isPanelOpen) {
+        return;
+      }
+      const startPoint = getEventPoint(startEvent);
+      if (!startPoint) {
+        return;
+      }
+
+      if (startEvent.type === "mousedown") {
+        startEvent.preventDefault();
+      }
+
+      const dragState = {
+        startX: startPoint.x,
+        startY: startPoint.y,
+        startTop: anchorTop,
+        startRight: anchorRight,
+      };
+
+      function onMove(moveEvent) {
+        const movePoint = getEventPoint(moveEvent);
+        if (!movePoint) {
+          return;
+        }
+        const dx = movePoint.x - dragState.startX;
+        const dy = movePoint.y - dragState.startY;
+        anchorTop = dragState.startTop + dy;
+        anchorRight = dragState.startRight - dx;
+        applyPanelPosition();
+        if (moveEvent.cancelable && moveEvent.type.startsWith("touch")) {
+          moveEvent.preventDefault();
+        }
+      }
+
+      function onEnd() {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onEnd);
+        window.removeEventListener("touchmove", onMove);
+        window.removeEventListener("touchend", onEnd);
+        window.removeEventListener("touchcancel", onEnd);
+        persistUiAnchor(true);
+      }
+
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onEnd);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onEnd);
+      window.addEventListener("touchcancel", onEnd);
     }
 
     if (uiState.panelOpen) {
       openPanelFromBall();
     } else {
-      applyBallPosition();
-      ball.hidden = false;
-      panel.hidden = true;
-      persistUiAnchor(false);
+      closePanelToBall();
     }
 
     panel.querySelector("#overlaylex-reapply-btn")?.addEventListener("click", () => {
@@ -1545,10 +1763,7 @@
       closePanelToBall();
     });
     panel.querySelector("#overlaylex-settings-btn")?.addEventListener("click", () => {
-      if (!state.ui.settingsPanel) {
-        return;
-      }
-      state.ui.settingsPanel.hidden = !state.ui.settingsPanel.hidden;
+      toggleSettingsPanel();
     });
     state.ui.themeSelect?.addEventListener("change", () => {
       const selectedMode = normalizeUiThemeMode(state.ui.themeSelect?.value);
@@ -1557,95 +1772,23 @@
       setStatus(`主题模式已切换为：${getThemeModeLabel(selectedMode)}。`);
     });
 
-    let drag = null;
-    let suppressClick = false;
-    ball.addEventListener("pointerdown", (event) => {
-      drag = {
-        startX: event.clientX,
-        startY: event.clientY,
-        startTop: anchorTop,
-        startRight: anchorRight,
-        moved: false,
-      };
-      ball.setPointerCapture(event.pointerId);
-    });
-    ball.addEventListener("pointermove", (event) => {
-      if (!drag) {
-        return;
-      }
-      const dy = event.clientY - drag.startY;
-      const dx = event.clientX - drag.startX;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        drag.moved = true;
-      }
-      anchorTop = drag.startTop + dy;
-      anchorRight = drag.startRight - dx;
-      applyBallPosition();
-    });
-    ball.addEventListener("pointerup", (event) => {
-      if (!drag) {
-        return;
-      }
-      try {
-        ball.releasePointerCapture(event.pointerId);
-      } catch (error) {
-        // 某些浏览器在失焦后 releasePointerCapture 会抛错，忽略即可。
-      }
-      persistUiAnchor(false);
-      suppressClick = drag.moved;
-      queueMicrotask(() => {
-        suppressClick = false;
-      });
-      drag = null;
-    });
     ball.addEventListener("click", (event) => {
-      if (suppressClick) {
+      if (Date.now() < suppressOpenUntil) {
         event.preventDefault();
         event.stopPropagation();
         return;
       }
       openPanelFromBall();
     });
+    ball.addEventListener("mousedown", startBallDrag);
+    ball.addEventListener("touchstart", startBallDrag, { passive: true });
 
     const panelDragHandle = panel.querySelector("#overlaylex-panel-drag-handle");
-    let panelDrag = null;
-    panelDragHandle?.addEventListener("pointerdown", (event) => {
-      if (panel.hidden) {
-        return;
-      }
-      panelDrag = {
-        startX: event.clientX,
-        startY: event.clientY,
-        startTop: anchorTop,
-        startRight: anchorRight,
-      };
-      panelDragHandle.setPointerCapture(event.pointerId);
-    });
-    panelDragHandle?.addEventListener("pointermove", (event) => {
-      if (!panelDrag || panel.hidden) {
-        return;
-      }
-      const dy = event.clientY - panelDrag.startY;
-      const dx = event.clientX - panelDrag.startX;
-      anchorTop = panelDrag.startTop + dy;
-      anchorRight = panelDrag.startRight - dx;
-      applyPanelPosition();
-    });
-    panelDragHandle?.addEventListener("pointerup", (event) => {
-      if (!panelDrag) {
-        return;
-      }
-      try {
-        panelDragHandle.releasePointerCapture(event.pointerId);
-      } catch (error) {
-        // 与悬浮球同理：释放指针失败不影响主流程。
-      }
-      persistUiAnchor(true);
-      panelDrag = null;
-    });
+    panelDragHandle?.addEventListener("mousedown", startPanelDrag);
+    panelDragHandle?.addEventListener("touchstart", startPanelDrag, { passive: true });
 
     window.addEventListener("resize", () => {
-      if (panel.hidden) {
+      if (!isPanelOpen) {
         applyBallPosition();
         persistUiAnchor(false);
         return;

@@ -9,6 +9,10 @@
 
 ## 变更日志
 - 2026-02-07
+  - 更新 `src/userscript/overlaylex.user.js`：移除外部字体图标依赖，统一改为内置 SVG 图标渲染，修复 `translate/settings/cloud_sync/close/done/cloud_download` 在部分站点显示为英文文本的问题。
+  - 更新 `src/userscript/overlaylex.user.js`：重写浮窗显隐控制为 `overlaylex-hidden` 类，规避宿主站样式覆盖 `hidden` 属性导致的“关闭按钮无响应/面板无法收起”问题。
+  - 更新 `src/userscript/overlaylex.user.js`：拖拽事件改为 `mousedown/touchstart` 双通道，修复部分设备与页面环境下“显示可拖动手型但实际拖不动”的问题，并保持面板与悬浮球位置一体化。
+  - 更新 `src/userscript/overlaylex.user.js`：悬浮球升级为玻璃态气泡样式，新增轻微呼吸光环与“长按 650ms 触发重注入”交互。
   - 更新 `AGENTS.md`：补充本次 `paratranz-api` skill 提交记录，确保协作日志与仓库提交保持一致。
   - 新增 `skills/paratranz-api/SKILL.md`：创建 ParaTranz API 交互技能，明确触发条件、标准工作流、错误处理和最小可运行示例。
   - 新增 `skills/paratranz-api/agents/openai.yaml`：补充技能 UI 元信息与默认提示词，便于在 Codex 技能列表中触发。
