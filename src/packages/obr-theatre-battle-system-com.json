@@ -1,0 +1,35 @@
+{
+  "id": "obr-theatre-battle-system-com",
+  "name": "OBR 自动翻译包 - theatre.battle-system.com",
+  "target": {
+    "host": "theatre.battle-system.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Close All": "",
+    "Controls": "",
+    "Dialogue": "",
+    "Help": "",
+    "History": "",
+    "Name": "",
+    "Notice": "",
+    "Override:": "",
+    "Range:": "",
+    "Send To:": "",
+    "Speech Bubble": "",
+    "Story": "",
+    "Style:": "",
+    "SUBMIT": "",
+    "Talk": "",
+    "Talk:": "",
+    "This is for Speech Bubbles only.": "",
+    "Token:": "",
+    "Using :: will seperate pages. Using \\t or \\T will add spacing. Using \\n will add a linebreak. Dialogue type displays 'RPG Dialog Style'. Notice displays it in a taller window. Bubble displays text as chat-bubbles. Story allows for image links. A blank Story will show the token image.": "",
+    "View on Send": "",
+    "Whisper": "",
+    "Whisper:": "",
+    "Yell": "",
+    "Yell:": ""
+  }
+}

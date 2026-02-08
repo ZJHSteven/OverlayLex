@@ -1,0 +1,18 @@
+{
+  "id": "obr-dynamic-fog-owlbear-rodeo",
+  "name": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo",
+  "target": {
+    "host": "dynamic-fog.owlbear.rodeo",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Angle": "",
+    "Edge": "",
+    "ft": "",
+    "Range": "",
+    "Remove": "",
+    "Rotate": "",
+    "Type": ""
+  }
+}

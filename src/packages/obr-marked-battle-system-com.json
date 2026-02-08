@@ -1,0 +1,34 @@
+{
+  "id": "obr-marked-battle-system-com",
+  "name": "OBR 自动翻译包 - marked.battle-system.com",
+  "target": {
+    "host": "marked.battle-system.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "blue": "",
+    "Clear": "",
+    "Close": "",
+    "Color format": "",
+    "Color swatch": "",
+    "cyan": "",
+    "Direction": "",
+    "green": "",
+    "Group": "",
+    "Group #1": "",
+    "Group #2": "",
+    "Group #3": "",
+    "Hex": "",
+    "HSL": "",
+    "Label Name": "",
+    "Loading...": "",
+    "Marked!": "",
+    "No labels found.": "",
+    "Open color picker": "",
+    "purple": "",
+    "red": "",
+    "RGB": "",
+    "yellow": ""
+  }
+}

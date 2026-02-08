@@ -1,0 +1,19 @@
+{
+  "id": "obr-dddice-com",
+  "name": "OBR 自动翻译包 - dddice.com",
+  "target": {
+    "host": "dddice.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Connecting": "",
+    "Continue as guest": "",
+    "dddice": "",
+    "dddice.com/activate": "",
+    "Go to": "",
+    "or": "",
+    "Owlbear Rodeo": "",
+    "Then enter this code": ""
+  }
+}

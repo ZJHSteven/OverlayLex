@@ -1,0 +1,15 @@
+{
+  "id": "obr-movement-tracker-abarbre-com",
+  "name": "OBR 自动翻译包 - movement-tracker.abarbre.com",
+  "target": {
+    "host": "movement-tracker.abarbre.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Enable/Disable": "",
+    "Made by: Andreas Barbre": "",
+    "Movement Tracker": "",
+    "Reset all GM entites": ""
+  }
+}

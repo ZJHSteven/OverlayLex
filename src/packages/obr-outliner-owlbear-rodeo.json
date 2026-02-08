@@ -1,4 +1,4 @@
-﻿{
+{
   "id": "obr-outliner-owlbear-rodeo",
   "name": "OBR 自动翻译包 - outliner.owlbear.rodeo",
   "target": {
@@ -19,6 +19,7 @@
     "Pointers": "指针",
     "Props": "道具",
     "Rulers": "统治者",
+    "Search": "",
     "Text": "文本",
     "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": "要拾取可拖动的项目，请按空格键。拖动时，使用箭头键移动项目。再次按空格键将项目放到新位置，或按退出键取消。"
   }

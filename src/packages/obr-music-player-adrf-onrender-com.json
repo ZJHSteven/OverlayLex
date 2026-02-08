@@ -1,0 +1,29 @@
+{
+  "id": "obr-music-player-adrf-onrender-com",
+  "name": "OBR 自动翻译包 - music-player-adrf.onrender.com",
+  "target": {
+    "host": "music-player-adrf.onrender.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Add Folder": "",
+    "All Folders": "",
+    "Be": "",
+    "Beach": "",
+    "Du": "",
+    "Dungeon": "",
+    "Fo": "",
+    "Forest": "",
+    "Open File": "",
+    "Pi": "",
+    "Pirate Ship": "",
+    "Playing for Everyone": "",
+    "Playing Locally": "",
+    "Save File": "",
+    "Toggle Local Volume Mute": "",
+    "Toggle Sort": "",
+    "Vo": "",
+    "Volcano": ""
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "obr-bubbles-for-owlbear-rodeo-pages-dev",
+  "name": "OBR 自动翻译包 - bubbles-for-owlbear-rodeo.pages.dev",
+  "target": {
+    "host": "bubbles-for-owlbear-rodeo.pages.dev",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "& MAXIMUM": "",
+    "enter": "",
+    "gr": "",
+    "HIT POINTS": "",
+    "Make a roll": "",
+    "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": ""
+  }
+}
