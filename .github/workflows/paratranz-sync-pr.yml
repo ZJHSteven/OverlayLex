@@ -1,0 +1,83 @@
+name: paratranz-sync-pr
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-paratranz-to-main:
+    runs-on: ubuntu-latest
+    env:
+      PARATRANZ_TOKEN: ${{ secrets.PARATRANZ_TOKEN }}
+      PARATRANZ_PROJECT_ID: ${{ secrets.PARATRANZ_PROJECT_ID }}
+    steps:
+      - name: Checkout Main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate Secrets
+        run: |
+          if [ -z "${PARATRANZ_TOKEN}" ]; then
+            echo "PARATRANZ_TOKEN is missing."
+            exit 1
+          fi
+          if [ -z "${PARATRANZ_PROJECT_ID}" ]; then
+            echo "PARATRANZ_PROJECT_ID is missing."
+            exit 1
+          fi
+
+      - name: Pull Latest Translations From Paratranz
+        run: |
+          node src/tools/overlaylex-i18n-flow.mjs pull-paratranz \
+            --project-id "${PARATRANZ_PROJECT_ID}" \
+            --out-dir ".tmp/paratranz-sync-pr"
+
+      - name: Apply Pulled Translations To Packages
+        run: |
+          node src/tools/overlaylex-i18n-flow.mjs from-paratranz \
+            --input-dir ".tmp/paratranz-sync-pr"
+
+      - name: Detect Package Changes
+        id: detect
+        shell: bash
+        run: |
+          if git diff --quiet -- src/packages; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No translation changes, skip pull request."
+            exit 0
+          fi
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "Translation changes detected, prepare pull request."
+
+      - name: Create Or Update Translation Sync PR
+        if: ${{ steps.detect.outputs.has_changes == 'true' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(i18n): sync translations from Paratranz [skip paratranz]"
+          branch: bot/paratranz-sync
+          base: main
+          delete-branch: false
+          title: "chore(i18n): 同步 Paratranz 译文"
+          body: |
+            本 PR 由 GitHub Actions 自动生成，用于同步 ParaTranz 最新译文到本地翻译包。
+
+            - 来源：ParaTranz 项目 `${{ secrets.PARATRANZ_PROJECT_ID }}`
+            - 范围：`src/packages/*.json`
+            - 规则：有变化才提交，无变化自动跳过
+
+            如需发版，请先合并该 PR，再推送到 `release` 分支。
+          add-paths: |
+            src/packages
