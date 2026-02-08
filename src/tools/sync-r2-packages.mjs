@@ -38,12 +38,13 @@ function logError(message, extra = "") {
 function printHelp() {
   console.log(`
 用法：
-  node src/tools/sync-r2-packages.mjs --bucket-name <name> [--packages-dir src/packages] [--worker-dir src/worker]
+  node src/tools/sync-r2-packages.mjs --bucket-name <name> [--packages-dir src/packages] [--worker-dir src/worker] [--local]
 
 参数：
   --bucket-name   R2 桶名称（必填）
   --packages-dir  包目录，默认 src/packages
   --worker-dir    wrangler 工作目录，默认 src/worker
+  --local         上传到本地 R2 模拟存储（默认上传远端，即追加 --remote）
 `);
 }
 
@@ -104,9 +105,14 @@ function getJsonFiles(dirPath) {
   return files;
 }
 
-function runWranglerPut(workerDir, bucketName, objectKey, filePath) {
+function runWranglerPut(workerDir, bucketName, objectKey, filePath, useRemote) {
   const target = `${bucketName}/${objectKey}`;
-  const result = spawnSync("npx", ["wrangler", "r2", "object", "put", target, "--file", filePath], {
+  const commandArgs = ["wrangler", "r2", "object", "put", target, "--file", filePath];
+  if (useRemote) {
+    commandArgs.push("--remote");
+  }
+
+  const result = spawnSync("npx", commandArgs, {
     cwd: workerDir,
     stdio: "inherit",
     // Windows 下通过 shell 解析可避免 npx.cmd 解析失败，Linux/macOS 下保持无 shell 以减少不确定性。
@@ -131,6 +137,7 @@ function main() {
   const bucketName = String(options["bucket-name"] || "").trim();
   const packagesDir = resolvePath(String(options["packages-dir"] || "src/packages"));
   const workerDir = resolvePath(String(options["worker-dir"] || "src/worker"));
+  const useRemote = !Boolean(options.local);
 
   if (!bucketName) {
     throw new Error("缺少 --bucket-name。");
@@ -164,12 +171,13 @@ function main() {
     }
 
     const objectKey = `packages/${fileName}`;
-    runWranglerPut(workerDir, bucketName, objectKey, filePath);
+    runWranglerPut(workerDir, bucketName, objectKey, filePath, useRemote);
     uploadedCount += 1;
     logInfo("上传成功：", objectKey);
   }
 
   logInfo("同步完成。");
+  logInfo("上传位置：", useRemote ? "remote（Cloudflare 线上 R2）" : "local（Wrangler 本地模拟）");
   logInfo("上传数量：", String(uploadedCount));
   logInfo("跳过数量：", String(skippedCount));
 }
