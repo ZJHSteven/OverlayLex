@@ -16,6 +16,7 @@
  * 命令：
  * - prepare-from-staged（默认）: 本地交互式发布命令
  * - verify-release: CI 专用校验（非交互）
+ * - sync-metadata: 仅同步 allowlist 与 worker catalog（不做 git 推送）
  */
 
 import fs from "node:fs";
@@ -67,6 +68,7 @@ function printHelp() {
 命令：
   prepare-from-staged    按“当前暂存区包文件”执行本地一键发布（默认）
   verify-release         CI 校验：校验版本、allowlist 与 worker catalog 一致性
+  sync-metadata          只做元数据同步（allowlist + worker catalog）
 
 参数：
   --base-ref <ref>       CI 校验基线（verify-release 必填）
@@ -924,6 +926,28 @@ async function commandVerifyRelease(options) {
   logInfo("改动包数量：", String(changedFiles.length));
 }
 
+function commandSyncMetadata() {
+  let allRecords = readAllPublishablePackages();
+  const allowlistResult = syncDomainAllowlistWithPackages(allRecords);
+  allRecords = readAllPublishablePackages();
+  const workerResult = syncWorkerCatalogWithPackages(allRecords);
+
+  const latestAllRecords = readAllPublishablePackages();
+  assertAllowlistCoverage(latestAllRecords);
+  assertWorkerCatalogConsistency(latestAllRecords);
+
+  if (allowlistResult.changed) {
+    logInfo("sync-metadata：已更新域名准入包。", "overlaylex-domain-allowlist");
+  } else {
+    logInfo("sync-metadata：域名准入包无需改动。");
+  }
+  if (workerResult.changed) {
+    logInfo("sync-metadata：已更新 Worker PACKAGE_CATALOG。");
+  } else {
+    logInfo("sync-metadata：Worker PACKAGE_CATALOG 无需改动。");
+  }
+}
+
 async function main() {
   const rawArgs = process.argv.slice(2);
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
@@ -942,6 +966,9 @@ async function main() {
       return;
     case "verify-release":
       await commandVerifyRelease(options);
+      return;
+    case "sync-metadata":
+      commandSyncMetadata();
       return;
     default:
       throw new Error(`未知命令：${command}`);
