@@ -71,6 +71,7 @@ function printHelp() {
 参数：
   --base-ref <ref>       CI 校验基线（verify-release 必填）
   --api-url <url>        线上 API 地址（默认 ${DEFAULT_API_URL}）
+  --yes                  跳过两次交互确认（仅建议在自动化场景使用）
 `);
 }
 
@@ -802,7 +803,8 @@ function buildReleaseCommitMessage(changedPackageIds) {
   return `chore(release): publish ${preview.join(",")}${suffix}`;
 }
 
-async function commandPrepareFromStaged() {
+async function commandPrepareFromStaged(options) {
+  const autoYes = Boolean(options.yes);
   const currentBranch = getCurrentBranch();
   if (currentBranch !== "main") {
     throw new Error(`请在 main 分支执行该命令，当前分支：${currentBranch}`);
@@ -817,7 +819,7 @@ async function commandPrepareFromStaged() {
     console.log(`  - ${file}`);
   }
 
-  const confirmedRound1 = await promptYes("第一次确认：以上暂存文件将作为发布输入。");
+  const confirmedRound1 = autoYes ? true : await promptYes("第一次确认：以上暂存文件将作为发布输入。");
   if (!confirmedRound1) {
     logWarn("你取消了本次发布准备。");
     return;
@@ -867,7 +869,9 @@ async function commandPrepareFromStaged() {
     console.log(`  - ${file}`);
   }
 
-  const confirmedRound2 = await promptYes("第二次确认：将执行 commit + push main + cherry-pick 到 release + push release。");
+  const confirmedRound2 = autoYes
+    ? true
+    : await promptYes("第二次确认：将执行 commit + push main + cherry-pick 到 release + push release。");
   if (!confirmedRound2) {
     logWarn("你取消了发布推送流程（改动仍保留在本地与暂存区）。");
     return;
@@ -933,7 +937,7 @@ async function main() {
 
   switch (command) {
     case "prepare-from-staged":
-      await commandPrepareFromStaged();
+      await commandPrepareFromStaged(options);
       return;
     case "verify-release":
       await commandVerifyRelease(options);
