@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.10
+// @version      0.2.11
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
@@ -29,7 +29,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.10";
+  const SCRIPT_VERSION = "0.2.11";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -719,6 +719,8 @@
     return safeLocalStorageGet(STORAGE_KEYS.UI_STATE, {
       ballTop: 120,
       ballRight: 16,
+      panelTop: 120,
+      panelRight: 16,
       panelOpen: false,
       themeMode: "system",
     });
@@ -1496,18 +1498,29 @@
     const DRAG_THRESHOLD = 3;
     const LONG_PRESS_MS = 650;
 
-    let anchorTop = Number(uiState.ballTop);
-    let anchorRight = Number(uiState.ballRight);
+    // 球与面板使用两套独立锚点：
+    // - 球锚点：只由球拖拽与球边界修正更新，保证“展开/收起后球不漂移”。
+    // - 面板锚点：只由面板拖拽与面板边界修正更新，允许面板独立避让视口边界。
+    let ballAnchorTop = Number(uiState.ballTop);
+    let ballAnchorRight = Number(uiState.ballRight);
+    let panelAnchorTop = Number(uiState.panelTop);
+    let panelAnchorRight = Number(uiState.panelRight);
     let isPanelOpen = false;
     let suppressOpenUntil = 0;
     let longPressTimerId = null;
     let longPressFired = false;
 
-    if (!Number.isFinite(anchorTop)) {
-      anchorTop = 120;
+    if (!Number.isFinite(ballAnchorTop)) {
+      ballAnchorTop = 120;
     }
-    if (!Number.isFinite(anchorRight)) {
-      anchorRight = 16;
+    if (!Number.isFinite(ballAnchorRight)) {
+      ballAnchorRight = 16;
+    }
+    if (!Number.isFinite(panelAnchorTop)) {
+      panelAnchorTop = ballAnchorTop;
+    }
+    if (!Number.isFinite(panelAnchorRight)) {
+      panelAnchorRight = ballAnchorRight;
     }
 
     const ball = document.createElement("button");
@@ -1644,55 +1657,44 @@
     }
 
     function applyBallPosition() {
-      const next = clampBallAnchor(anchorTop, anchorRight);
-      anchorTop = next.top;
-      anchorRight = next.right;
-      ball.style.top = `${anchorTop}px`;
-      ball.style.right = `${anchorRight}px`;
+      const next = clampBallAnchor(ballAnchorTop, ballAnchorRight);
+      ballAnchorTop = next.top;
+      ballAnchorRight = next.right;
+      ball.style.top = `${ballAnchorTop}px`;
+      ball.style.right = `${ballAnchorRight}px`;
     }
 
     function applyPanelPosition() {
-      const next = clampPanelAnchor(anchorTop, anchorRight);
-      anchorTop = next.top;
-      anchorRight = next.right;
-      panel.style.top = `${anchorTop}px`;
-      panel.style.right = `${anchorRight}px`;
+      const next = clampPanelAnchor(panelAnchorTop, panelAnchorRight);
+      panelAnchorTop = next.top;
+      panelAnchorRight = next.right;
+      panel.style.top = `${panelAnchorTop}px`;
+      panel.style.right = `${panelAnchorRight}px`;
     }
 
     /**
-     * 从“当前可见球”的真实像素位置回写锚点。
-     * 这样在球 -> 面板切换时不会出现累积误差。
+     * 使用“球当前锚点”作为面板展开起点。
+     * 说明：
+     * - 面板展开时可以因越界被 clamp，但不会反向修改球锚点。
+     * - 这样可保证“收起后球回到原位”。
      */
-    function syncAnchorFromBallRect() {
-      const viewport = getViewportSize();
-      const rect = ball.getBoundingClientRect();
-      anchorTop = rect.top;
-      anchorRight = viewport.width - rect.right;
-    }
-
-    /**
-     * 从“当前可见面板”的真实像素位置回写锚点。
-     * 这样在面板 -> 球切换时不会出现“收起后右偏”。
-     */
-    function syncAnchorFromPanelRect() {
-      const viewport = getViewportSize();
-      const rect = panel.getBoundingClientRect();
-      anchorTop = rect.top;
-      anchorRight = viewport.width - rect.right;
+    function syncPanelAnchorFromBallAnchor() {
+      panelAnchorTop = ballAnchorTop;
+      panelAnchorRight = ballAnchorRight;
     }
 
     function persistUiAnchor(panelOpen) {
       setUiState({
-        ballTop: Math.round(anchorTop),
-        ballRight: Math.round(anchorRight),
+        ballTop: Math.round(ballAnchorTop),
+        ballRight: Math.round(ballAnchorRight),
+        panelTop: Math.round(panelAnchorTop),
+        panelRight: Math.round(panelAnchorRight),
         panelOpen: Boolean(panelOpen),
       });
     }
 
     function openPanelFromBall() {
-      if (isElementVisible(ball)) {
-        syncAnchorFromBallRect();
-      }
+      syncPanelAnchorFromBallAnchor();
       isPanelOpen = true;
       closeSettingsPanel();
       setElementVisible(panel, true);
@@ -1702,9 +1704,6 @@
     }
 
     function closePanelToBall() {
-      if (isElementVisible(panel)) {
-        syncAnchorFromPanelRect();
-      }
       isPanelOpen = false;
       closeSettingsPanel();
       setElementVisible(panel, false);
@@ -1776,12 +1775,12 @@
       const dragState = {
         startX: startPoint.x,
         startY: startPoint.y,
-        startTop: anchorTop,
-        startRight: anchorRight,
+        startTop: ballAnchorTop,
+        startRight: ballAnchorRight,
         moved: false,
         frameId: null,
-        pendingTop: anchorTop,
-        pendingRight: anchorRight,
+        pendingTop: ballAnchorTop,
+        pendingRight: ballAnchorRight,
       };
       longPressFired = false;
 
@@ -1804,8 +1803,8 @@
         }
         dragState.frameId = window.requestAnimationFrame(() => {
           dragState.frameId = null;
-          anchorTop = dragState.pendingTop;
-          anchorRight = dragState.pendingRight;
+          ballAnchorTop = dragState.pendingTop;
+          ballAnchorRight = dragState.pendingRight;
           applyBallPosition();
         });
       }
@@ -1842,8 +1841,8 @@
         if (dragState.frameId !== null) {
           window.cancelAnimationFrame(dragState.frameId);
           dragState.frameId = null;
-          anchorTop = dragState.pendingTop;
-          anchorRight = dragState.pendingRight;
+          ballAnchorTop = dragState.pendingTop;
+          ballAnchorRight = dragState.pendingRight;
           applyBallPosition();
         }
         ball.classList.remove("overlaylex-ball-dragging");
@@ -1880,8 +1879,8 @@
       const dragState = {
         startX: startPoint.x,
         startY: startPoint.y,
-        startTop: anchorTop,
-        startRight: anchorRight,
+        startTop: panelAnchorTop,
+        startRight: panelAnchorRight,
       };
 
       function onMove(moveEvent) {
@@ -1891,8 +1890,8 @@
         }
         const dx = movePoint.x - dragState.startX;
         const dy = movePoint.y - dragState.startY;
-        anchorTop = dragState.startTop + dy;
-        anchorRight = dragState.startRight - dx;
+        panelAnchorTop = dragState.startTop + dy;
+        panelAnchorRight = dragState.startRight - dx;
         applyPanelPosition();
         if (moveEvent.cancelable && moveEvent.type.startsWith("touch")) {
           moveEvent.preventDefault();

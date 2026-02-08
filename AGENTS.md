@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/userscript/overlaylex.user.js`：修复“球与面板共用锚点导致收起后偏移”问题，改为球/面板双锚点独立管理；展开时面板从球坐标计算并独立 `clamp`，收起时仅恢复球自身坐标，不再被面板位置反向覆盖。
+  - 更新 `src/userscript/overlaylex.user.js`：`UI_STATE` 新增 `panelTop/panelRight` 字段用于分离持久化；同时保持 `ballTop/ballRight` 独立保存，确保边界场景下球位置稳定可复现。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升至 `0.2.11`（`@version` 与 `SCRIPT_VERSION` 同步）。
   - 更新 `src/userscript/overlaylex.user.js`：将悬浮球尺寸按约 `1/3` 放大（`22px -> 30px`），并同步图标/呼吸圈/状态点参数，版本升至 `0.2.10`。
   - 更新 `src/userscript/overlaylex.user.js`：悬浮球拖拽改为 `requestAnimationFrame` 逐帧渲染，新增拖拽中视觉降级样式（临时关闭高成本模糊/动效），修复拖动不跟手与卡顿感。
   - 更新 `src/userscript/overlaylex.user.js`：新增“开合前按当前可见元素实时回写锚点”逻辑，修复点击面板外收起后悬浮球位置右偏问题。
