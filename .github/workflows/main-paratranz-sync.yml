@@ -48,6 +48,12 @@ jobs:
           echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
           echo "resolved base ref: $BASE_REF"
 
+      - name: Validate Local Translation Policy
+        if: ${{ steps.base.outputs.base_ref != '' }}
+        run: |
+          node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy \
+            --base-ref "${{ steps.base.outputs.base_ref }}"
+
       - name: Push Changed Packages To ParaTranz
         if: ${{ steps.base.outputs.base_ref != '' }}
         run: |
@@ -59,4 +65,3 @@ jobs:
       - name: Skip Message
         if: ${{ steps.base.outputs.base_ref == '' }}
         run: echo "No valid base ref, skip this run."
-

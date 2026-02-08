@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `.github/workflows/main-paratranz-sync.yml`：新增 `Validate Local Translation Policy` 步骤，在上推 ParaTranz 前执行 `check-local-translation-policy`，阻止“修改已存在 original 译文”的本地改动进入主流程。
   - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 `check-local-translation-policy` 子命令，用于校验 `main` 分支本地译文改动策略；规则为“允许新增 `original` 携带空/非空预翻译，禁止修改已存在 `original` 的译文”。
   - 新增 `src/worker/package-lock.json`：补齐 Worker 依赖锁文件，保证 GitHub Actions 中 `npm ci` 可稳定执行。
   - 修复 `src/tools/sync-r2-packages.mjs`：R2 上传默认改为远端模式（自动附加 `--remote`），并新增 `--local` 调试开关，避免误写入 Wrangler 本地模拟桶导致线上包未更新。
