@@ -342,16 +342,19 @@ function getCurrentBranch() {
 }
 
 function ensureCleanForPrepare(stagedFiles) {
+  if (stagedFiles.length === 0) {
+    throw new Error("暂存区为空。请先在 UI 或命令行中暂存要发布的包文件。");
+  }
+
+  // 允许工作区存在其他改动：发布来源只取“暂存区”。
+  // 这里仅给提示，避免初学者误以为这些改动会被一起发出去。
   const unstaged = getUnstagedFiles();
   if (unstaged.length > 0) {
-    throw new Error(`存在未暂存改动，请先整理工作区：${unstaged.join(", ")}`);
+    logWarn("检测到未暂存改动；本次发布只按暂存区文件执行，不会自动带上未暂存文件。");
   }
   const untracked = getUntrackedFiles();
   if (untracked.length > 0) {
-    throw new Error(`存在未跟踪文件，请先清理或纳入版本控制：${untracked.join(", ")}`);
-  }
-  if (stagedFiles.length === 0) {
-    throw new Error("暂存区为空。请先在 UI 或命令行中暂存要发布的包文件。");
+    logWarn("检测到未跟踪文件；本次发布只按暂存区文件执行，不会自动带上未跟踪文件。");
   }
 }
 
@@ -932,8 +935,10 @@ async function commandPrepareFromStaged(options) {
   allRecords = readAllPublishablePackages();
   const workerCatalogResult = syncWorkerCatalogWithPackages(allRecords, releasedTranslationIds);
 
-  // 把脚本自动修改的文件重新加入暂存区，确保 commit 与校验对象一致。
-  runGit(["add", "src/packages", "src/worker/src/data.js"], { stdio: "inherit" });
+  // 只把“你原始暂存的包 + 自动维护元数据文件”加入暂存区。
+  // 这样可避免把工作区其他改动误带进本次发布 commit。
+  const autoStageFiles = [...new Set([...stagedFiles, "src/packages/overlaylex-domain-allowlist.json", "src/worker/src/data.js"])];
+  runGit(["add", ...autoStageFiles], { stdio: "inherit" });
   const finalStagedFiles = getStagedFiles();
   const finalStaged = validateFinalStagedFiles(finalStagedFiles);
 

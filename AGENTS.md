@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/tools/release-from-staged.mjs`：移除“工作区必须干净”硬限制，允许存在未暂存/未跟踪改动；发布来源仍只取暂存区。并将自动 `git add` 范围收敛为“原始暂存包 + `overlaylex-domain-allowlist.json` + `src/worker/src/data.js`”，避免误带其他文件。
+  - 更新 `README.md`：补充“工作区可不干净，但发布 commit 仅包含暂存包与自动维护元数据文件”的规则说明。
   - 更新 `src/tools/release-from-staged.mjs`：回退“按中文译文自动筛包”策略，改为“仅按发布者暂存区选择决定新增发布包”；脚本不再自动替用户做包选择，只负责版本递增、allowlist/catalog 同步与发布链路执行。
   - 更新 `README.md`：将发布规则说明改为“选择权在暂存区”，明确脚本不会按译文内容自动筛选包。
   - 更新 `src/tools/release-from-staged.mjs`：发布目录改为仅纳入“至少包含 1 条中文译文”的翻译包；未翻译（纯英文采集）包会被自动排除出 Worker `PACKAGE_CATALOG` 与 manifest，同时发布前校验会阻止这类包进入发布流程。
