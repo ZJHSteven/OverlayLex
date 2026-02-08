@@ -5,21 +5,21 @@
     "host": "outliner.owlbear.rodeo",
     "pathPrefix": "/"
   },
-  "version": "0.1.0",
+  "version": "0.1.3",
   "translations": {
     "Attachments": "附件",
     "Characters": "人物",
     "Drawings": "绘画",
-    "Fog": "多雾路段",
+    "Fog": "战争迷雾",
     "Maps": "地图",
     "Mounts": "坐骑",
     "Notes": "笔记",
-    "Open a scene to use the outliner": "打开场景以使用大纲视图",
-    "Outliner": "大纲",
-    "Pointers": "指针",
+    "Open a scene to use the outliner": "打开场景以使用图层视图",
+    "Outliner": "图层",
+    "Pointers": "指示器",
     "Props": "道具",
-    "Rulers": "统治者",
-    "Search": "",
+    "Rulers": "尺子",
+    "Search": "搜索",
     "Text": "文本",
     "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": "要拾取可拖动的项目，请按空格键。拖动时，使用箭头键移动项目。再次按空格键将项目放到新位置，或按退出键取消。"
   }

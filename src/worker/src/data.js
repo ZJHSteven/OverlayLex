@@ -27,54 +27,142 @@ export const DOMAIN_PACKAGE_ID = "overlaylex-domain-allowlist";
  * - kind=domain-allowlist: 域名准入包
  */
 export const PACKAGE_CATALOG = {
-  "obr-www-owlbear-rodeo": {
-    id: "obr-www-owlbear-rodeo",
-    name: "OBR 主站与房间中文包（owlbear.rodeo）",
-    kind: "translation",
-    version: "0.2.0",
-    enabledByDefault: true,
-    description: "OBR 主站与房间统一翻译包（已合并 room-core）",
+  "obr-bubbles-for-owlbear-rodeo-pages-dev": {
+    "id": "obr-bubbles-for-owlbear-rodeo-pages-dev",
+    "name": "OBR 自动翻译包 - bubbles-for-owlbear-rodeo.pages.dev",
+    "kind": "translation",
+    "version": "0.1.3",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - bubbles-for-owlbear-rodeo.pages.dev（自动同步）"
   },
   "obr-clash-battle-system-com": {
-    id: "obr-clash-battle-system-com",
-    name: "Clash 插件中文包（clash.battle-system.com）",
-    kind: "translation",
-    version: "0.1.0",
-    enabledByDefault: true,
-    description: "Clash 插件翻译包（自动采集生成）",
+    "id": "obr-clash-battle-system-com",
+    "name": "Clash 插件中文包（clash.battle-system.com）",
+    "kind": "translation",
+    "version": "0.1.3",
+    "enabledByDefault": true,
+    "description": "Clash 插件翻译包（自动采集生成）"
   },
-  "obr-smoke-battle-system-com": {
-    id: "obr-smoke-battle-system-com",
-    name: "Smoke 插件中文包（smoke.battle-system.com）",
-    kind: "translation",
-    version: "0.1.0",
-    enabledByDefault: true,
-    description: "Smoke & Spectre 插件翻译包（自动采集生成）",
+  "obr-dddice-com": {
+    "id": "obr-dddice-com",
+    "name": "OBR 自动翻译包 - dddice.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - dddice.com（自动同步）"
+  },
+  "obr-dynamic-fog-owlbear-rodeo": {
+    "id": "obr-dynamic-fog-owlbear-rodeo",
+    "name": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo（自动同步）"
+  },
+  "obr-gmg-tabletop-almanac-com": {
+    "id": "obr-gmg-tabletop-almanac-com",
+    "name": "OBR 自动翻译包 - gmg.tabletop-almanac.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - gmg.tabletop-almanac.com（自动同步）"
+  },
+  "obr-marked-battle-system-com": {
+    "id": "obr-marked-battle-system-com",
+    "name": "OBR 自动翻译包 - marked.battle-system.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - marked.battle-system.com（自动同步）"
+  },
+  "obr-movement-tracker-abarbre-com": {
+    "id": "obr-movement-tracker-abarbre-com",
+    "name": "OBR 自动翻译包 - movement-tracker.abarbre.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - movement-tracker.abarbre.com（自动同步）"
+  },
+  "obr-music-player-adrf-onrender-com": {
+    "id": "obr-music-player-adrf-onrender-com",
+    "name": "OBR 自动翻译包 - music-player-adrf.onrender.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - music-player-adrf.onrender.com（自动同步）"
   },
   "obr-outliner-owlbear-rodeo": {
-    id: "obr-outliner-owlbear-rodeo",
-    name: "Outliner 插件中文包（outliner.owlbear.rodeo）",
-    kind: "translation",
-    version: "0.1.0",
-    enabledByDefault: true,
-    description: "Outliner 插件翻译包（自动采集生成）",
+    "id": "obr-outliner-owlbear-rodeo",
+    "name": "Outliner 插件中文包（outliner.owlbear.rodeo）",
+    "kind": "translation",
+    "version": "0.1.3",
+    "enabledByDefault": true,
+    "description": "Outliner 插件翻译包（自动采集生成）"
   },
   "obr-owlbear-hp-tracker-pages-dev": {
-    id: "obr-owlbear-hp-tracker-pages-dev",
-    name: "HP Tracker 插件中文包（owlbear-hp-tracker.pages.dev）",
-    kind: "translation",
-    version: "0.1.0",
-    enabledByDefault: true,
-    description: "HP Tracker 插件翻译包（自动采集生成）",
+    "id": "obr-owlbear-hp-tracker-pages-dev",
+    "name": "HP Tracker 插件中文包（owlbear-hp-tracker.pages.dev）",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "HP Tracker 插件翻译包（自动采集生成）"
+  },
+  "obr-owlbear-rodeo-bubbles-extension-onrender-com": {
+    "id": "obr-owlbear-rodeo-bubbles-extension-onrender-com",
+    "name": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com（自动同步）"
+  },
+  "obr-smoke-battle-system-com": {
+    "id": "obr-smoke-battle-system-com",
+    "name": "Smoke 插件中文包（smoke.battle-system.com）",
+    "kind": "translation",
+    "version": "0.1.3",
+    "enabledByDefault": true,
+    "description": "Smoke & Spectre 插件翻译包（自动采集生成）"
+  },
+  "obr-theatre-battle-system-com": {
+    "id": "obr-theatre-battle-system-com",
+    "name": "OBR 自动翻译包 - theatre.battle-system.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - theatre.battle-system.com（自动同步）"
+  },
+  "obr-www-dummysheet-com": {
+    "id": "obr-www-dummysheet-com",
+    "name": "OBR 自动翻译包 - www.dummysheet.com",
+    "kind": "translation",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - www.dummysheet.com（自动同步）"
+  },
+  "obr-www-owlbear-rodeo": {
+    "id": "obr-www-owlbear-rodeo",
+    "name": "OBR 主站与房间中文包（owlbear.rodeo）",
+    "kind": "translation",
+    "version": "0.2.3",
+    "enabledByDefault": true,
+    "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
   "overlaylex-domain-allowlist": {
-    id: "overlaylex-domain-allowlist",
-    name: "OverlayLex 域名准入包",
-    kind: "domain-allowlist",
-    version: "0.2.0",
-    enabledByDefault: true,
-    description: "控制脚本允许在哪些域名继续执行",
+    "id": "overlaylex-domain-allowlist",
+    "name": "OverlayLex 域名准入包",
+    "kind": "domain-allowlist",
+    "version": "0.2.1",
+    "enabledByDefault": true,
+    "description": "控制脚本允许在哪些域名继续执行"
   },
+  "overlaylex-domain-seeds": {
+    "id": "overlaylex-domain-seeds",
+    "name": "OverlayLex 本地种子域名",
+    "kind": "domain-allowlist",
+    "version": "0.1.0",
+    "enabledByDefault": true,
+    "description": "控制脚本允许在哪些域名继续执行"
+  }
 };
 
 /**
@@ -85,54 +173,129 @@ export const PACKAGE_CATALOG = {
  */
 export const BUILTIN_PACKAGE_FALLBACKS = {
   "obr-www-owlbear-rodeo": {
-    id: "obr-www-owlbear-rodeo",
-    name: "OBR 主站与房间中文包（owlbear.rodeo）",
-    target: {
-      hosts: ["owlbear.rodeo", "www.owlbear.rodeo"],
-      pathPrefix: "/",
+    "id": "obr-www-owlbear-rodeo",
+    "name": "OBR 主站与房间中文包（owlbear.rodeo）",
+    "target": {
+      "hosts": [
+        "owlbear.rodeo",
+        "www.owlbear.rodeo"
+      ],
+      "pathPrefix": "/"
     },
-    version: "0.2.0",
-    translations: {
+    "version": "0.2.0",
+    "translations": {
       "Owlbear Rodeo": "枭熊VTT",
       "You need to enable JavaScript to run this app.": "你需要启用 JavaScript 才能运行此应用。",
-      Players: "玩家",
-      Search: "搜索",
-      "5ft": "5英尺",
-    },
+      "Players": "玩家",
+      "Search": "搜索",
+      "5ft": "5英尺"
+    }
   },
   "obr-room-core": {
-    id: "obr-room-core",
-    name: "OBR 房间核心中文包（兼容别名）",
-    target: {
-      host: "owlbear.rodeo",
-      pathPrefix: "/room",
+    "id": "obr-room-core",
+    "name": "OBR 房间核心中文包（兼容别名）",
+    "target": {
+      "host": "owlbear.rodeo",
+      "pathPrefix": "/room"
     },
-    version: "0.2.0",
-    translations: {
+    "version": "0.2.0",
+    "translations": {
       "Owlbear Rodeo": "枭熊VTT",
       "You need to enable JavaScript to run this app.": "你需要启用 JavaScript 才能运行此应用。",
-      Players: "玩家",
-      Search: "搜索",
-      "5ft": "5英尺",
-    },
+      "Players": "玩家",
+      "Search": "搜索",
+      "5ft": "5英尺"
+    }
   },
   "overlaylex-domain-allowlist": {
-    id: "overlaylex-domain-allowlist",
-    name: "OverlayLex 域名准入包",
-    kind: "domain-allowlist",
-    version: "0.2.0",
-    rules: [
-      { type: "exact", value: "owlbear.rodeo", comment: "OBR 主域名" },
-      { type: "exact", value: "www.owlbear.rodeo", comment: "OBR 主域名（www）" },
-      { type: "suffix", value: ".owlbear.rodeo", comment: "OBR 相关子域名" },
-      { type: "suffix", value: ".owlbear.app", comment: "OBR 生态域名" },
-      { type: "suffix", value: ".battle-system.com", comment: "Battle-System 插件域名" },
-      { type: "exact", value: "dddice.com", comment: "DDDice 插件域名" },
-      { type: "exact", value: "aoe.owlbear.davidsev.co.uk", comment: "AoE 插件域名" },
-      { type: "exact", value: "owlbear-hp-tracker.pages.dev", comment: "HP Tracker 插件域名" },
-      { type: "exact", value: "resident-uhlig.gitlab.io", comment: "resident-uhlig 插件域名" },
-    ],
-  },
+    "id": "overlaylex-domain-allowlist",
+    "name": "OverlayLex 域名准入包",
+    "kind": "domain-allowlist",
+    "version": "0.2.1",
+    "rules": [
+      {
+        "type": "exact",
+        "value": "owlbear.rodeo",
+        "comment": "OBR 主域名"
+      },
+      {
+        "type": "exact",
+        "value": "www.owlbear.rodeo",
+        "comment": "OBR 主域名（www）"
+      },
+      {
+        "type": "suffix",
+        "value": ".owlbear.rodeo",
+        "comment": "OBR 相关子域名"
+      },
+      {
+        "type": "suffix",
+        "value": ".owlbear.app",
+        "comment": "OBR 生态域名"
+      },
+      {
+        "type": "suffix",
+        "value": ".battle-system.com",
+        "comment": "Battle-System 插件域名"
+      },
+      {
+        "type": "exact",
+        "value": "dddice.com",
+        "comment": "DDDice 插件域名"
+      },
+      {
+        "type": "exact",
+        "value": "aoe.owlbear.davidsev.co.uk",
+        "comment": "AoE 插件域名"
+      },
+      {
+        "type": "exact",
+        "value": "owlbear-hp-tracker.pages.dev",
+        "comment": "HP Tracker 插件域名"
+      },
+      {
+        "type": "exact",
+        "value": "resident-uhlig.gitlab.io",
+        "comment": "resident-uhlig 插件域名"
+      },
+      {
+        "type": "exact",
+        "value": "bubbles-for-owlbear-rodeo.pages.dev",
+        "comment": "自动同步包域名",
+        "source": "obr-bubbles-for-owlbear-rodeo-pages-dev"
+      },
+      {
+        "type": "exact",
+        "value": "gmg.tabletop-almanac.com",
+        "comment": "自动同步包域名",
+        "source": "obr-gmg-tabletop-almanac-com"
+      },
+      {
+        "type": "exact",
+        "value": "movement-tracker.abarbre.com",
+        "comment": "自动同步包域名",
+        "source": "obr-movement-tracker-abarbre-com"
+      },
+      {
+        "type": "exact",
+        "value": "music-player-adrf.onrender.com",
+        "comment": "自动同步包域名",
+        "source": "obr-music-player-adrf-onrender-com"
+      },
+      {
+        "type": "exact",
+        "value": "owlbear-rodeo-bubbles-extension.onrender.com",
+        "comment": "自动同步包域名",
+        "source": "obr-owlbear-rodeo-bubbles-extension-onrender-com"
+      },
+      {
+        "type": "exact",
+        "value": "www.dummysheet.com",
+        "comment": "自动同步包域名",
+        "source": "obr-www-dummysheet-com"
+      }
+    ]
+  }
 };
 
 /**
