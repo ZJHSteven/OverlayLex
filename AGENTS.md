@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 GitHub 仓库描述：补充项目定位说明（Owlbear Rodeo / DnD5e 场景下的 OverlayLex 双脚本翻译方案）。
+  - 更新 `src/userscript/overlaylex.user.js`：`@name` 调整为 `OverlayLex Translator`，`@namespace` 改为仓库地址，新增 `@updateURL/@downloadURL`（Raw 链接），并补充发布用 `@description`，版本升至 `0.2.9`。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：`@namespace` 改为仓库地址，新增 `@updateURL/@downloadURL`（Raw 链接），并补充发布用 `@description`，版本升至 `0.1.2`。
   - 更新 `README.md`：补充“译文真源规则 + 本地改动策略（允许新增词条预翻译、禁止修改已存在词条译文）”、新增 `check-local-translation-policy` 示例命令，并更新 `main/release/每日同步 PR` 三条工作流说明。
   - 新增 `.github/workflows/paratranz-sync-pr.yml`：支持“每天定时 + 手动触发”从 ParaTranz 回拉译文并回写 `src/packages`，仅在有差异时自动创建/更新 `bot/paratranz-sync` PR，无变化时自动跳过提交。
   - 更新 `.github/workflows/release-publish.yml`：新增发布前 `Check Paratranz Drift` 门禁（拉取并回写远端译文后检测 `src/packages` 是否有差异），未对齐时阻断发布；并补充 `PARATRANZ_TOKEN`、`PARATRANZ_PROJECT_ID` secrets 校验。

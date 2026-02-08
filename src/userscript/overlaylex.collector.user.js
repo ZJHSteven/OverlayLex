@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         OverlayLex Collector
-// @namespace    https://overlaylex.local
-// @version      0.1.1
-// @description  OverlayLex 实时抽词采集器（独立于主翻译脚本）
+// @namespace    https://github.com/ZJHSteven/OverlayLex
+// @version      0.1.2
+// @description  OverlayLex 采集脚本：实时收集页面英文词条并导出为翻译原文素材。
 // @author       OverlayLex
 // @match        *://*/*
+// @updateURL    https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.collector.user.js
+// @downloadURL  https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.collector.user.js
 // @run-at       document-end
 // @grant        GM_getValue
 // @grant        GM_setValue

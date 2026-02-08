@@ -1,10 +1,12 @@
 // ==UserScript==
-// @name         OverlayLex
-// @namespace    https://overlaylex.local
-// @version      0.2.8
-// @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
+// @name         OverlayLex Translator
+// @namespace    https://github.com/ZJHSteven/OverlayLex
+// @version      0.2.9
+// @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
+// @updateURL    https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.user.js
+// @downloadURL  https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.user.js
 // @run-at       document-end
 // @grant        none
 // ==/UserScript==
