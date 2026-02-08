@@ -6,7 +6,7 @@ on:
       - release
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish:
@@ -77,37 +77,34 @@ jobs:
             exit 1
           fi
 
-      - name: Bump Package Versions
+      - name: Verify Release Metadata
         if: ${{ steps.base.outputs.base_ref != '' }}
         run: |
-          node src/tools/overlaylex-i18n-flow.mjs bump-release-version \
+          node src/tools/release-from-staged.mjs verify-release \
             --base-ref "${{ steps.base.outputs.base_ref }}" \
-            --write
+            --api-url "https://overlaylex-demo-api.zhangjiahe0830.workers.dev"
 
-      - name: Commit Version Bump
-        if: ${{ steps.base.outputs.base_ref != '' }}
-        shell: bash
-        run: |
-          if git diff --quiet -- src/packages; then
-            echo "No package version changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add src/packages
-          git commit -m "chore(release): bump package patch versions [skip release]"
-          git push
+      - name: Skip Verify Message
+        if: ${{ steps.base.outputs.base_ref == '' }}
+        run: echo "No valid base ref, skip release metadata verification."
 
       - name: Install Worker Dependencies
         working-directory: src/worker
         run: npm ci
 
       - name: Sync Packages To R2
+        if: ${{ steps.base.outputs.base_ref != '' }}
         run: |
           node src/tools/sync-r2-packages.mjs \
             --bucket-name "${R2_BUCKET_NAME}" \
             --packages-dir src/packages \
-            --worker-dir src/worker
+            --worker-dir src/worker \
+            --changed-only \
+            --base-ref "${{ steps.base.outputs.base_ref }}"
+
+      - name: Skip R2 Sync Message
+        if: ${{ steps.base.outputs.base_ref == '' }}
+        run: echo "No valid base ref, skip package sync."
 
       - name: Deploy Worker
         working-directory: src/worker

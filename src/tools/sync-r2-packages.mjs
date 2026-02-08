@@ -38,13 +38,15 @@ function logError(message, extra = "") {
 function printHelp() {
   console.log(`
 用法：
-  node src/tools/sync-r2-packages.mjs --bucket-name <name> [--packages-dir src/packages] [--worker-dir src/worker] [--local]
+  node src/tools/sync-r2-packages.mjs --bucket-name <name> [--packages-dir src/packages] [--worker-dir src/worker] [--local] [--changed-only --base-ref <ref>]
 
 参数：
   --bucket-name   R2 桶名称（必填）
   --packages-dir  包目录，默认 src/packages
   --worker-dir    wrangler 工作目录，默认 src/worker
   --local         上传到本地 R2 模拟存储（默认上传远端，即追加 --remote）
+  --changed-only  仅上传相对 --base-ref 有改动的包文件
+  --base-ref      git 比较基线（与 --changed-only 搭配使用）
 `);
 }
 
@@ -105,6 +107,44 @@ function getJsonFiles(dirPath) {
   return files;
 }
 
+function relativeToRepo(absolutePath) {
+  return path.relative(REPO_ROOT, absolutePath).replace(/\\/g, "/");
+}
+
+function tryRunGit(commandArgs) {
+  const result = spawnSync("git", commandArgs, {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    stdio: "pipe",
+    shell: process.platform === "win32",
+    env: process.env,
+  });
+  if (result.error || result.status !== 0) {
+    const detail = result.error?.message || String(result.stderr || "").trim();
+    throw new Error(`git ${commandArgs.join(" ")} 执行失败：${detail}`);
+  }
+  return String(result.stdout || "").trim();
+}
+
+function getChangedPackageFiles(packagesDir, baseRef) {
+  const safeBaseRef = String(baseRef || "").trim();
+  if (!safeBaseRef) {
+    throw new Error("使用 --changed-only 时必须提供 --base-ref。");
+  }
+  const packageRelativeDir = relativeToRepo(packagesDir);
+  const output = tryRunGit(["diff", "--name-only", `${safeBaseRef}...HEAD`, "--", packageRelativeDir]);
+  if (!output) {
+    return [];
+  }
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => path.resolve(REPO_ROOT, line))
+    .filter((absolutePath) => fs.existsSync(absolutePath))
+    .filter((absolutePath) => absolutePath.toLowerCase().endsWith(".json"));
+}
+
 function runWranglerPut(workerDir, bucketName, objectKey, filePath, useRemote) {
   const target = `${bucketName}/${objectKey}`;
   const commandArgs = ["wrangler", "r2", "object", "put", target, "--file", filePath];
@@ -138,6 +178,8 @@ function main() {
   const packagesDir = resolvePath(String(options["packages-dir"] || "src/packages"));
   const workerDir = resolvePath(String(options["worker-dir"] || "src/worker"));
   const useRemote = !Boolean(options.local);
+  const changedOnly = Boolean(options["changed-only"]);
+  const baseRef = String(options["base-ref"] || "").trim();
 
   if (!bucketName) {
     throw new Error("缺少 --bucket-name。");
@@ -148,8 +190,25 @@ function main() {
   if (!fs.existsSync(workerDir)) {
     throw new Error(`worker 目录不存在：${workerDir}`);
   }
+  if (changedOnly && !baseRef) {
+    throw new Error("使用 --changed-only 时必须提供 --base-ref。");
+  }
 
-  const files = getJsonFiles(packagesDir);
+  const allFiles = getJsonFiles(packagesDir);
+  const changedFileSet = changedOnly ? new Set(getChangedPackageFiles(packagesDir, baseRef)) : null;
+  const files = changedOnly ? allFiles.filter((filePath) => changedFileSet.has(filePath)) : allFiles;
+
+  if (changedOnly) {
+    logInfo("上传模式：", `changed-only（base-ref=${baseRef}）`);
+  } else {
+    logInfo("上传模式：", "all-files");
+  }
+
+  if (files.length === 0) {
+    logInfo("无需上传：当前筛选条件下没有待发布包。");
+    return;
+  }
+
   let uploadedCount = 0;
   let skippedCount = 0;
 
