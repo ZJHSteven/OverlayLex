@@ -106,18 +106,18 @@ function getJsonFiles(dirPath) {
 
 function runWranglerPut(workerDir, bucketName, objectKey, filePath) {
   const target = `${bucketName}/${objectKey}`;
-  const result = spawnSync(
-    process.platform === "win32" ? "npx.cmd" : "npx",
-    ["wrangler", "r2", "object", "put", target, "--file", filePath],
-    {
-      cwd: workerDir,
-      stdio: "inherit",
-      shell: false,
-      env: process.env,
-    }
-  );
+  const result = spawnSync("npx", ["wrangler", "r2", "object", "put", target, "--file", filePath], {
+    cwd: workerDir,
+    stdio: "inherit",
+    // Windows 下通过 shell 解析可避免 npx.cmd 解析失败，Linux/macOS 下保持无 shell 以减少不确定性。
+    shell: process.platform === "win32",
+    env: process.env,
+  });
+  if (result.error) {
+    throw new Error(`上传失败：${target}；原因：${result.error.message}`);
+  }
   if (result.status !== 0) {
-    throw new Error(`上传失败：${target}`);
+    throw new Error(`上传失败：${target}；退出码：${String(result.status)}`);
   }
 }
 
@@ -180,4 +180,3 @@ try {
   logError(error?.message || String(error));
   process.exit(1);
 }
-

@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-08
+  - 修复 `src/tools/sync-r2-packages.mjs`：调整 `wrangler` 调用方式为跨平台 `npx` 执行（Windows 启用 shell 解析），并补充子进程错误/退出码日志，解决 Windows 环境下 R2 同步首包失败问题。
   - 更新 `README.md`：补充 OverlayLex i18n 闭环文档（采集临时 JSON 格式、`overlaylex-i18n-flow.mjs` 命令、ParaTranz 互转规则、`main/release` 分支 CI/CD 流程与 Secrets 配置）。
   - 更新 `.gitignore`：新增 `.tmp/` 与 `tmp/collector.selected.json` 忽略规则，避免临时导出文件误入版本库。
   - 新增 `.github/workflows/main-paratranz-sync.yml`：`main` 分支自动执行 ParaTranz 增量同步（按 `base_ref` 计算变更包，调用 `push-paratranz --changed-only`）。
