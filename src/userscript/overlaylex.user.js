@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.9
+// @version      0.2.10
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
@@ -29,7 +29,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.8";
+  const SCRIPT_VERSION = "0.2.10";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -59,11 +59,11 @@
    */
   const UI_TUNING = {
     floatingBall: {
-      sizePx: 22,
-      iconPx: 12,
-      ringInsetPx: -3,
-      ringBlurPx: 4,
-      dotSizePx: 5,
+      sizePx: 30,
+      iconPx: 16,
+      ringInsetPx: -4,
+      ringBlurPx: 5,
+      dotSizePx: 7,
       dotOffsetPx: 1,
     },
   };
@@ -905,6 +905,8 @@
         -webkit-backdrop-filter: blur(12px);
         overflow: visible;
         user-select: none;
+        touch-action: none;
+        will-change: top, right, transform;
       }
       .overlaylex-ball-core {
         position: relative;
@@ -956,6 +958,17 @@
       }
       .overlaylex-ball:active {
         transform: scale(0.97);
+      }
+      .overlaylex-ball.overlaylex-ball-dragging {
+        /* 拖拽中临时降级特效，减少重绘压力，提高跟手性。 */
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        box-shadow: 0 8px 16px rgba(15, 23, 42, 0.28);
+      }
+      .overlaylex-ball.overlaylex-ball-dragging .overlaylex-ball-ring {
+        animation: none;
+        filter: none;
+        opacity: .22;
       }
       .overlaylex-panel {
         position: fixed;
@@ -1646,6 +1659,28 @@
       panel.style.right = `${anchorRight}px`;
     }
 
+    /**
+     * 从“当前可见球”的真实像素位置回写锚点。
+     * 这样在球 -> 面板切换时不会出现累积误差。
+     */
+    function syncAnchorFromBallRect() {
+      const viewport = getViewportSize();
+      const rect = ball.getBoundingClientRect();
+      anchorTop = rect.top;
+      anchorRight = viewport.width - rect.right;
+    }
+
+    /**
+     * 从“当前可见面板”的真实像素位置回写锚点。
+     * 这样在面板 -> 球切换时不会出现“收起后右偏”。
+     */
+    function syncAnchorFromPanelRect() {
+      const viewport = getViewportSize();
+      const rect = panel.getBoundingClientRect();
+      anchorTop = rect.top;
+      anchorRight = viewport.width - rect.right;
+    }
+
     function persistUiAnchor(panelOpen) {
       setUiState({
         ballTop: Math.round(anchorTop),
@@ -1655,6 +1690,9 @@
     }
 
     function openPanelFromBall() {
+      if (isElementVisible(ball)) {
+        syncAnchorFromBallRect();
+      }
       isPanelOpen = true;
       closeSettingsPanel();
       setElementVisible(panel, true);
@@ -1664,6 +1702,9 @@
     }
 
     function closePanelToBall() {
+      if (isElementVisible(panel)) {
+        syncAnchorFromPanelRect();
+      }
       isPanelOpen = false;
       closeSettingsPanel();
       setElementVisible(panel, false);
@@ -1728,7 +1769,7 @@
         return;
       }
 
-      if (startEvent.type === "mousedown") {
+      if (startEvent.cancelable) {
         startEvent.preventDefault();
       }
 
@@ -1738,6 +1779,9 @@
         startTop: anchorTop,
         startRight: anchorRight,
         moved: false,
+        frameId: null,
+        pendingTop: anchorTop,
+        pendingRight: anchorRight,
       };
       longPressFired = false;
 
@@ -1752,6 +1796,20 @@
         setStatus("已长按触发重注入翻译。");
       }, LONG_PRESS_MS);
 
+      function scheduleBallPositionFrame(nextTop, nextRight) {
+        dragState.pendingTop = nextTop;
+        dragState.pendingRight = nextRight;
+        if (dragState.frameId !== null) {
+          return;
+        }
+        dragState.frameId = window.requestAnimationFrame(() => {
+          dragState.frameId = null;
+          anchorTop = dragState.pendingTop;
+          anchorRight = dragState.pendingRight;
+          applyBallPosition();
+        });
+      }
+
       function onMove(moveEvent) {
         const movePoint = getEventPoint(moveEvent);
         if (!movePoint) {
@@ -1760,12 +1818,15 @@
         const dx = movePoint.x - dragState.startX;
         const dy = movePoint.y - dragState.startY;
         if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-          dragState.moved = true;
+          if (!dragState.moved) {
+            dragState.moved = true;
+            ball.classList.add("overlaylex-ball-dragging");
+          }
           clearLongPressTimer();
         }
-        anchorTop = dragState.startTop + dy;
-        anchorRight = dragState.startRight - dx;
-        applyBallPosition();
+        const nextTop = dragState.startTop + dy;
+        const nextRight = dragState.startRight - dx;
+        scheduleBallPositionFrame(nextTop, nextRight);
         if (moveEvent.cancelable && moveEvent.type.startsWith("touch")) {
           moveEvent.preventDefault();
         }
@@ -1778,6 +1839,14 @@
         window.removeEventListener("touchend", onEnd);
         window.removeEventListener("touchcancel", onEnd);
 
+        if (dragState.frameId !== null) {
+          window.cancelAnimationFrame(dragState.frameId);
+          dragState.frameId = null;
+          anchorTop = dragState.pendingTop;
+          anchorRight = dragState.pendingRight;
+          applyBallPosition();
+        }
+        ball.classList.remove("overlaylex-ball-dragging");
         clearLongPressTimer();
         persistUiAnchor(false);
         if (dragState.moved || longPressFired) {
@@ -1804,7 +1873,7 @@
         return;
       }
 
-      if (startEvent.type === "mousedown") {
+      if (startEvent.cancelable) {
         startEvent.preventDefault();
       }
 
@@ -1880,11 +1949,11 @@
       openPanelFromBall();
     });
     ball.addEventListener("mousedown", startBallDrag);
-    ball.addEventListener("touchstart", startBallDrag, { passive: true });
+    ball.addEventListener("touchstart", startBallDrag, { passive: false });
 
     const panelDragHandle = panel.querySelector("#overlaylex-panel-drag-handle");
     panelDragHandle?.addEventListener("mousedown", startPanelDrag);
-    panelDragHandle?.addEventListener("touchstart", startPanelDrag, { passive: true });
+    panelDragHandle?.addEventListener("touchstart", startPanelDrag, { passive: false });
     document.addEventListener("pointerdown", handleOutsidePointerDown, true);
 
     window.addEventListener("resize", () => {

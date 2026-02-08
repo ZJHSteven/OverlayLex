@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/userscript/overlaylex.user.js`：将悬浮球尺寸按约 `1/3` 放大（`22px -> 30px`），并同步图标/呼吸圈/状态点参数，版本升至 `0.2.10`。
+  - 更新 `src/userscript/overlaylex.user.js`：悬浮球拖拽改为 `requestAnimationFrame` 逐帧渲染，新增拖拽中视觉降级样式（临时关闭高成本模糊/动效），修复拖动不跟手与卡顿感。
+  - 更新 `src/userscript/overlaylex.user.js`：新增“开合前按当前可见元素实时回写锚点”逻辑，修复点击面板外收起后悬浮球位置右偏问题。
   - 更新 GitHub 仓库描述：补充项目定位说明（Owlbear Rodeo / DnD5e 场景下的 OverlayLex 双脚本翻译方案）。
   - 更新 `src/userscript/overlaylex.user.js`：`@name` 调整为 `OverlayLex Translator`，`@namespace` 改为仓库地址，新增 `@updateURL/@downloadURL`（Raw 链接），并补充发布用 `@description`，版本升至 `0.2.9`。
   - 更新 `src/userscript/overlaylex.collector.user.js`：`@namespace` 改为仓库地址，新增 `@updateURL/@downloadURL`（Raw 链接），并补充发布用 `@description`，版本升至 `0.1.2`。
