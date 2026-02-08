@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-07
+  - 更新 `src/userscript/overlaylex.user.js`：按用户要求将悬浮球缩减到上一版约 `1/4` 尺寸（`44px -> 11px`），并同步缩小图标、呼吸圈与状态点参数。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.7`。
   - 更新 `src/userscript/overlaylex.user.js`：悬浮球默认尺寸由 `56px` 缩小到 `44px`，并同步缩小图标、呼吸圈与状态点，降低遮挡感。
   - 更新 `src/userscript/overlaylex.user.js`：新增 `UI_TUNING.floatingBall` 集中配置（`sizePx/iconPx/ringInsetPx/ringBlurPx/dotSizePx/dotOffsetPx`），支持初学者在单一位置手动微调悬浮球视觉尺寸。
   - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.6`。

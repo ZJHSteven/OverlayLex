@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex
 // @namespace    https://overlaylex.local
-// @version      0.2.6
+// @version      0.2.7
 // @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
 // @author       OverlayLex
 // @match        *://*/*
@@ -27,7 +27,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.6";
+  const SCRIPT_VERSION = "0.2.7";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -57,12 +57,12 @@
    */
   const UI_TUNING = {
     floatingBall: {
-      sizePx: 44,
-      iconPx: 22,
-      ringInsetPx: -5,
-      ringBlurPx: 7,
-      dotSizePx: 8,
-      dotOffsetPx: 3,
+      sizePx: 11,
+      iconPx: 6,
+      ringInsetPx: -2,
+      ringBlurPx: 2,
+      dotSizePx: 4,
+      dotOffsetPx: 1,
     },
   };
 
