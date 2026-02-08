@@ -9,6 +9,10 @@
 
 ## 变更日志
 - 2026-02-08
+  - 新增 `src/tools/release-from-staged.mjs`：提供“按暂存区驱动发布”的本地一键脚本，支持两次确认、发布包 patch 自动递增、自动维护 `overlaylex-domain-allowlist`、自动同步 `src/worker/src/data.js` 的 `PACKAGE_CATALOG`，并自动执行 `main commit -> push main -> cherry-pick 到 release -> push release`。
+  - 更新 `.github/workflows/release-publish.yml`：移除云端自动 bump/自动提交步骤，改为 `verify-release` 校验（版本号必须高于线上、allowlist 覆盖、worker catalog 一致）+ 仅上传相对 `base_ref` 的改动包。
+  - 更新 `src/tools/sync-r2-packages.mjs`：新增 `--changed-only --base-ref`，支持按 Git 变更集上传包，避免 release 流程全量重传全部包。
+  - 更新 `README.md`：补充“本地一键发布（按暂存区）”操作说明，并同步 release CI 最新流程。
   - 更新 `src/tools/overlaylex-i18n-flow.mjs`：将 `from-paratranz` 升级为双模式命令；当传入 `--project-id` 时自动执行 `pull-paratranz -> from-paratranz`，未传时保持“仅本地回写”旧行为；保留 `sync-paratranz` 兼容别名。
   - 更新 `README.md`：第 3 步改为 `from-paratranz --project-id 17950` 一键命令；补充 `--out-dir` 为可选参数（默认 `.tmp/paratranz`）与 `PARATRANZ_TOKEN` 读取规则说明。
   - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 `sync-paratranz` 聚合子命令，一步执行 `pull-paratranz -> from-paratranz`，用于“从 ParaTranz 拉取并直接回写本地包”的常规场景。
