@@ -8,6 +8,9 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-02-08
+  - 新增 `src/tools/overlaylex-i18n-flow.mjs`：实现 OverlayLex i18n 一体化流程脚本，支持 `merge-collected`、`to-paratranz`、`from-paratranz`、`pull-paratranz`、`push-paratranz`、`bump-release-version` 六个子命令。
+  - 新增 `config/overlaylex-i18n.config.json`：补充流程脚本默认配置（包目录、临时目录、Paratranz 基础地址/项目ID/路径前缀、合并策略与导入策略）。
 - 2026-02-07
   - 更新 `src/userscript/overlaylex.user.js`：按反馈将悬浮球从 `11px` 调整为 `22px`（翻倍），并按比例同步图标、呼吸圈与状态点参数，兼顾可见性与遮挡控制。
   - 更新 `src/userscript/overlaylex.user.js`：新增“点击面板外区域自动收起为悬浮球”逻辑（捕获阶段监听 `pointerdown`），提升收起交互直觉性。

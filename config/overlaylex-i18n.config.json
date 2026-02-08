@@ -1,0 +1,18 @@
+{
+  "packagesDir": "src/packages",
+  "tempDir": ".tmp/paratranz",
+  "paratranz": {
+    "apiBaseUrl": "https://paratranz.cn/api",
+    "projectId": "",
+    "filePathPrefix": "packages/",
+    "tokenEnv": "PARATRANZ_TOKEN"
+  },
+  "merge": {
+    "newPackagePrefix": "obr-",
+    "defaultPathPrefix": "/"
+  },
+  "conversion": {
+    "skipEmptyTranslationOnImport": true
+  }
+}
+
