@@ -9,6 +9,10 @@
 
 ## 变更日志
 - 2026-02-07
+  - 更新 `src/userscript/overlaylex.user.js`：按反馈将悬浮球从 `11px` 调整为 `22px`（翻倍），并按比例同步图标、呼吸圈与状态点参数，兼顾可见性与遮挡控制。
+  - 更新 `src/userscript/overlaylex.user.js`：新增“点击面板外区域自动收起为悬浮球”逻辑（捕获阶段监听 `pointerdown`），提升收起交互直觉性。
+  - 更新 `src/userscript/overlaylex.user.js`：翻译包列表右侧状态图标改为“常态不显示，只有手动更新过程中下载该包时显示云下载图标”，移除常态对勾展示。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.8`。
   - 更新 `src/userscript/overlaylex.user.js`：按用户要求将悬浮球缩减到上一版约 `1/4` 尺寸（`44px -> 11px`），并同步缩小图标、呼吸圈与状态点参数。
   - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.7`。
   - 更新 `src/userscript/overlaylex.user.js`：悬浮球默认尺寸由 `56px` 缩小到 `44px`，并同步缩小图标、呼吸圈与状态点，降低遮挡感。

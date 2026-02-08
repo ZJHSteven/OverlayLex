@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex
 // @namespace    https://overlaylex.local
-// @version      0.2.7
+// @version      0.2.8
 // @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
 // @author       OverlayLex
 // @match        *://*/*
@@ -27,7 +27,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.7";
+  const SCRIPT_VERSION = "0.2.8";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -57,11 +57,11 @@
    */
   const UI_TUNING = {
     floatingBall: {
-      sizePx: 11,
-      iconPx: 6,
-      ringInsetPx: -2,
-      ringBlurPx: 2,
-      dotSizePx: 4,
+      sizePx: 22,
+      iconPx: 12,
+      ringInsetPx: -3,
+      ringBlurPx: 4,
+      dotSizePx: 5,
       dotOffsetPx: 1,
     },
   };
@@ -135,6 +135,7 @@
       themeSelect: null,
       themeMediaQuery: null,
       themeChangeHandler: null,
+      packageUpdatingMap: {},
     },
   };
 
@@ -216,7 +217,36 @@
     return Boolean(pkgMeta.enabledByDefault);
   }
 
-  async function ensurePackageReady(pkgMeta) {
+  /**
+   * 判断某个包当前是否处于“下载更新中”状态。
+   */
+  function isPackageUpdating(packageId) {
+    return Boolean(state.ui.packageUpdatingMap?.[packageId]);
+  }
+
+  /**
+   * 写入“包下载中”状态，并刷新列表右侧云下载图标。
+   * 说明：
+   * - 只有手动更新流程会打开该状态。
+   * - 常态下（未更新）不显示右侧图标。
+   */
+  function setPackageUpdating(packageId, updating) {
+    if (!packageId) {
+      return;
+    }
+    if (!state.ui.packageUpdatingMap || typeof state.ui.packageUpdatingMap !== "object") {
+      state.ui.packageUpdatingMap = {};
+    }
+    if (updating) {
+      state.ui.packageUpdatingMap[packageId] = true;
+    } else {
+      delete state.ui.packageUpdatingMap[packageId];
+    }
+    renderPackageList();
+  }
+
+  async function ensurePackageReady(pkgMeta, options = {}) {
+    const showUpdatingIndicator = Boolean(options.showUpdatingIndicator);
     if (!getPackageEnabled(pkgMeta)) {
       return null;
     }
@@ -228,7 +258,17 @@
     }
 
     const packageUrl = pkgMeta.url || buildPackageUrl(pkgMeta.id);
-    const packageData = await fetchPackageByUrl(packageUrl);
+    if (showUpdatingIndicator) {
+      setPackageUpdating(pkgMeta.id, true);
+    }
+    let packageData = null;
+    try {
+      packageData = await fetchPackageByUrl(packageUrl);
+    } finally {
+      if (showUpdatingIndicator) {
+        setPackageUpdating(pkgMeta.id, false);
+      }
+    }
 
     state.packageCache[pkgMeta.id] = {
       version: pkgMeta.version,
@@ -239,11 +279,12 @@
     return packageData;
   }
 
-  async function reloadEnabledPackages() {
+  async function reloadEnabledPackages(options = {}) {
     if (!state.manifest || !Array.isArray(state.manifest.packages)) {
       return;
     }
 
+    const showUpdatingIndicator = Boolean(options.showUpdatingIndicator);
     const nextMap = new Map();
     for (const pkgMeta of state.manifest.packages) {
       // 只读取 translation 包，域名包由专门流程处理。
@@ -251,7 +292,7 @@
         continue;
       }
       try {
-        const packageData = await ensurePackageReady(pkgMeta);
+        const packageData = await ensurePackageReady(pkgMeta, { showUpdatingIndicator });
         if (!packageData || typeof packageData !== "object") {
           continue;
         }
@@ -1338,8 +1379,17 @@
       // 用 data-enabled 驱动视觉状态，避免把“是否启用”写死在 class 字符串里。
       const syncEnabledUi = (enabled) => {
         row.dataset.enabled = enabled ? "true" : "false";
-        packageActionIcon.innerHTML = enabled ? getIconSvg("done") : getIconSvg("cloudDownload");
-        packageActionIcon.title = enabled ? "翻译包已启用" : "翻译包可下载/启用";
+        const packageId = String(pkg?.id || "");
+        const updating = isPackageUpdating(packageId);
+        if (updating) {
+          packageActionIcon.innerHTML = getIconSvg("cloudDownload");
+          packageActionIcon.title = "正在从云端更新该翻译包...";
+          packageActionIcon.style.display = "inline-flex";
+        } else {
+          packageActionIcon.innerHTML = "";
+          packageActionIcon.title = "";
+          packageActionIcon.style.display = "none";
+        }
       };
 
       const switchLabel = document.createElement("label");
@@ -1407,7 +1457,7 @@
         Logger.warn("检查更新时拉取域名包失败，保留本地缓存。", error);
       }
 
-      await reloadEnabledPackages();
+      await reloadEnabledPackages({ showUpdatingIndicator: true });
       renderPackageList();
       scheduleFullReapply();
       setStatus("更新检查完成，已应用最新 manifest。");
@@ -1620,6 +1670,30 @@
       persistUiAnchor(false);
     }
 
+    /**
+     * 点击面板外区域时，自动收起面板。
+     * 说明：
+     * - 使用捕获阶段监听，避免被宿主页面 stopPropagation 干扰。
+     * - 只在面板已展开时生效。
+     */
+    function isEventInsidePanel(event) {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      if (Array.isArray(path) && path.includes(panel)) {
+        return true;
+      }
+      return panel.contains(event.target);
+    }
+
+    function handleOutsidePointerDown(event) {
+      if (!isPanelOpen) {
+        return;
+      }
+      if (isEventInsidePanel(event)) {
+        return;
+      }
+      closePanelToBall();
+    }
+
     function getEventPoint(event) {
       if (event.touches && event.touches.length > 0) {
         return { x: event.touches[0].clientX, y: event.touches[0].clientY };
@@ -1809,6 +1883,7 @@
     const panelDragHandle = panel.querySelector("#overlaylex-panel-drag-handle");
     panelDragHandle?.addEventListener("mousedown", startPanelDrag);
     panelDragHandle?.addEventListener("touchstart", startPanelDrag, { passive: true });
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true);
 
     window.addEventListener("resize", () => {
       if (!isPanelOpen) {
