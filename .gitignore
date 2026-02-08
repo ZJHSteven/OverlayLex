@@ -2,3 +2,5 @@
 html/
 src/worker/node_modules/
 src/worker/.wrangler/
+.tmp/
+tmp/collector.selected.json

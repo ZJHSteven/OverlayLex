@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `README.md`：补充 OverlayLex i18n 闭环文档（采集临时 JSON 格式、`overlaylex-i18n-flow.mjs` 命令、ParaTranz 互转规则、`main/release` 分支 CI/CD 流程与 Secrets 配置）。
+  - 更新 `.gitignore`：新增 `.tmp/` 与 `tmp/collector.selected.json` 忽略规则，避免临时导出文件误入版本库。
   - 新增 `.github/workflows/main-paratranz-sync.yml`：`main` 分支自动执行 ParaTranz 增量同步（按 `base_ref` 计算变更包，调用 `push-paratranz --changed-only`）。
   - 新增 `.github/workflows/release-publish.yml`：`release` 分支自动执行“版本号 patch 递增 -> 提交回推 -> R2 同步 -> Worker 部署 -> manifest 冒烟检查”发布流程。
   - 新增 `src/tools/sync-r2-packages.mjs`：按 `packages/{filename}.json` 规则批量上传可发布包（翻译包/域名准入包）到 R2。

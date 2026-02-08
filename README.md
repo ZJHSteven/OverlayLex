@@ -99,9 +99,91 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
    - `复制本域增量`：仅复制当前域名下“未导出过”的新词条。
    - `复制本域全量`：复制当前域名下所有已采集词条。
    - `复制 iframe 域名`：复制当前页面观察到的 iframe 域名列表。
-3. 复制结果直接粘贴给我翻译。  
-4. 翻译后并入正式包（如 `src/packages/obr-www-owlbear-rodeo.json`）。  
-5. 更新后端包版本号，再在页面里点击“检查更新”完成热更新。
+3. 复制结果粘贴到临时文件 `tmp/collector.selected.json`，并手动删除你不想入库的域名或词条。  
+4. 执行本地合并命令，把临时采集 JSON 合并进正式包。  
+5. 通过 ParaTranz 协作翻译并回拉。  
+6. 合并到 `release` 后自动发包，页面点击“检查更新”即可获取新版本。
+
+## i18n 流程脚本（OverlayLex <-> ParaTranz）
+
+统一入口：`src/tools/overlaylex-i18n-flow.mjs`
+
+```bash
+# 1) 把采集 JSON 合并到本地包（新增词条译文默认空字符串）
+node src/tools/overlaylex-i18n-flow.mjs merge-collected --input tmp/collector.selected.json
+
+# 2) 导出为 ParaTranz 文件格式（每包一个 JSON 数组文件）
+node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
+
+# 3) 拉取 ParaTranz 文件并回写到本地包
+node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id <项目ID> --out-dir .tmp/paratranz
+node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratranz
+```
+
+### 采集临时文件格式
+
+`tmp/collector.selected.json` 采用“按域名分组对象 JSON”：
+
+```json
+{
+  "www.owlbear.rodeo": [
+    "Search",
+    "Players"
+  ],
+  "smoke.battle-system.com": [
+    "Opacity"
+  ]
+}
+```
+
+### ParaTranz 目标格式
+
+脚本导出的单文件内容为数组，字段固定为：
+
+```json
+[
+  {
+    "key": "host::sha1(original)",
+    "original": "source text",
+    "translation": "translation text",
+    "context": "packageId=...; hosts=...; pathPrefix=/"
+  }
+]
+```
+
+规则：
+- 包文件名与 `id` 保持不变。
+- `key` 规则：`host::sha1(original)`。
+- 回写时默认“空译文不覆盖本地已有译文”。
+- `merge-collected` 默认只做新增，不删旧词条（`--prune` 才删除）。
+
+## 分支与自动发布（GitHub Actions）
+
+### `main` 分支
+- 触发工作流：`.github/workflows/main-paratranz-sync.yml`
+- 行为：根据本次 push 的 `base_ref` 计算改动包，自动执行：
+  - `push-paratranz --changed-only --base-ref <ref>`
+- 目的：把英文增量自动同步到 ParaTranz，避免手工逐包上传。
+
+### `release` 分支
+- 触发工作流：`.github/workflows/release-publish.yml`
+- 固定顺序：
+  1. `bump-release-version --write`（仅已存在包自动 patch +1，新包保持 `0.1.0`）
+  2. 自动提交版本号回 `release`
+  3. 同步 `src/packages/*.json` 到 R2（对象键：`packages/{filename}`）
+  4. 部署 Worker（`npm run deploy`）
+  5. 冒烟校验线上 `/manifest`
+
+## CI Secrets 配置
+
+在 GitHub 仓库 Secrets 中配置：
+- `PARATRANZ_TOKEN`
+- `PARATRANZ_PROJECT_ID`
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `R2_BUCKET_NAME`
+
+本地命令也可复用同名环境变量（尤其是 `PARATRANZ_TOKEN`）。
 
 ## 当前实现的取舍
 
