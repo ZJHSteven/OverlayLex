@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/tools/release-from-staged.mjs`：新增 `--yes` 非交互参数，支持自动化场景跳过两次确认，避免管道输入场景下第二次确认读不到输入导致流程提前结束。
   - 新增 `src/tools/release-from-staged.mjs`：提供“按暂存区驱动发布”的本地一键脚本，支持两次确认、发布包 patch 自动递增、自动维护 `overlaylex-domain-allowlist`、自动同步 `src/worker/src/data.js` 的 `PACKAGE_CATALOG`，并自动执行 `main commit -> push main -> cherry-pick 到 release -> push release`。
   - 更新 `.github/workflows/release-publish.yml`：移除云端自动 bump/自动提交步骤，改为 `verify-release` 校验（版本号必须高于线上、allowlist 覆盖、worker catalog 一致）+ 仅上传相对 `base_ref` 的改动包。
   - 更新 `src/tools/sync-r2-packages.mjs`：新增 `--changed-only --base-ref`，支持按 Git 变更集上传包，避免 release 流程全量重传全部包。
