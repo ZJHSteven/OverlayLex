@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/tools/release-from-staged.mjs`：新增 `sync-metadata` 子命令，支持仅同步 `overlaylex-domain-allowlist` 与 Worker `PACKAGE_CATALOG`（不触发 Git 推送），用于修复历史流程导致的元数据版本漂移。
   - 更新 `src/tools/release-from-staged.mjs`：修复 Windows 下 `git commit -m` 参数被 shell 拆分导致失败的问题；Git 子进程改为 `shell: false`，保证包含空格/逗号的提交信息可稳定提交。
   - 更新 `src/tools/release-from-staged.mjs`：新增 `--yes` 非交互参数，支持自动化场景跳过两次确认，避免管道输入场景下第二次确认读不到输入导致流程提前结束。
   - 新增 `src/tools/release-from-staged.mjs`：提供“按暂存区驱动发布”的本地一键脚本，支持两次确认、发布包 patch 自动递增、自动维护 `overlaylex-domain-allowlist`、自动同步 `src/worker/src/data.js` 的 `PACKAGE_CATALOG`，并自动执行 `main commit -> push main -> cherry-pick 到 release -> push release`。

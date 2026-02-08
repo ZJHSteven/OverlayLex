@@ -31,7 +31,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-bubbles-for-owlbear-rodeo-pages-dev",
     "name": "OBR 自动翻译包 - bubbles-for-owlbear-rodeo.pages.dev",
     "kind": "translation",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - bubbles-for-owlbear-rodeo.pages.dev（自动同步）"
   },
@@ -39,7 +39,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-clash-battle-system-com",
     "name": "Clash 插件中文包（clash.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "enabledByDefault": true,
     "description": "Clash 插件翻译包（自动采集生成）"
   },
@@ -95,7 +95,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-outliner-owlbear-rodeo",
     "name": "Outliner 插件中文包（outliner.owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "enabledByDefault": true,
     "description": "Outliner 插件翻译包（自动采集生成）"
   },
@@ -119,7 +119,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-smoke-battle-system-com",
     "name": "Smoke 插件中文包（smoke.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "enabledByDefault": true,
     "description": "Smoke & Spectre 插件翻译包（自动采集生成）"
   },
@@ -143,7 +143,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-owlbear-rodeo",
     "name": "OBR 主站与房间中文包（owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "enabledByDefault": true,
     "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
@@ -151,7 +151,7 @@ export const PACKAGE_CATALOG = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "enabledByDefault": true,
     "description": "控制脚本允许在哪些域名继续执行"
   },
@@ -211,7 +211,7 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "rules": [
       {
         "type": "exact",
