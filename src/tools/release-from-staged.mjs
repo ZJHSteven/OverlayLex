@@ -173,43 +173,6 @@ function isTranslationPackage(packageData) {
   );
 }
 
-function getTranslationStats(packageData) {
-  const translations = packageData?.translations;
-  if (!translations || typeof translations !== "object" || Array.isArray(translations)) {
-    return {
-      total: 0,
-      nonEmpty: 0,
-      hanCount: 0,
-    };
-  }
-
-  let total = 0;
-  let nonEmpty = 0;
-  let hanCount = 0;
-  for (const value of Object.values(translations)) {
-    total += 1;
-    const text = String(value ?? "").trim();
-    if (!text) {
-      continue;
-    }
-    nonEmpty += 1;
-    if (/[\u4e00-\u9fff]/.test(text)) {
-      hanCount += 1;
-    }
-  }
-  return {
-    total,
-    nonEmpty,
-    hanCount,
-  };
-}
-
-function isTranslationReadyForRelease(packageData) {
-  const stats = getTranslationStats(packageData);
-  // 发布门槛：至少出现 1 条中文译文，避免英文采集包进入 manifest。
-  return stats.hanCount > 0;
-}
-
 function getPackageIdFromFile(filePath, packageData) {
   if (typeof packageData?.id === "string" && packageData.id.trim()) {
     return packageData.id.trim();
@@ -295,10 +258,33 @@ function readAllPublishablePackages() {
       data,
       kind: isTranslationPackage(data) ? "translation" : "domain-allowlist",
       hosts: isTranslationPackage(data) ? getTargetHosts(data.target) : [],
-      translationReady: isTranslationPackage(data) ? isTranslationReadyForRelease(data) : true,
     });
   }
   return records;
+}
+
+function createPackageRecordMap(records) {
+  const recordMap = new Map();
+  for (const record of records) {
+    recordMap.set(record.id, record);
+  }
+  return recordMap;
+}
+
+function getReleasedTranslationIdsFromWorkerCatalog() {
+  const workerText = fs.readFileSync(WORKER_DATA_PATH, "utf8");
+  const parsedCatalog = parseExportObject(workerText, "PACKAGE_CATALOG");
+  const catalog = parsedCatalog.value;
+  const ids = new Set();
+  for (const item of Object.values(catalog)) {
+    const id = String(item?.id || "").trim();
+    const kind = String(item?.kind || "").trim();
+    if (!id || kind !== "translation") {
+      continue;
+    }
+    ids.add(id);
+  }
+  return ids;
 }
 
 function promptYes(questionText) {
@@ -391,7 +377,6 @@ function validateStagedPackageFiles(stagedFiles) {
       data: packageData,
       id: getPackageIdFromFile(absolutePath, packageData),
       kind: isTranslationPackage(packageData) ? "translation" : "domain-allowlist",
-      translationReady: isTranslationPackage(packageData) ? isTranslationReadyForRelease(packageData) : true,
     });
   }
 
@@ -400,12 +385,6 @@ function validateStagedPackageFiles(stagedFiles) {
     throw new Error("暂存区没有翻译包（translation），无法执行发布。");
   }
 
-  const notReadyRecords = records.filter((item) => item.kind === "translation" && !item.translationReady);
-  if (notReadyRecords.length > 0) {
-    throw new Error(
-      `暂存区包含“无中文译文”的翻译包，禁止发布：${notReadyRecords.map((item) => item.id).join(", ")}`
-    );
-  }
   return records;
 }
 
@@ -447,7 +426,7 @@ function isRuleCoveringHost(rule, host) {
   return false;
 }
 
-function syncDomainAllowlistWithPackages(allRecords) {
+function syncDomainAllowlistWithPackages(allRecords, releasedTranslationIds) {
   const allowlist = readJsonFile(DOMAIN_ALLOWLIST_PATH);
   if (!Array.isArray(allowlist.rules)) {
     throw new Error("overlaylex-domain-allowlist.json 的 rules 字段不是数组。");
@@ -461,7 +440,7 @@ function syncDomainAllowlistWithPackages(allRecords) {
     if (record.kind !== "translation") {
       continue;
     }
-    if (!record.translationReady) {
+    if (releasedTranslationIds && !releasedTranslationIds.has(record.id)) {
       continue;
     }
     for (const host of record.hosts) {
@@ -622,17 +601,21 @@ function buildDefaultDescription(kind, packageData) {
   return "自动同步翻译包";
 }
 
-function syncWorkerCatalogWithPackages(allRecords) {
+function syncWorkerCatalogWithPackages(allRecords, releasedTranslationIds) {
   const workerText = fs.readFileSync(WORKER_DATA_PATH, "utf8");
   const parsedCatalog = parseExportObject(workerText, "PACKAGE_CATALOG");
   const existingCatalog = parsedCatalog.value;
+  const recordMap = createPackageRecordMap(allRecords);
 
   const sortedRecords = [...allRecords].sort((a, b) => a.id.localeCompare(b.id, "en"));
   const publishableRecords = sortedRecords.filter((record) => {
     if (record.kind !== "translation") {
-      return true;
+      return record.id === "overlaylex-domain-allowlist";
     }
-    return record.translationReady;
+    if (!releasedTranslationIds) {
+      return false;
+    }
+    return releasedTranslationIds.has(record.id);
   });
   const nextCatalog = {};
   for (const record of publishableRecords) {
@@ -646,6 +629,34 @@ function syncWorkerCatalogWithPackages(allRecords) {
       enabledByDefault:
         typeof existing.enabledByDefault === "boolean" ? existing.enabledByDefault : true,
       description: String(existing.description || buildDefaultDescription(kind, record.data)),
+    };
+  }
+
+  // 保留现有 catalog 中的 translation 项（只要包文件仍存在），确保历史已发布包不会因“本次未暂存”被误下线。
+  for (const item of Object.values(existingCatalog)) {
+    const id = String(item?.id || "").trim();
+    const kind = String(item?.kind || "").trim();
+    if (!id || kind !== "translation") {
+      continue;
+    }
+    if (nextCatalog[id]) {
+      continue;
+    }
+    const record = recordMap.get(id);
+    if (!record || record.kind !== "translation") {
+      continue;
+    }
+    if (releasedTranslationIds && !releasedTranslationIds.has(id)) {
+      continue;
+    }
+    nextCatalog[id] = {
+      id,
+      name: String(item.name || record.data.name || id),
+      kind: "translation",
+      version: String(record.data.version || item.version || "0.1.0"),
+      enabledByDefault:
+        typeof item.enabledByDefault === "boolean" ? item.enabledByDefault : true,
+      description: String(item.description || buildDefaultDescription("translation", record.data)),
     };
   }
 
@@ -723,7 +734,7 @@ function getChangedPackageFilesByBaseRef(baseRef) {
     .filter((line) => fs.existsSync(path.resolve(REPO_ROOT, line)));
 }
 
-function assertAllowlistCoverage(allRecords) {
+function assertAllowlistCoverage(allRecords, releasedTranslationIds) {
   const allowlistRecord = allRecords.find((item) => item.id === "overlaylex-domain-allowlist");
   if (!allowlistRecord) {
     throw new Error("缺少 overlaylex-domain-allowlist 包。");
@@ -735,7 +746,7 @@ function assertAllowlistCoverage(allRecords) {
     if (record.kind !== "translation") {
       continue;
     }
-    if (!record.translationReady) {
+    if (releasedTranslationIds && !releasedTranslationIds.has(record.id)) {
       continue;
     }
     for (const host of record.hosts) {
@@ -751,16 +762,19 @@ function assertAllowlistCoverage(allRecords) {
   }
 }
 
-function assertWorkerCatalogConsistency(allRecords) {
+function assertWorkerCatalogConsistency(allRecords, releasedTranslationIds) {
   const workerText = fs.readFileSync(WORKER_DATA_PATH, "utf8");
   const parsedCatalog = parseExportObject(workerText, "PACKAGE_CATALOG");
   const catalog = parsedCatalog.value;
   const errors = [];
   const publishableRecords = allRecords.filter((record) => {
     if (record.kind !== "translation") {
-      return true;
+      return record.id === "overlaylex-domain-allowlist";
     }
-    return record.translationReady;
+    if (!releasedTranslationIds) {
+      return false;
+    }
+    return releasedTranslationIds.has(record.id);
   });
   const publishableIds = new Set(publishableRecords.map((item) => item.id));
 
@@ -777,7 +791,7 @@ function assertWorkerCatalogConsistency(allRecords) {
     }
   }
 
-  // 不允许未达发布门槛的翻译包残留在 catalog，否则会继续出现在 manifest。
+  // catalog 中 translation 只能来自“已发布集合”，避免把仓库中未发布包暴露到 manifest。
   for (const item of Object.values(catalog)) {
     const id = String(item?.id || "");
     const kind = String(item?.kind || "");
@@ -825,10 +839,6 @@ async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl
     const absolutePath = path.resolve(REPO_ROOT, relativePath);
     const packageData = readJsonFile(absolutePath);
     if (!isPublishablePackage(packageData)) {
-      continue;
-    }
-    if (isTranslationPackage(packageData) && !isTranslationReadyForRelease(packageData)) {
-      errors.push(`未满足发布门槛（缺少中文译文）：${relativePath}`);
       continue;
     }
     const packageId = getPackageIdFromFile(absolutePath, packageData);
@@ -910,10 +920,17 @@ async function commandPrepareFromStaged(options) {
   }
 
   const bumpedPackages = bumpVersionsForStagedPackages(stagedRecords);
+  const releasedTranslationIds = getReleasedTranslationIdsFromWorkerCatalog();
+  for (const record of stagedRecords) {
+    if (record.kind === "translation") {
+      releasedTranslationIds.add(record.id);
+    }
+  }
+
   let allRecords = readAllPublishablePackages();
-  const allowlistResult = syncDomainAllowlistWithPackages(allRecords);
+  const allowlistResult = syncDomainAllowlistWithPackages(allRecords, releasedTranslationIds);
   allRecords = readAllPublishablePackages();
-  const workerCatalogResult = syncWorkerCatalogWithPackages(allRecords);
+  const workerCatalogResult = syncWorkerCatalogWithPackages(allRecords, releasedTranslationIds);
 
   // 把脚本自动修改的文件重新加入暂存区，确保 commit 与校验对象一致。
   runGit(["add", "src/packages", "src/worker/src/data.js"], { stdio: "inherit" });
@@ -925,8 +942,8 @@ async function commandPrepareFromStaged(options) {
   // 2) Worker catalog 与包版本一致
   // 3) 即将发布的包 version 必须高于线上版本
   const latestAllRecords = readAllPublishablePackages();
-  assertAllowlistCoverage(latestAllRecords);
-  assertWorkerCatalogConsistency(latestAllRecords);
+  assertAllowlistCoverage(latestAllRecords, releasedTranslationIds);
+  assertWorkerCatalogConsistency(latestAllRecords, releasedTranslationIds);
   await assertChangedPackageVersionGreaterThanRemote(finalStaged.packageFiles, DEFAULT_API_URL);
 
   logInfo("自动处理结果：");
@@ -992,9 +1009,10 @@ async function commandVerifyRelease(options) {
     throw new Error("verify-release 缺少 --base-ref。");
   }
 
+  const releasedTranslationIds = getReleasedTranslationIdsFromWorkerCatalog();
   const allRecords = readAllPublishablePackages();
-  assertAllowlistCoverage(allRecords);
-  assertWorkerCatalogConsistency(allRecords);
+  assertAllowlistCoverage(allRecords, releasedTranslationIds);
+  assertWorkerCatalogConsistency(allRecords, releasedTranslationIds);
 
   const changedFiles = getChangedPackageFilesByBaseRef(baseRef);
   if (changedFiles.length === 0) {
@@ -1008,14 +1026,15 @@ async function commandVerifyRelease(options) {
 }
 
 function commandSyncMetadata() {
+  const releasedTranslationIds = getReleasedTranslationIdsFromWorkerCatalog();
   let allRecords = readAllPublishablePackages();
-  const allowlistResult = syncDomainAllowlistWithPackages(allRecords);
+  const allowlistResult = syncDomainAllowlistWithPackages(allRecords, releasedTranslationIds);
   allRecords = readAllPublishablePackages();
-  const workerResult = syncWorkerCatalogWithPackages(allRecords);
+  const workerResult = syncWorkerCatalogWithPackages(allRecords, releasedTranslationIds);
 
   const latestAllRecords = readAllPublishablePackages();
-  assertAllowlistCoverage(latestAllRecords);
-  assertWorkerCatalogConsistency(latestAllRecords);
+  assertAllowlistCoverage(latestAllRecords, releasedTranslationIds);
+  assertWorkerCatalogConsistency(latestAllRecords, releasedTranslationIds);
 
   if (allowlistResult.changed) {
     logInfo("sync-metadata：已更新域名准入包。", "overlaylex-domain-allowlist");
