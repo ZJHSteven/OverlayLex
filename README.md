@@ -118,6 +118,9 @@ node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
 # 3) 拉取 ParaTranz 文件并回写到本地包
 node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id <项目ID> --out-dir .tmp/paratranz
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratranz
+
+# 4) 校验 main 分支本地译文改动策略（CI 同款）
+node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-ref origin/main
 ```
 
 ### 采集临时文件格式
@@ -157,22 +160,43 @@ node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratran
 - 回写时默认“空译文不覆盖本地已有译文”。
 - `merge-collected` 默认只做新增，不删旧词条（`--prune` 才删除）。
 
+### 译文真源与本地改动规则
+
+- 译文真源是 ParaTranz，不是本地 `src/packages`。
+- `main` 允许：
+  - 新增 `original`（`translation` 可空或非空，用于 AI 预翻译）。
+  - 包结构与元数据改动。
+- `main` 禁止：
+  - 修改“已存在 original”的 `translation`（会被 CI 阻断）。
+
 ## 分支与自动发布（GitHub Actions）
 
 ### `main` 分支
 - 触发工作流：`.github/workflows/main-paratranz-sync.yml`
 - 行为：根据本次 push 的 `base_ref` 计算改动包，自动执行：
+  - `check-local-translation-policy --base-ref <ref>`
   - `push-paratranz --changed-only --base-ref <ref>`
 - 目的：把英文增量自动同步到 ParaTranz，避免手工逐包上传。
+
+### 每日译文同步 PR（Paratranz -> main）
+- 触发工作流：`.github/workflows/paratranz-sync-pr.yml`
+- 触发方式：
+  - 每天定时自动执行一次（UTC）。
+  - 支持 Actions 页面手动触发（`workflow_dispatch`）。
+- 行为：
+  - `pull-paratranz` -> `from-paratranz`
+  - 仅当 `src/packages` 有变化时创建/更新 PR（分支 `bot/paratranz-sync`）
+  - 无变化时自动跳过，不会提交空 commit。
 
 ### `release` 分支
 - 触发工作流：`.github/workflows/release-publish.yml`
 - 固定顺序：
-  1. `bump-release-version --write`（仅已存在包自动 patch +1，新包保持 `0.1.0`）
-  2. 自动提交版本号回 `release`
-  3. 同步 `src/packages/*.json` 到 R2（对象键：`packages/{filename}`）
-  4. 部署 Worker（`npm run deploy`）
-  5. 冒烟校验线上 `/manifest`
+  1. `pull-paratranz` + `from-paratranz` 对齐检查（有漂移则阻断发布）
+  2. `bump-release-version --write`（仅已存在包自动 patch +1，新包保持 `0.1.0`）
+  3. 自动提交版本号回 `release`
+  4. 同步 `src/packages/*.json` 到 R2（对象键：`packages/{filename}`）
+  5. 部署 Worker（`npm run deploy`）
+  6. 冒烟校验线上 `/manifest`
 
 ## CI Secrets 配置
 
