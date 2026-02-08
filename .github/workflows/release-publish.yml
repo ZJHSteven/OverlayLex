@@ -63,37 +63,80 @@ jobs:
           echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
           echo "resolved base ref: $BASE_REF"
 
-      - name: Check Paratranz Drift
+      - name: Collect Changed Package Files
+        id: changed_packages
+        shell: bash
         run: |
+          mkdir -p .tmp
+          CHANGED_FILE=".tmp/release-changed-packages.txt"
+          : > "$CHANGED_FILE"
+
+          BASE_REF="${{ steps.base.outputs.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "changed_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
+            echo "No valid base ref, treat as no package changes."
+            exit 0
+          fi
+
+          mapfile -t CHANGED_FILES < <(git diff --name-only "$BASE_REF...HEAD" -- src/packages | grep -E '\.json$' || true)
+          if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "changed_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
+            echo "No changed package files under src/packages."
+            exit 0
+          fi
+
+          printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILE"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "changed_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
+          echo "changed package files:"
+          cat "$CHANGED_FILE"
+
+      - name: Check Paratranz Drift
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        shell: bash
+        run: |
+          mapfile -t CHANGED_FILES < "${{ steps.changed_packages.outputs.changed_file }}"
+          if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
+            echo "No changed package files, skip drift check."
+            exit 0
+          fi
+
           node src/tools/overlaylex-i18n-flow.mjs pull-paratranz \
             --project-id "${PARATRANZ_PROJECT_ID}" \
             --out-dir ".tmp/paratranz-release-check"
           node src/tools/overlaylex-i18n-flow.mjs from-paratranz \
             --input-dir ".tmp/paratranz-release-check"
-          if ! git diff --quiet -- src/packages; then
+          if ! git diff --quiet -- "${CHANGED_FILES[@]}"; then
             echo "Paratranz drift detected: local packages are behind remote translations."
-            echo "Please merge the latest translation sync PR before releasing."
-            git status --short -- src/packages
+            echo "Please merge the latest translation sync PR before releasing changed packages."
+            git status --short -- "${CHANGED_FILES[@]}"
             exit 1
           fi
 
+      - name: Skip Drift Message
+        if: ${{ steps.changed_packages.outputs.has_changes != 'true' }}
+        run: echo "No changed package files, skip Paratranz drift check."
+
       - name: Verify Release Metadata
-        if: ${{ steps.base.outputs.base_ref != '' }}
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
         run: |
           node src/tools/release-from-staged.mjs verify-release \
             --base-ref "${{ steps.base.outputs.base_ref }}" \
             --api-url "https://overlaylex-demo-api.zhangjiahe0830.workers.dev"
 
       - name: Skip Verify Message
-        if: ${{ steps.base.outputs.base_ref == '' }}
-        run: echo "No valid base ref, skip release metadata verification."
+        if: ${{ steps.changed_packages.outputs.has_changes != 'true' }}
+        run: echo "No changed package files, skip release metadata verification."
 
       - name: Install Worker Dependencies
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
         working-directory: src/worker
         run: npm ci
 
       - name: Sync Packages To R2
-        if: ${{ steps.base.outputs.base_ref != '' }}
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
         run: |
           node src/tools/sync-r2-packages.mjs \
             --bucket-name "${R2_BUCKET_NAME}" \
@@ -103,14 +146,16 @@ jobs:
             --base-ref "${{ steps.base.outputs.base_ref }}"
 
       - name: Skip R2 Sync Message
-        if: ${{ steps.base.outputs.base_ref == '' }}
+        if: ${{ steps.changed_packages.outputs.has_changes != 'true' }}
         run: echo "No valid base ref, skip package sync."
 
       - name: Deploy Worker
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
         working-directory: src/worker
         run: npm run deploy
 
       - name: Smoke Check Manifest
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
         shell: bash
         run: |
           API_URL="https://overlaylex-demo-api.zhangjiahe0830.workers.dev"
