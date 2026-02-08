@@ -14,6 +14,7 @@
  * - pull-paratranz
  * - push-paratranz
  * - bump-release-version
+ * - check-local-translation-policy
  */
 
 import crypto from "node:crypto";
@@ -98,6 +99,7 @@ function printHelp() {
   pull-paratranz        从 Paratranz 拉取文件翻译数据到本地目录
   push-paratranz        将本地包推送到 Paratranz（文件级）
   bump-release-version  对发版变更包执行 patch 版本自动递增
+  check-local-translation-policy  校验 main 分支的本地译文改动策略
 
 常用参数：
   --config <path>         指定配置文件，默认 config/overlaylex-i18n.config.json
@@ -110,6 +112,7 @@ function printHelp() {
   --changed-only          仅处理变更包（push-paratranz）
   --write                 将版本递增写回文件（bump-release-version）
   --prune                 合并时删除临时文件未出现词条（默认关闭）
+  --base-ref <ref>        git 比较基线（check-local-translation-policy）
 `);
 }
 
@@ -362,6 +365,12 @@ function packageFileExistsInBaseRef(baseRef, packageFileAbsolutePath) {
   const relativePath = relativeToRepo(packageFileAbsolutePath);
   const result = tryRunGitCommand(`git cat-file -e ${baseRef}:${relativePath}`);
   return result.ok;
+}
+
+function readJsonFileFromGitRef(baseRef, fileAbsolutePath) {
+  const relativePath = relativeToRepo(fileAbsolutePath);
+  const raw = runGitCommand(`git show ${baseRef}:${relativePath}`).replace(/^\uFEFF/, "");
+  return JSON.parse(raw);
 }
 
 function parseSemver(versionString) {
@@ -959,6 +968,78 @@ function commandBumpReleaseVersion(config, options) {
 }
 
 // ------------------------------
+// 命令实现：check-local-translation-policy
+// ------------------------------
+
+function commandCheckLocalTranslationPolicy(config, options) {
+  const packagesDir = resolvePathFromRepo(config.packagesDir);
+  const baseRef = String(options["base-ref"] || "").trim();
+  if (!baseRef) {
+    throw new Error("check-local-translation-policy 缺少 --base-ref。");
+  }
+
+  const changedFiles = getChangedPackageFiles(packagesDir, baseRef);
+  if (changedFiles.length === 0) {
+    logInfo("check-local-translation-policy 无需执行：未检测到包文件改动。");
+    return;
+  }
+
+  const violations = [];
+
+  for (const packageFilePath of changedFiles) {
+    const currentData = readJsonFile(packageFilePath);
+    if (!isTranslationPackage(currentData)) {
+      continue;
+    }
+
+    const existedInBase = packageFileExistsInBaseRef(baseRef, packageFilePath);
+    if (!existedInBase) {
+      // 新包中的词条允许预翻译（translation 可为空或非空）。
+      continue;
+    }
+
+    const baseData = readJsonFileFromGitRef(baseRef, packageFilePath);
+    if (!isTranslationPackage(baseData)) {
+      continue;
+    }
+
+    const currentTranslations = currentData.translations || {};
+    const baseTranslations = baseData.translations || {};
+
+    for (const [originalText, currentTranslation] of Object.entries(currentTranslations)) {
+      if (!Object.prototype.hasOwnProperty.call(baseTranslations, originalText)) {
+        // 新增 original 允许 translation 非空（支持 AI 预翻译）。
+        continue;
+      }
+      const baseTranslation = String(baseTranslations[originalText] ?? "");
+      const nextTranslation = String(currentTranslation ?? "");
+      if (baseTranslation === nextTranslation) {
+        continue;
+      }
+      violations.push({
+        file: relativeToRepo(packageFilePath),
+        original: originalText,
+        before: baseTranslation,
+        after: nextTranslation,
+      });
+    }
+  }
+
+  if (violations.length === 0) {
+    logInfo("check-local-translation-policy 通过：未发现违规译文改动。");
+    return;
+  }
+
+  logError("发现不允许的本地译文改动（仅允许新增 original 的预翻译）。");
+  for (const item of violations) {
+    logError(
+      `违规词条：${item.file} | original=${JSON.stringify(item.original)} | before=${JSON.stringify(item.before)} | after=${JSON.stringify(item.after)}`
+    );
+  }
+  throw new Error(`校验失败：共 ${violations.length} 处违规译文改动。`);
+}
+
+// ------------------------------
 // 程序入口
 // ------------------------------
 
@@ -990,6 +1071,9 @@ async function main() {
     case "bump-release-version":
       commandBumpReleaseVersion(config, options);
       return;
+    case "check-local-translation-policy":
+      commandCheckLocalTranslationPolicy(config, options);
+      return;
     default:
       throw new Error(`未知命令：${command}。请先执行 help 查看支持命令。`);
   }
@@ -999,4 +1083,3 @@ main().catch((error) => {
   logError("执行失败：", error?.stack || error?.message || String(error));
   process.exitCode = 1;
 });
-
