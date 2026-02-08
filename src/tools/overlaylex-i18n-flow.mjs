@@ -12,6 +12,7 @@
  * - to-paratranz
  * - from-paratranz
  * - pull-paratranz
+ * - sync-paratranz
  * - push-paratranz
  * - bump-release-version
  * - check-local-translation-policy
@@ -97,6 +98,7 @@ function printHelp() {
   to-paratranz          将本地包导出为 Paratranz 数组格式
   from-paratranz        将 Paratranz 数组格式回写到本地包
   pull-paratranz        从 Paratranz 拉取文件翻译数据到本地目录
+  sync-paratranz        一步执行 pull-paratranz + from-paratranz
   push-paratranz        将本地包推送到 Paratranz（文件级）
   bump-release-version  对发版变更包执行 patch 版本自动递增
   check-local-translation-policy  校验 main 分支的本地译文改动策略
@@ -105,8 +107,8 @@ function printHelp() {
   --config <path>         指定配置文件，默认 config/overlaylex-i18n.config.json
   --input <path>          输入文件路径（merge-collected）
   --input-packages <dir>  输入包目录（to-paratranz）
-  --input-dir <dir>       输入目录（from-paratranz）
-  --out-dir <dir>         输出目录（to-paratranz / pull-paratranz）
+  --input-dir <dir>       输入目录（from-paratranz / sync-paratranz，可选）
+  --out-dir <dir>         输出目录（to-paratranz / pull-paratranz / sync-paratranz）
   --project-id <id>       Paratranz 项目 ID（可覆盖配置）
   --base-ref <ref>        git 比较基线（push-paratranz / bump-release-version）
   --changed-only          仅处理变更包（push-paratranz）
@@ -814,6 +816,44 @@ async function commandPullParatranz(config, options) {
 }
 
 // ------------------------------
+// 命令实现：sync-paratranz
+// ------------------------------
+
+/**
+ * commandSyncParatranz:
+ * - 目标：提供“拉取 + 回写”的一键命令，减少手工串联两条命令的负担。
+ * - 输入：
+ *   - --project-id：ParaTranz 项目 ID（必需，除非已在配置中填写）
+ *   - --out-dir：拉取落盘目录（可选，默认 config.tempDir）
+ *   - --input-dir：回写读取目录（可选，默认与 --out-dir 相同）
+ * - 输出：
+ *   - 更新 src/packages 下匹配到的本地翻译包
+ * - 核心逻辑：
+ *   1) 先执行 pull-paratranz，保证本地目录拿到最新远端译文；
+ *   2) 再执行 from-paratranz，把该目录内容回写到本地包。
+ */
+async function commandSyncParatranz(config, options) {
+  // 如果用户没有显式指定输出目录，就沿用配置里的 tempDir。
+  const outputDirOption = options["out-dir"] || config.tempDir;
+  // 默认直接读取刚刚拉取的目录；仅在高级场景才需要手动覆盖 input-dir。
+  const inputDirOption = options["input-dir"] || outputDirOption;
+  // 复用既有子命令逻辑，保持行为一致，避免重复实现。
+  const pullOptions = { ...options, "out-dir": outputDirOption };
+  const fromOptions = { ...options, "input-dir": inputDirOption };
+
+  // 第一步：先从 ParaTranz 拉取最新文件到本地临时目录。
+  await commandPullParatranz(config, pullOptions);
+  // 第二步：把拉下来的数组格式文件写回 src/packages。
+  commandFromParatranz(config, fromOptions);
+
+  // 汇总日志，帮助初学者确认这个聚合命令做了哪两件事。
+  logInfo("sync-paratranz 完成。");
+  logInfo("执行顺序：", "pull-paratranz -> from-paratranz");
+  logInfo("拉取目录：", resolvePathFromRepo(outputDirOption));
+  logInfo("回写目录：", resolvePathFromRepo(inputDirOption));
+}
+
+// ------------------------------
 // 命令实现：push-paratranz
 // ------------------------------
 
@@ -1064,6 +1104,9 @@ async function main() {
       return;
     case "pull-paratranz":
       await commandPullParatranz(config, options);
+      return;
+    case "sync-paratranz":
+      await commandSyncParatranz(config, options);
       return;
     case "push-paratranz":
       await commandPushParatranz(config, options);

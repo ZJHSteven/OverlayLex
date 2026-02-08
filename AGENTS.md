@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 `sync-paratranz` 聚合子命令，一步执行 `pull-paratranz -> from-paratranz`，用于“从 ParaTranz 拉取并直接回写本地包”的常规场景。
+  - 更新 `README.md`：将第 3 步改为 `sync-paratranz` 一键命令（推荐），并保留 `pull-paratranz` + `from-paratranz` 的等价拆分写法用于调试中间目录。
   - 更新 `src/userscript/overlaylex.user.js`：修复“球与面板共用锚点导致收起后偏移”问题，改为球/面板双锚点独立管理；展开时面板从球坐标计算并独立 `clamp`，收起时仅恢复球自身坐标，不再被面板位置反向覆盖。
   - 更新 `src/userscript/overlaylex.user.js`：`UI_STATE` 新增 `panelTop/panelRight` 字段用于分离持久化；同时保持 `ballTop/ballRight` 独立保存，确保边界场景下球位置稳定可复现。
   - 更新 `src/userscript/overlaylex.user.js`：版本升至 `0.2.11`（`@version` 与 `SCRIPT_VERSION` 同步）。

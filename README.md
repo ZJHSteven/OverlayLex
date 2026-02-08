@@ -115,7 +115,10 @@ node src/tools/overlaylex-i18n-flow.mjs merge-collected --input tmp/collector.se
 # 2) 导出为 ParaTranz 文件格式（每包一个 JSON 数组文件）
 node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
 
-# 3) 拉取 ParaTranz 文件并回写到本地包
+# 3) 一步拉取 ParaTranz 并回写到本地包（推荐）
+node src/tools/overlaylex-i18n-flow.mjs sync-paratranz --project-id <项目ID> --out-dir .tmp/paratranz
+
+# 3.1) 等价拆分写法（仅在你需要中间产物调试时使用）
 node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id <项目ID> --out-dir .tmp/paratranz
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratranz
 
