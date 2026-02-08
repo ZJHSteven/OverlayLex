@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-07
+  - 更新 `src/userscript/overlaylex.user.js`：悬浮球默认尺寸由 `56px` 缩小到 `44px`，并同步缩小图标、呼吸圈与状态点，降低遮挡感。
+  - 更新 `src/userscript/overlaylex.user.js`：新增 `UI_TUNING.floatingBall` 集中配置（`sizePx/iconPx/ringInsetPx/ringBlurPx/dotSizePx/dotOffsetPx`），支持初学者在单一位置手动微调悬浮球视觉尺寸。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.6`。
   - 更新 `src/userscript/overlaylex.user.js`：将 `translate/language/settings/cloud_sync` 四个手绘图标替换为用户提供的官方 Material Symbols SVG 路径，修复图形风格不一致问题；同时把图标填充色统一为 `currentColor` 以复用亮暗主题配色。
   - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.5`，用于区分“官方 SVG 图标替换”修复版本。
   - 更新 `src/userscript/overlaylex.user.js`：移除外部字体图标依赖，统一改为内置 SVG 图标渲染，修复 `translate/settings/cloud_sync/close/done/cloud_download` 在部分站点显示为英文文本的问题。

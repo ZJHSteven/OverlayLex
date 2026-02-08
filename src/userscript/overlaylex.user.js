@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex
 // @namespace    https://overlaylex.local
-// @version      0.2.5
+// @version      0.2.6
 // @description  OverlayLex 文本覆盖翻译（包化加载、域名门禁、增量翻译、iframe 支持）
 // @author       OverlayLex
 // @match        *://*/*
@@ -27,7 +27,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.5";
+  const SCRIPT_VERSION = "0.2.6";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -45,6 +45,25 @@
     packagePathPrefix: "/packages/",
     domainPackagePath: "/domain-package.json",
     observerDebounceMs: 80,
+  };
+  /**
+   * UI 可调参数（教学向）
+   *
+   * 你后续若要继续“手动微调悬浮球大小”，只需要改这里，不要到样式里零散改数字。
+   * 推荐调节顺序：
+   * 1) 先改 sizePx（球整体直径）
+   * 2) 再改 iconPx（中间图标大小）
+   * 3) 最后微调 dotSizePx/ringInsetPx（小状态点与呼吸圈）
+   */
+  const UI_TUNING = {
+    floatingBall: {
+      sizePx: 44,
+      iconPx: 22,
+      ringInsetPx: -5,
+      ringBlurPx: 7,
+      dotSizePx: 8,
+      dotOffsetPx: 3,
+    },
   };
 
   // 当前上下文是否顶层窗口（用于控制悬浮球是否注入）。
@@ -806,6 +825,7 @@
   }
 
   function injectUiStyles() {
+    const ballUi = UI_TUNING.floatingBall;
     const style = document.createElement("style");
     style.textContent = `
       /* OverlayLex UI 样式：只影响带 overlaylex-* 前缀的节点，不污染宿主页面。 */
@@ -826,8 +846,8 @@
       .overlaylex-ball {
         position: fixed;
         z-index: 2147483000;
-        width: 56px;
-        height: 56px;
+        width: ${ballUi.sizePx}px;
+        height: ${ballUi.sizePx}px;
         border-radius: 50%;
         border: 1px solid rgba(255, 255, 255, 0.38);
         background: rgba(255, 255, 255, 0.7);
@@ -851,24 +871,24 @@
         justify-content: center;
       }
       .overlaylex-ball-icon {
-        font-size: 28px;
+        font-size: ${ballUi.iconPx}px;
       }
       .overlaylex-ball-ring {
         position: absolute;
-        inset: -7px;
+        inset: ${ballUi.ringInsetPx}px;
         border-radius: 999px;
         background: rgba(19, 127, 236, 0.24);
-        filter: blur(9px);
+        filter: blur(${ballUi.ringBlurPx}px);
         opacity: .45;
         animation: overlaylex-breathe 2.8s ease-in-out infinite;
         pointer-events: none;
       }
       .overlaylex-ball-dot {
         position: absolute;
-        top: 3px;
-        right: 3px;
-        width: 10px;
-        height: 10px;
+        top: ${ballUi.dotOffsetPx}px;
+        right: ${ballUi.dotOffsetPx}px;
+        width: ${ballUi.dotSizePx}px;
+        height: ${ballUi.dotSizePx}px;
         border-radius: 999px;
         background: #137fec;
         border: 2px solid rgba(255, 255, 255, 0.95);
@@ -1405,7 +1425,7 @@
     injectUiStyles();
     const uiState = getUiState();
     const EDGE_PADDING = 8;
-    const BALL_SIZE = 56;
+    const BALL_SIZE = UI_TUNING.floatingBall.sizePx;
     const FALLBACK_PANEL_WIDTH = 340;
     const FALLBACK_PANEL_HEIGHT = 460;
     const DRAG_THRESHOLD = 3;
