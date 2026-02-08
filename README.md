@@ -225,7 +225,7 @@ node src/tools/release-from-staged.mjs prepare-from-staged
 说明：
 - 该流程不再依赖“云端自动 bump 版本”；版本统一在本地发布脚本阶段完成，避免 `main/release` 版本漂移。
 - 发布上传是“整文件覆盖”，但文件集合只取本次 Git 改动包，不会全量重传全部包。
-- `manifest` 只会暴露“至少包含 1 条中文译文”的翻译包；纯英文采集包不会出现在前端包列表中。
+- 发布包选择权在你手里：脚本只会把“你暂存的翻译包”加入发布目录（`PACKAGE_CATALOG`），不会按译文内容自动替你筛选。
 
 ## CI Secrets 配置
 

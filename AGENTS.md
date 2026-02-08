@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/tools/release-from-staged.mjs`：回退“按中文译文自动筛包”策略，改为“仅按发布者暂存区选择决定新增发布包”；脚本不再自动替用户做包选择，只负责版本递增、allowlist/catalog 同步与发布链路执行。
+  - 更新 `README.md`：将发布规则说明改为“选择权在暂存区”，明确脚本不会按译文内容自动筛选包。
   - 更新 `src/tools/release-from-staged.mjs`：发布目录改为仅纳入“至少包含 1 条中文译文”的翻译包；未翻译（纯英文采集）包会被自动排除出 Worker `PACKAGE_CATALOG` 与 manifest，同时发布前校验会阻止这类包进入发布流程。
   - 更新 `README.md`：补充“manifest 只暴露含中文译文包，纯英文采集包不展示”的规则说明。
   - 更新 `src/tools/release-from-staged.mjs`：新增 `sync-metadata` 子命令，支持仅同步 `overlaylex-domain-allowlist` 与 Worker `PACKAGE_CATALOG`（不触发 Git 推送），用于修复历史流程导致的元数据版本漂移。

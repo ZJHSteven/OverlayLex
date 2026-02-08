@@ -82,14 +82,6 @@ export const PACKAGE_CATALOG = {
     "version": "0.2.3",
     "enabledByDefault": true,
     "description": "控制脚本允许在哪些域名继续执行"
-  },
-  "overlaylex-domain-seeds": {
-    "id": "overlaylex-domain-seeds",
-    "name": "OverlayLex 本地种子域名",
-    "kind": "domain-allowlist",
-    "version": "0.1.0",
-    "enabledByDefault": true,
-    "description": "控制脚本允许在哪些域名继续执行"
   }
 };
 
