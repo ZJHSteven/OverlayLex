@@ -102,7 +102,8 @@ function runGit(args, { allowFailure = false, stdio = "pipe" } = {}) {
     cwd: REPO_ROOT,
     encoding: "utf8",
     stdio,
-    shell: process.platform === "win32",
+    // 对 git 子进程禁用 shell，避免 Windows 下参数被 shell 二次拆分（例如 commit message 含空格/逗号）。
+    shell: false,
     env: process.env,
   });
   if (allowFailure) {
