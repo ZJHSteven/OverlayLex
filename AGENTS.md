@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-08
+  - 新增 `src/worker/package-lock.json`：补齐 Worker 依赖锁文件，保证 GitHub Actions 中 `npm ci` 可稳定执行。
   - 修复 `src/tools/sync-r2-packages.mjs`：R2 上传默认改为远端模式（自动附加 `--remote`），并新增 `--local` 调试开关，避免误写入 Wrangler 本地模拟桶导致线上包未更新。
   - 修复 `src/tools/sync-r2-packages.mjs`：调整 `wrangler` 调用方式为跨平台 `npx` 执行（Windows 启用 shell 解析），并补充子进程错误/退出码日志，解决 Windows 环境下 R2 同步首包失败问题。
   - 更新 `README.md`：补充 OverlayLex i18n 闭环文档（采集临时 JSON 格式、`overlaylex-i18n-flow.mjs` 命令、ParaTranz 互转规则、`main/release` 分支 CI/CD 流程与 Secrets 配置）。
