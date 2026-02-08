@@ -9,6 +9,8 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `src/tools/overlaylex-i18n-flow.mjs`：将 `from-paratranz` 升级为双模式命令；当传入 `--project-id` 时自动执行 `pull-paratranz -> from-paratranz`，未传时保持“仅本地回写”旧行为；保留 `sync-paratranz` 兼容别名。
+  - 更新 `README.md`：第 3 步改为 `from-paratranz --project-id 17950` 一键命令；补充 `--out-dir` 为可选参数（默认 `.tmp/paratranz`）与 `PARATRANZ_TOKEN` 读取规则说明。
   - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 `sync-paratranz` 聚合子命令，一步执行 `pull-paratranz -> from-paratranz`，用于“从 ParaTranz 拉取并直接回写本地包”的常规场景。
   - 更新 `README.md`：将第 3 步改为 `sync-paratranz` 一键命令（推荐），并保留 `pull-paratranz` + `from-paratranz` 的等价拆分写法用于调试中间目录。
   - 更新 `src/userscript/overlaylex.user.js`：修复“球与面板共用锚点导致收起后偏移”问题，改为球/面板双锚点独立管理；展开时面板从球坐标计算并独立 `clamp`，收起时仅恢复球自身坐标，不再被面板位置反向覆盖。

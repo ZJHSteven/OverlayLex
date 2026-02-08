@@ -96,9 +96,9 @@ function printHelp() {
 命令：
   merge-collected       将临时采集 JSON 合并到本地包
   to-paratranz          将本地包导出为 Paratranz 数组格式
-  from-paratranz        将 Paratranz 数组格式回写到本地包
+  from-paratranz        回写到本地包（传 --project-id 时自动先拉取）
   pull-paratranz        从 Paratranz 拉取文件翻译数据到本地目录
-  sync-paratranz        一步执行 pull-paratranz + from-paratranz
+  sync-paratranz        兼容别名：一步执行 pull-paratranz + from-paratranz
   push-paratranz        将本地包推送到 Paratranz（文件级）
   bump-release-version  对发版变更包执行 patch 版本自动递增
   check-local-translation-policy  校验 main 分支的本地译文改动策略
@@ -108,8 +108,8 @@ function printHelp() {
   --input <path>          输入文件路径（merge-collected）
   --input-packages <dir>  输入包目录（to-paratranz）
   --input-dir <dir>       输入目录（from-paratranz / sync-paratranz，可选）
-  --out-dir <dir>         输出目录（to-paratranz / pull-paratranz / sync-paratranz）
-  --project-id <id>       Paratranz 项目 ID（可覆盖配置）
+  --out-dir <dir>         输出目录（to-paratranz / pull-paratranz / sync-paratranz，可选，默认 .tmp/paratranz）
+  --project-id <id>       Paratranz 项目 ID（pull/from/sync 可用，可覆盖配置）
   --base-ref <ref>        git 比较基线（push-paratranz / bump-release-version）
   --changed-only          仅处理变更包（push-paratranz）
   --write                 将版本递增写回文件（bump-release-version）
@@ -679,11 +679,20 @@ function commandToParatranz(config, options) {
 }
 
 // ------------------------------
-// 命令实现：from-paratranz
+// from-paratranz 的“回写核心逻辑”
 // ------------------------------
 
-function commandFromParatranz(config, options) {
-  const inputDir = resolvePathFromRepo(options["input-dir"] || config.tempDir);
+/**
+ * applyParatranzRowsToPackages:
+ * - 目标：把某个目录中的 Paratranz JSON 数组文件写回到 src/packages。
+ * - 输入：inputDirOption（目录，可为相对仓库根目录路径）
+ * - 输出：更新后的本地包文件（仅在有变化时写盘）
+ * - 说明：
+ *   - 这个函数只负责“回写”，不负责“拉取”；
+ *   - 这样 commandFromParatranz 与 commandSyncParatranz 都可以复用同一份实现，减少行为分叉。
+ */
+function applyParatranzRowsToPackages(config, inputDirOption) {
+  const inputDir = resolvePathFromRepo(inputDirOption || config.tempDir);
   const packagesDir = resolvePathFromRepo(config.packagesDir);
   const skipEmpty = config.conversion.skipEmptyTranslationOnImport !== false;
   const inputFiles = getJsonFilesInDirectory(inputDir);
@@ -750,6 +759,34 @@ function commandFromParatranz(config, options) {
   logInfo("更新包数量：", String(updatedPackageCount));
   logInfo("更新词条数量：", String(updatedRowCount));
   logInfo("跳过文件数量：", String(skippedFileCount));
+}
+
+// ------------------------------
+// 命令实现：from-paratranz
+// ------------------------------
+
+/**
+ * commandFromParatranz:
+ * - 两种模式：
+ *   1) 本地回写模式：不传 --project-id，仅把 --input-dir（或默认目录）回写到本地包。
+ *   2) 一键同步模式：传 --project-id 时，自动执行“先 pull，再 from”。
+ * - 这样用户可以继续使用熟悉的 from-paratranz 命令名，同时保留老用法兼容性。
+ */
+async function commandFromParatranz(config, options) {
+  const hasProjectIdInArgs = Object.prototype.hasOwnProperty.call(options, "project-id");
+  const outputDirOption = options["out-dir"] || config.tempDir;
+  const inputDirOption = options["input-dir"] || outputDirOption;
+
+  if (hasProjectIdInArgs) {
+    // 当用户显式提供 --project-id，我们把 from 命令升级为“一键同步”模式。
+    await commandPullParatranz(config, { ...options, "out-dir": outputDirOption });
+    applyParatranzRowsToPackages(config, inputDirOption);
+    logInfo("from-paratranz 执行模式：", "已检测到 --project-id，自动执行 pull-paratranz -> from-paratranz");
+    return;
+  }
+
+  // 保持历史兼容：未传 --project-id 时，仍然是“仅回写本地目录”。
+  applyParatranzRowsToPackages(config, options["input-dir"] || config.tempDir);
 }
 
 // ------------------------------
@@ -844,7 +881,7 @@ async function commandSyncParatranz(config, options) {
   // 第一步：先从 ParaTranz 拉取最新文件到本地临时目录。
   await commandPullParatranz(config, pullOptions);
   // 第二步：把拉下来的数组格式文件写回 src/packages。
-  commandFromParatranz(config, fromOptions);
+  applyParatranzRowsToPackages(config, fromOptions["input-dir"]);
 
   // 汇总日志，帮助初学者确认这个聚合命令做了哪两件事。
   logInfo("sync-paratranz 完成。");
@@ -1100,7 +1137,7 @@ async function main() {
       commandToParatranz(config, options);
       return;
     case "from-paratranz":
-      commandFromParatranz(config, options);
+      await commandFromParatranz(config, options);
       return;
     case "pull-paratranz":
       await commandPullParatranz(config, options);

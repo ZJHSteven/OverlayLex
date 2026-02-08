@@ -115,11 +115,15 @@ node src/tools/overlaylex-i18n-flow.mjs merge-collected --input tmp/collector.se
 # 2) 导出为 ParaTranz 文件格式（每包一个 JSON 数组文件）
 node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
 
-# 3) 一步拉取 ParaTranz 并回写到本地包（推荐）
-node src/tools/overlaylex-i18n-flow.mjs sync-paratranz --project-id <项目ID> --out-dir .tmp/paratranz
+# 3) 一步拉取 ParaTranz 并回写到本地包（推荐，直接可复制）
+node src/tools/overlaylex-i18n-flow.mjs from-paratranz --project-id 17950
+
+# 3.0) 可选参数说明
+# --out-dir 可不填；默认目录是 .tmp/paratranz
+# 如需改目录可写：--out-dir .tmp/paratranz-custom
 
 # 3.1) 等价拆分写法（仅在你需要中间产物调试时使用）
-node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id <项目ID> --out-dir .tmp/paratranz
+node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id 17950 --out-dir .tmp/paratranz
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratranz
 
 # 4) 校验 main 分支本地译文改动策略（CI 同款）
@@ -211,6 +215,10 @@ node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-re
 - `R2_BUCKET_NAME`
 
 本地命令也可复用同名环境变量（尤其是 `PARATRANZ_TOKEN`）。
+
+`PARATRANZ_TOKEN` 读取规则：
+- 默认读取环境变量名 `PARATRANZ_TOKEN`。
+- 若你在 `config/overlaylex-i18n.config.json` 里把 `paratranz.tokenEnv` 改成别的名字，脚本会读取你配置的新名字。
 
 ## 当前实现的取舍
 
