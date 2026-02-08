@@ -198,11 +198,13 @@ node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-re
 ### `release` 分支
 - 触发工作流：`.github/workflows/release-publish.yml`
 - 固定顺序：
-  1. `pull-paratranz` + `from-paratranz` 对齐检查（有漂移则阻断发布）
-  2. `verify-release`：校验域名准入包覆盖、Worker `PACKAGE_CATALOG` 版本一致性、且“本次改动包版本号 > 线上版本”
-3. 仅同步“相对本次 `base_ref` 有改动”的包文件到 R2（整文件覆盖）
-4. 部署 Worker（`npm run deploy`）
-5. 冒烟校验线上 `/manifest`
+  1. 先计算本次 push 相对 `base_ref` 的变更包列表（`src/packages/*.json`）。
+  2. 若无变更包：工作流直接跳过发布链路（不发包、不部署）。
+  3. 若有变更包：仅对“本次变更包”执行 `pull-paratranz` + `from-paratranz` 漂移检查（有漂移则阻断）。
+  4. `verify-release`：校验域名准入包覆盖、Worker `PACKAGE_CATALOG` 版本一致性、且“本次改动包版本号 > 线上版本”。
+  5. 仅同步“相对本次 `base_ref` 有改动”的包文件到 R2（整文件覆盖）。
+  6. 部署 Worker（`npm run deploy`）。
+  7. 冒烟校验线上 `/manifest`。
 
 ## 本地一键发布（按暂存区驱动）
 
