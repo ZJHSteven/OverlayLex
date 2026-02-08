@@ -173,6 +173,43 @@ function isTranslationPackage(packageData) {
   );
 }
 
+function getTranslationStats(packageData) {
+  const translations = packageData?.translations;
+  if (!translations || typeof translations !== "object" || Array.isArray(translations)) {
+    return {
+      total: 0,
+      nonEmpty: 0,
+      hanCount: 0,
+    };
+  }
+
+  let total = 0;
+  let nonEmpty = 0;
+  let hanCount = 0;
+  for (const value of Object.values(translations)) {
+    total += 1;
+    const text = String(value ?? "").trim();
+    if (!text) {
+      continue;
+    }
+    nonEmpty += 1;
+    if (/[\u4e00-\u9fff]/.test(text)) {
+      hanCount += 1;
+    }
+  }
+  return {
+    total,
+    nonEmpty,
+    hanCount,
+  };
+}
+
+function isTranslationReadyForRelease(packageData) {
+  const stats = getTranslationStats(packageData);
+  // 发布门槛：至少出现 1 条中文译文，避免英文采集包进入 manifest。
+  return stats.hanCount > 0;
+}
+
 function getPackageIdFromFile(filePath, packageData) {
   if (typeof packageData?.id === "string" && packageData.id.trim()) {
     return packageData.id.trim();
@@ -258,6 +295,7 @@ function readAllPublishablePackages() {
       data,
       kind: isTranslationPackage(data) ? "translation" : "domain-allowlist",
       hosts: isTranslationPackage(data) ? getTargetHosts(data.target) : [],
+      translationReady: isTranslationPackage(data) ? isTranslationReadyForRelease(data) : true,
     });
   }
   return records;
@@ -353,12 +391,20 @@ function validateStagedPackageFiles(stagedFiles) {
       data: packageData,
       id: getPackageIdFromFile(absolutePath, packageData),
       kind: isTranslationPackage(packageData) ? "translation" : "domain-allowlist",
+      translationReady: isTranslationPackage(packageData) ? isTranslationReadyForRelease(packageData) : true,
     });
   }
 
   const translationCount = records.filter((item) => item.kind === "translation").length;
   if (translationCount === 0) {
     throw new Error("暂存区没有翻译包（translation），无法执行发布。");
+  }
+
+  const notReadyRecords = records.filter((item) => item.kind === "translation" && !item.translationReady);
+  if (notReadyRecords.length > 0) {
+    throw new Error(
+      `暂存区包含“无中文译文”的翻译包，禁止发布：${notReadyRecords.map((item) => item.id).join(", ")}`
+    );
   }
   return records;
 }
@@ -413,6 +459,9 @@ function syncDomainAllowlistWithPackages(allRecords) {
   const hostOwnerMap = new Map();
   for (const record of allRecords) {
     if (record.kind !== "translation") {
+      continue;
+    }
+    if (!record.translationReady) {
       continue;
     }
     for (const host of record.hosts) {
@@ -579,8 +628,14 @@ function syncWorkerCatalogWithPackages(allRecords) {
   const existingCatalog = parsedCatalog.value;
 
   const sortedRecords = [...allRecords].sort((a, b) => a.id.localeCompare(b.id, "en"));
+  const publishableRecords = sortedRecords.filter((record) => {
+    if (record.kind !== "translation") {
+      return true;
+    }
+    return record.translationReady;
+  });
   const nextCatalog = {};
-  for (const record of sortedRecords) {
+  for (const record of publishableRecords) {
     const existing = existingCatalog[record.id] || {};
     const kind = record.kind;
     nextCatalog[record.id] = {
@@ -680,6 +735,9 @@ function assertAllowlistCoverage(allRecords) {
     if (record.kind !== "translation") {
       continue;
     }
+    if (!record.translationReady) {
+      continue;
+    }
     for (const host of record.hosts) {
       const covered = rules.some((rule) => isRuleCoveringHost(rule, host));
       if (!covered) {
@@ -698,8 +756,15 @@ function assertWorkerCatalogConsistency(allRecords) {
   const parsedCatalog = parseExportObject(workerText, "PACKAGE_CATALOG");
   const catalog = parsedCatalog.value;
   const errors = [];
+  const publishableRecords = allRecords.filter((record) => {
+    if (record.kind !== "translation") {
+      return true;
+    }
+    return record.translationReady;
+  });
+  const publishableIds = new Set(publishableRecords.map((item) => item.id));
 
-  for (const record of allRecords) {
+  for (const record of publishableRecords) {
     const item = catalog[record.id];
     if (!item) {
       errors.push(`PACKAGE_CATALOG 缺少包：${record.id}`);
@@ -709,6 +774,18 @@ function assertWorkerCatalogConsistency(allRecords) {
     const packageVersion = String(record.data.version || "");
     if (catalogVersion !== packageVersion) {
       errors.push(`PACKAGE_CATALOG 版本不一致：${record.id} catalog=${catalogVersion} package=${packageVersion}`);
+    }
+  }
+
+  // 不允许未达发布门槛的翻译包残留在 catalog，否则会继续出现在 manifest。
+  for (const item of Object.values(catalog)) {
+    const id = String(item?.id || "");
+    const kind = String(item?.kind || "");
+    if (kind !== "translation") {
+      continue;
+    }
+    if (!publishableIds.has(id)) {
+      errors.push(`PACKAGE_CATALOG 包含未发布翻译包：${id}`);
     }
   }
 
@@ -748,6 +825,10 @@ async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl
     const absolutePath = path.resolve(REPO_ROOT, relativePath);
     const packageData = readJsonFile(absolutePath);
     if (!isPublishablePackage(packageData)) {
+      continue;
+    }
+    if (isTranslationPackage(packageData) && !isTranslationReadyForRelease(packageData)) {
+      errors.push(`未满足发布门槛（缺少中文译文）：${relativePath}`);
       continue;
     }
     const packageId = getPackageIdFromFile(absolutePath, packageData);

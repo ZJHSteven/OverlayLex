@@ -200,9 +200,9 @@ node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-re
 - 固定顺序：
   1. `pull-paratranz` + `from-paratranz` 对齐检查（有漂移则阻断发布）
   2. `verify-release`：校验域名准入包覆盖、Worker `PACKAGE_CATALOG` 版本一致性、且“本次改动包版本号 > 线上版本”
-  3. 仅同步“相对本次 `base_ref` 有改动”的包文件到 R2（整文件覆盖）
-  4. 部署 Worker（`npm run deploy`）
-  5. 冒烟校验线上 `/manifest`
+3. 仅同步“相对本次 `base_ref` 有改动”的包文件到 R2（整文件覆盖）
+4. 部署 Worker（`npm run deploy`）
+5. 冒烟校验线上 `/manifest`
 
 ## 本地一键发布（按暂存区驱动）
 
@@ -225,6 +225,7 @@ node src/tools/release-from-staged.mjs prepare-from-staged
 说明：
 - 该流程不再依赖“云端自动 bump 版本”；版本统一在本地发布脚本阶段完成，避免 `main/release` 版本漂移。
 - 发布上传是“整文件覆盖”，但文件集合只取本次 Git 改动包，不会全量重传全部包。
+- `manifest` 只会暴露“至少包含 1 条中文译文”的翻译包；纯英文采集包不会出现在前端包列表中。
 
 ## CI Secrets 配置
 
