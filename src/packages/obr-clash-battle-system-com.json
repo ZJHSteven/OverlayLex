@@ -5,7 +5,7 @@
     "host": "clash.battle-system.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.3",
+  "version": "0.1.4",
   "translations": {
     "- Adding Clickable Dice Values": "- 添加可点击的骰子值",
     "- Adding Skills to the Block": "- 向方块添加技能",
