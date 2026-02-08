@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Collector
 // @namespace    https://overlaylex.local
-// @version      0.1.0
+// @version      0.1.1
 // @description  OverlayLex 实时抽词采集器（独立于主翻译脚本）
 // @author       OverlayLex
 // @match        *://*/*
@@ -528,12 +528,6 @@
     return Boolean(element.closest?.(`[id^="${UI_ID_PREFIX}"]`));
   }
 
-  function formatTextLine(text) {
-    const escaped = String(text).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    // 按你的要求：只保留英文词条本身，不再输出空翻译占位。
-    return `"${escaped}"`;
-  }
-
   function collectHostTexts(host, incremental) {
     const bucket = ensureHostBucket(host);
     const allTexts = Object.keys(bucket.texts);
@@ -542,32 +536,26 @@
     return picked;
   }
 
-  function buildMergedTextsFromHosts(hosts, incremental) {
-    const mergedSet = new Set();
-    const selectedByHost = {};
-    for (const host of hosts) {
-      const texts = collectHostTexts(host, incremental);
-      selectedByHost[host] = texts;
-      for (const text of texts) {
-        mergedSet.add(text);
-      }
-    }
-    const merged = [...mergedSet].sort((a, b) => a.localeCompare(b, "en"));
-    return { merged, selectedByHost };
-  }
-
+  /**
+   * buildHostScopedExport:
+   * 导出“按域名分组 JSON”格式，便于后续直接粘贴到临时文件并人工筛选。
+   * 输出示例：
+   * {
+   *   "smoke.battle-system.com": ["Text A", "Text B"],
+   *   "www.owlbear.rodeo": ["Text C"]
+   * }
+   */
   function buildHostScopedExport(hosts, incremental) {
     const sortedHosts = [...hosts].sort((a, b) => a.localeCompare(b, "en"));
-    const sectionList = [];
+    const payload = {};
     const selectedByHost = {};
     for (const host of sortedHosts) {
       const texts = collectHostTexts(host, incremental);
       selectedByHost[host] = texts;
-      const joinedTexts = texts.map((text) => formatTextLine(text)).join(",");
-      sectionList.push(`${host}:\n${joinedTexts}`);
+      payload[host] = texts;
     }
     return {
-      serialized: sectionList.join("\n\n"),
+      serialized: JSON.stringify(payload, null, 2),
       selectedByHost,
     };
   }
@@ -822,7 +810,7 @@
         return;
       }
       markExportedByHost(selectedByHost);
-      setStatusText(`复制本域增量成功：${selectedByHost[host]?.length || 0} 条。`);
+      setStatusText(`复制本域增量 JSON 成功：${selectedByHost[host]?.length || 0} 条。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-full`)?.addEventListener("click", () => {
@@ -833,7 +821,7 @@
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
-      setStatusText(`复制本域全量成功：${selectedByHost[host]?.length || 0} 条。`);
+      setStatusText(`复制本域全量 JSON 成功：${selectedByHost[host]?.length || 0} 条。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-all-merged`)?.addEventListener("click", () => {
@@ -844,7 +832,7 @@
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
-      setStatusText(`一键复制全部域名成功：跨 ${allHosts.length} 个域名。`);
+      setStatusText(`一键复制全部域名 JSON 成功：跨 ${allHosts.length} 个域名。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-selected-host`)?.addEventListener("click", () => {
@@ -859,7 +847,7 @@
         setStatusText("复制失败：请检查剪贴板权限。");
         return;
       }
-      setStatusText(`复制选定域名成功：${selectedByHost[selectedHost]?.length || 0} 条。`);
+      setStatusText(`复制选定域名 JSON 成功：${selectedByHost[selectedHost]?.length || 0} 条。`);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-iframe-hosts`)?.addEventListener("click", () => {
