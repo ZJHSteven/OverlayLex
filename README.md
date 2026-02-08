@@ -226,6 +226,7 @@ node src/tools/release-from-staged.mjs prepare-from-staged
 - 该流程不再依赖“云端自动 bump 版本”；版本统一在本地发布脚本阶段完成，避免 `main/release` 版本漂移。
 - 发布上传是“整文件覆盖”，但文件集合只取本次 Git 改动包，不会全量重传全部包。
 - 发布包选择权在你手里：脚本只会把“你暂存的翻译包”加入发布目录（`PACKAGE_CATALOG`），不会按译文内容自动替你筛选。
+- 工作区可以不干净：脚本不会强制你清空其他改动；提交时只会包含“你原始暂存的包 + 自动维护的 `overlaylex-domain-allowlist.json` + `src/worker/src/data.js`”。
 
 ## CI Secrets 配置
 
