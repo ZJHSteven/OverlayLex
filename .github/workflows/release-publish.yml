@@ -16,6 +16,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      PARATRANZ_TOKEN: ${{ secrets.PARATRANZ_TOKEN }}
+      PARATRANZ_PROJECT_ID: ${{ secrets.PARATRANZ_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +43,14 @@ jobs:
             echo "R2_BUCKET_NAME is missing."
             exit 1
           fi
+          if [ -z "${PARATRANZ_TOKEN}" ]; then
+            echo "PARATRANZ_TOKEN is missing."
+            exit 1
+          fi
+          if [ -z "${PARATRANZ_PROJECT_ID}" ]; then
+            echo "PARATRANZ_PROJECT_ID is missing."
+            exit 1
+          fi
 
       - name: Resolve Base Ref
         id: base
@@ -52,6 +62,20 @@ jobs:
           fi
           echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
           echo "resolved base ref: $BASE_REF"
+
+      - name: Check Paratranz Drift
+        run: |
+          node src/tools/overlaylex-i18n-flow.mjs pull-paratranz \
+            --project-id "${PARATRANZ_PROJECT_ID}" \
+            --out-dir ".tmp/paratranz-release-check"
+          node src/tools/overlaylex-i18n-flow.mjs from-paratranz \
+            --input-dir ".tmp/paratranz-release-check"
+          if ! git diff --quiet -- src/packages; then
+            echo "Paratranz drift detected: local packages are behind remote translations."
+            echo "Please merge the latest translation sync PR before releasing."
+            git status --short -- src/packages
+            exit 1
+          fi
 
       - name: Bump Package Versions
         if: ${{ steps.base.outputs.base_ref != '' }}
@@ -115,4 +139,3 @@ jobs:
           }
           console.log("manifest smoke check passed.");
           NODE
-

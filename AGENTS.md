@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-08
+  - 更新 `.github/workflows/release-publish.yml`：新增发布前 `Check Paratranz Drift` 门禁（拉取并回写远端译文后检测 `src/packages` 是否有差异），未对齐时阻断发布；并补充 `PARATRANZ_TOKEN`、`PARATRANZ_PROJECT_ID` secrets 校验。
   - 更新 `.github/workflows/main-paratranz-sync.yml`：新增 `Validate Local Translation Policy` 步骤，在上推 ParaTranz 前执行 `check-local-translation-policy`，阻止“修改已存在 original 译文”的本地改动进入主流程。
   - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 `check-local-translation-policy` 子命令，用于校验 `main` 分支本地译文改动策略；规则为“允许新增 `original` 携带空/非空预翻译，禁止修改已存在 `original` 的译文”。
   - 新增 `src/worker/package-lock.json`：补齐 Worker 依赖锁文件，保证 GitHub Actions 中 `npm ci` 可稳定执行。
