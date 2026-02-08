@@ -1,0 +1,118 @@
+name: release-publish
+
+on:
+  push:
+    branches:
+      - release
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate Secrets
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN is missing."
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "CLOUDFLARE_ACCOUNT_ID is missing."
+            exit 1
+          fi
+          if [ -z "${R2_BUCKET_NAME}" ]; then
+            echo "R2_BUCKET_NAME is missing."
+            exit 1
+          fi
+
+      - name: Resolve Base Ref
+        id: base
+        shell: bash
+        run: |
+          BASE_REF="${{ github.event.before }}"
+          if [ "$BASE_REF" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE_REF" ]; then
+            BASE_REF="$(git rev-parse HEAD~1 2>/dev/null || true)"
+          fi
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+          echo "resolved base ref: $BASE_REF"
+
+      - name: Bump Package Versions
+        if: ${{ steps.base.outputs.base_ref != '' }}
+        run: |
+          node src/tools/overlaylex-i18n-flow.mjs bump-release-version \
+            --base-ref "${{ steps.base.outputs.base_ref }}" \
+            --write
+
+      - name: Commit Version Bump
+        if: ${{ steps.base.outputs.base_ref != '' }}
+        shell: bash
+        run: |
+          if git diff --quiet -- src/packages; then
+            echo "No package version changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/packages
+          git commit -m "chore(release): bump package patch versions [skip release]"
+          git push
+
+      - name: Install Worker Dependencies
+        working-directory: src/worker
+        run: npm ci
+
+      - name: Sync Packages To R2
+        run: |
+          node src/tools/sync-r2-packages.mjs \
+            --bucket-name "${R2_BUCKET_NAME}" \
+            --packages-dir src/packages \
+            --worker-dir src/worker
+
+      - name: Deploy Worker
+        working-directory: src/worker
+        run: npm run deploy
+
+      - name: Smoke Check Manifest
+        shell: bash
+        run: |
+          API_URL="https://overlaylex-demo-api.zhangjiahe0830.workers.dev"
+          MANIFEST="$(curl -fsSL "${API_URL}/manifest")"
+          echo "${MANIFEST}" > manifest.json
+          node - <<'NODE'
+          const fs = require("fs");
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          if (!manifest || !Array.isArray(manifest.packages)) {
+            throw new Error("manifest format invalid");
+          }
+          if (manifest.packages.some((item) => item.id === "obr-room-core")) {
+            throw new Error("manifest still contains obr-room-core");
+          }
+          const dataJs = fs.readFileSync("src/worker/src/data.js", "utf8");
+          const match = dataJs.match(/export const SCRIPT_VERSION = "([^"]+)";/);
+          if (!match) {
+            throw new Error("local script version not found");
+          }
+          const localVersion = match[1];
+          if (manifest.scriptVersion !== localVersion) {
+            throw new Error(`scriptVersion mismatch: remote=${manifest.scriptVersion} local=${localVersion}`);
+          }
+          console.log("manifest smoke check passed.");
+          NODE
+

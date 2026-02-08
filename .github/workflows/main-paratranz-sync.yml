@@ -1,0 +1,62 @@
+name: main-paratranz-sync
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  sync-paratranz:
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip paratranz]') }}
+    env:
+      PARATRANZ_TOKEN: ${{ secrets.PARATRANZ_TOKEN }}
+      PARATRANZ_PROJECT_ID: ${{ secrets.PARATRANZ_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate Secrets
+        run: |
+          if [ -z "${PARATRANZ_TOKEN}" ]; then
+            echo "PARATRANZ_TOKEN is missing."
+            exit 1
+          fi
+          if [ -z "${PARATRANZ_PROJECT_ID}" ]; then
+            echo "PARATRANZ_PROJECT_ID is missing."
+            exit 1
+          fi
+
+      - name: Resolve Base Ref
+        id: base
+        shell: bash
+        run: |
+          BASE_REF="${{ github.event.before }}"
+          if [ "$BASE_REF" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE_REF" ]; then
+            BASE_REF="$(git rev-parse HEAD~1 2>/dev/null || true)"
+          fi
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+          echo "resolved base ref: $BASE_REF"
+
+      - name: Push Changed Packages To ParaTranz
+        if: ${{ steps.base.outputs.base_ref != '' }}
+        run: |
+          node src/tools/overlaylex-i18n-flow.mjs push-paratranz \
+            --project-id "${PARATRANZ_PROJECT_ID}" \
+            --changed-only \
+            --base-ref "${{ steps.base.outputs.base_ref }}"
+
+      - name: Skip Message
+        if: ${{ steps.base.outputs.base_ref == '' }}
+        run: echo "No valid base ref, skip this run."
+

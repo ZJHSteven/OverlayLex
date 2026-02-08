@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-08
+  - 新增 `.github/workflows/main-paratranz-sync.yml`：`main` 分支自动执行 ParaTranz 增量同步（按 `base_ref` 计算变更包，调用 `push-paratranz --changed-only`）。
+  - 新增 `.github/workflows/release-publish.yml`：`release` 分支自动执行“版本号 patch 递增 -> 提交回推 -> R2 同步 -> Worker 部署 -> manifest 冒烟检查”发布流程。
+  - 新增 `src/tools/sync-r2-packages.mjs`：按 `packages/{filename}.json` 规则批量上传可发布包（翻译包/域名准入包）到 R2。
   - 新增 `src/tools/overlaylex-i18n-flow.mjs`：实现 OverlayLex i18n 一体化流程脚本，支持 `merge-collected`、`to-paratranz`、`from-paratranz`、`pull-paratranz`、`push-paratranz`、`bump-release-version` 六个子命令。
   - 新增 `config/overlaylex-i18n.config.json`：补充流程脚本默认配置（包目录、临时目录、Paratranz 基础地址/项目ID/路径前缀、合并策略与导入策略）。
   - 更新 `src/userscript/overlaylex.collector.user.js`：采集导出格式从“按域名文本串”改为“按域名分组 JSON 对象”（`{ host: [texts...] }`），并同步复制成功提示文案与脚本版本到 `0.1.1`。
