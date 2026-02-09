@@ -112,8 +112,11 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 # 1) 把采集 JSON 合并到本地包（新增词条译文默认空字符串）
 node src/tools/overlaylex-i18n-flow.mjs merge-collected --input tmp/collector.selected.json
 
-# 2) 导出为 ParaTranz 文件格式（每包一个 JSON 数组文件）
-node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
+# 2) 本地主动把“当前改动包”推送到 ParaTranz（推荐）
+# 说明：可以直接 push，不需要先执行 to-paratranz。
+# 原因：push-paratranz 命令内部会自动把本地包转换为 ParaTranz 数组并上传。
+# 先决条件：先设置 PARATRANZ_TOKEN（例如 PowerShell：$env:PARATRANZ_TOKEN="你的Token"）
+node src/tools/overlaylex-i18n-flow.mjs push-paratranz --changed-only --base-ref origin/main --project-id 17950
 
 # 3) 一步拉取 ParaTranz 并回写到本地包（推荐，直接可复制）
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --project-id 17950
@@ -126,10 +129,8 @@ node src/tools/overlaylex-i18n-flow.mjs from-paratranz --project-id 17950
 node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id 17950 --out-dir .tmp/paratranz
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratranz
 
-# 4) 本地主动把“当前改动包”推送到 ParaTranz（可选）
-# 说明：可以直接 push，不需要先执行 to-paratranz。
-# 原因：push-paratranz 命令内部会自动把本地包转换为 ParaTranz 数组并上传。
-node src/tools/overlaylex-i18n-flow.mjs push-paratranz --changed-only --base-ref origin/main --project-id 17950
+# 4) 可选：仅导出 ParaTranz 数组文件到本地目录（用于人工检查中间产物，不上传）
+node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
 
 # 5) 校验 main 分支本地译文改动策略（CI 同款）
 node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-ref origin/main
