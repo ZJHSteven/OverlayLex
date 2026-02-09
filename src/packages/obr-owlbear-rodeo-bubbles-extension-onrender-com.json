@@ -63,6 +63,7 @@
     "Temporary Hit Points": "",
     "The tokens you most recently selected on the map will be visible here.": "",
     "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": "",
-    "Token": ""
+    "Token": "",
+    "Token list is GM only.": ""
   }
 }
