@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-09
+  - 更新 `README.md`：在 i18n 命令示例中补充本地主动推送 ParaTranz 的可复制命令 `push-paratranz --changed-only --base-ref origin/main --project-id 17950`，并明确该命令可直接推送（无需先执行 `to-paratranz`，脚本会在命令内部自动转换上传格式）。
   - 更新 `src/userscript/overlaylex.collector.user.js`：修复按钮类 `input[value]` 未被采集的问题；新增仅针对 `input[type=button|submit|reset]` 的 `value` 采集逻辑，并将采集观察器 `attributeFilter` 扩展为 `["placeholder","title","value","src"]`，避免漏采动态按钮文案。
   - 更新 `src/userscript/overlaylex.user.js`：修复按钮类 `input[value]` 未被翻译的问题；新增仅针对 `input[type=button|submit|reset]` 的 `value` 翻译逻辑，同时把主文档与同源 iframe 的观察器 `attributeFilter` 扩展为 `["placeholder","title","value"]`。
 - 2026-02-08

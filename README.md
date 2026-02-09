@@ -126,7 +126,12 @@ node src/tools/overlaylex-i18n-flow.mjs from-paratranz --project-id 17950
 node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id 17950 --out-dir .tmp/paratranz
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratranz
 
-# 4) 校验 main 分支本地译文改动策略（CI 同款）
+# 4) 本地主动把“当前改动包”推送到 ParaTranz（可选）
+# 说明：可以直接 push，不需要先执行 to-paratranz。
+# 原因：push-paratranz 命令内部会自动把本地包转换为 ParaTranz 数组并上传。
+node src/tools/overlaylex-i18n-flow.mjs push-paratranz --changed-only --base-ref origin/main --project-id 17950
+
+# 5) 校验 main 分支本地译文改动策略（CI 同款）
 node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-ref origin/main
 ```
 
