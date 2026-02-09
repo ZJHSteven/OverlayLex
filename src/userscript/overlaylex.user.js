@@ -467,6 +467,20 @@
     return true;
   }
 
+  /**
+   * 判断元素是否为“可翻译 value”的按钮类 input。
+   * 说明：
+   * - 仅允许 button/submit/reset 三类；
+   * - 明确排除 text/password 等输入框，避免把用户输入误当成固定 UI 文案覆盖。
+   */
+  function isTranslatableInputValueElement(element) {
+    if (!element || element.tagName !== "INPUT") {
+      return false;
+    }
+    const typeRaw = String(element.getAttribute?.("type") || element.type || "text").toLowerCase();
+    return typeRaw === "button" || typeRaw === "submit" || typeRaw === "reset";
+  }
+
   function applyTranslationToElementAttributes(element) {
     let changed = false;
     const attributesToTranslate = ["placeholder", "title"];
@@ -481,6 +495,23 @@
       }
       element.setAttribute(attrName, translated);
       changed = true;
+    }
+
+    // 额外处理按钮类 input 的 value 文案（例如 input[type=button] 的按钮文字）。
+    if (isTranslatableInputValueElement(element)) {
+      const originalValue = String(element.getAttribute?.("value") || element.value || "");
+      if (originalValue) {
+        const translatedValue = translateByMap(originalValue);
+        if (translatedValue && translatedValue !== originalValue) {
+          // 若原始 DOM 存在 value 属性，同步回属性，保证后续序列化/框架读取一致。
+          if (element.getAttribute("value") !== null) {
+            element.setAttribute("value", translatedValue);
+          }
+          // 同步回属性值属性（property），保证页面上即时显示为译文。
+          element.value = translatedValue;
+          changed = true;
+        }
+      }
     }
     return changed;
   }
@@ -604,7 +635,7 @@
           subtree: true,
           characterData: true,
           attributes: true,
-          attributeFilter: ["placeholder", "title"],
+          attributeFilter: ["placeholder", "title", "value"],
         });
         state.iframeObserverMap.set(iframeElement, frameObserver);
       } catch (error) {
@@ -691,7 +722,7 @@
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ["placeholder", "title"],
+      attributeFilter: ["placeholder", "title", "value"],
     });
     state.observer = observer;
   }

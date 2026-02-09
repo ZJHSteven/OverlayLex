@@ -193,6 +193,48 @@
     return true;
   }
 
+  /**
+   * 判断一个元素是否属于“可采集 value 文本”的按钮类 input。
+   * 输入：
+   * - element: 任意 DOM 元素
+   * 输出：
+   * - true: 属于 input[type=button|submit|reset]，其 value 通常是静态 UI 文案，适合采集
+   * - false: 其他元素或输入型控件（text/password 等），避免把用户输入误采集进词条
+   */
+  function isCollectableInputValueElement(element) {
+    if (!element || element.tagName !== "INPUT") {
+      return false;
+    }
+    const typeRaw = String(element.getAttribute?.("type") || element.type || "text").toLowerCase();
+    return typeRaw === "button" || typeRaw === "submit" || typeRaw === "reset";
+  }
+
+  /**
+   * 采集单个元素上“非文本节点”的可翻译属性。
+   * 说明：
+   * - placeholder/title 是原有覆盖范围；
+   * - input[value] 仅限按钮类，避免把用户输入内容作为词条污染词库。
+   */
+  function collectFromElementAttributes(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+    const placeholder = element.getAttribute?.("placeholder");
+    if (placeholder) {
+      collectTextCandidate(placeholder, "placeholder");
+    }
+    const title = element.getAttribute?.("title");
+    if (title) {
+      collectTextCandidate(title, "title");
+    }
+    if (isCollectableInputValueElement(element)) {
+      const valueText = String(element.getAttribute?.("value") || element.value || "");
+      if (valueText) {
+        collectTextCandidate(valueText, "input-value");
+      }
+    }
+  }
+
   // ------------------------------
   // 跨 frame 汇聚（frame -> top）
   // ------------------------------
@@ -355,14 +397,7 @@
 
     if (rootNode.nodeType === NodeConst.ELEMENT_NODE) {
       const element = rootNode;
-      const placeholder = element.getAttribute?.("placeholder");
-      if (placeholder) {
-        collectTextCandidate(placeholder, "placeholder");
-      }
-      const title = element.getAttribute?.("title");
-      if (title) {
-        collectTextCandidate(title, "title");
-      }
+      collectFromElementAttributes(element);
       if (element.tagName === "IFRAME") {
         collectIframeHostFromElement(element);
       }
@@ -391,14 +426,7 @@
           current = walker.nextNode();
           continue;
         }
-        const placeholder = current.getAttribute?.("placeholder");
-        if (placeholder) {
-          collectTextCandidate(placeholder, "placeholder");
-        }
-        const title = current.getAttribute?.("title");
-        if (title) {
-          collectTextCandidate(title, "title");
-        }
+        collectFromElementAttributes(current);
         if (current.tagName === "IFRAME") {
           collectIframeHostFromElement(current);
         }
@@ -453,7 +481,7 @@
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ["placeholder", "title", "src"],
+      attributeFilter: ["placeholder", "title", "value", "src"],
     });
   }
 

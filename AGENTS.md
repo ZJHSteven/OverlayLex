@@ -8,6 +8,9 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-02-09
+  - 更新 `src/userscript/overlaylex.collector.user.js`：修复按钮类 `input[value]` 未被采集的问题；新增仅针对 `input[type=button|submit|reset]` 的 `value` 采集逻辑，并将采集观察器 `attributeFilter` 扩展为 `["placeholder","title","value","src"]`，避免漏采动态按钮文案。
+  - 更新 `src/userscript/overlaylex.user.js`：修复按钮类 `input[value]` 未被翻译的问题；新增仅针对 `input[type=button|submit|reset]` 的 `value` 翻译逻辑，同时把主文档与同源 iframe 的观察器 `attributeFilter` 扩展为 `["placeholder","title","value"]`。
 - 2026-02-08
   - 更新 `.github/workflows/release-publish.yml`：新增“变更包收集”步骤；当本次 push 无 `src/packages/*.json` 变化时，发布链路自动 no-op（跳过漂移检查/校验/R2 同步/Worker 部署）；并将 ParaTranz 漂移门禁从“全仓比较”改为“仅比较本次变更包”。
   - 更新 `README.md`：同步 release 工作流新规则，明确“无包改动自动跳过发布”与“漂移检查仅针对本次变更包”。
