@@ -5,15 +5,15 @@
     "host": "dddice.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "translations": {
-    "Connecting": "",
-    "Continue as guest": "",
-    "dddice": "",
-    "dddice.com/activate": "",
-    "Go to": "",
-    "or": "",
-    "Owlbear Rodeo": "",
-    "Then enter this code": ""
+    "Connecting": "正在连接",
+    "Continue as guest": "继续以访客身份使用",
+    "dddice": "dddice",
+    "dddice.com/activate": "dddice.com/activate",
+    "Go to": "前往",
+    "or": "或者",
+    "Owlbear Rodeo": "枭熊",
+    "Then enter this code": "然后输入此代码"
   }
 }
