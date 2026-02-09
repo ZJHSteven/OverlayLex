@@ -39,9 +39,41 @@ export const PACKAGE_CATALOG = {
     "id": "obr-clash-battle-system-com",
     "name": "Clash 插件中文包（clash.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "enabledByDefault": true,
     "description": "Clash 插件翻译包（自动采集生成）"
+  },
+  "obr-dddice-com": {
+    "id": "obr-dddice-com",
+    "name": "OBR 自动翻译包 - dddice.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - dddice.com（自动同步）"
+  },
+  "obr-dynamic-fog-owlbear-rodeo": {
+    "id": "obr-dynamic-fog-owlbear-rodeo",
+    "name": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo（自动同步）"
+  },
+  "obr-movement-tracker-abarbre-com": {
+    "id": "obr-movement-tracker-abarbre-com",
+    "name": "OBR 自动翻译包 - movement-tracker.abarbre.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - movement-tracker.abarbre.com（自动同步）"
+  },
+  "obr-music-player-adrf-onrender-com": {
+    "id": "obr-music-player-adrf-onrender-com",
+    "name": "OBR 自动翻译包 - music-player-adrf.onrender.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - music-player-adrf.onrender.com（自动同步）"
   },
   "obr-outliner-owlbear-rodeo": {
     "id": "obr-outliner-owlbear-rodeo",
@@ -63,7 +95,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-smoke-battle-system-com",
     "name": "Smoke 插件中文包（smoke.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "enabledByDefault": true,
     "description": "Smoke & Spectre 插件翻译包（自动采集生成）"
   },
@@ -79,7 +111,7 @@ export const PACKAGE_CATALOG = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "enabledByDefault": true,
     "description": "控制脚本允许在哪些域名继续执行"
   }
@@ -131,7 +163,7 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "rules": [
       {
         "type": "exact",
@@ -183,6 +215,18 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
         "value": "bubbles-for-owlbear-rodeo.pages.dev",
         "comment": "自动同步包域名",
         "source": "obr-bubbles-for-owlbear-rodeo-pages-dev"
+      },
+      {
+        "type": "exact",
+        "value": "movement-tracker.abarbre.com",
+        "comment": "自动同步包域名",
+        "source": "obr-movement-tracker-abarbre-com"
+      },
+      {
+        "type": "exact",
+        "value": "music-player-adrf.onrender.com",
+        "comment": "自动同步包域名",
+        "source": "obr-music-player-adrf-onrender-com"
       }
     ]
   }
