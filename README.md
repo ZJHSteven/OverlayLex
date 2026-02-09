@@ -112,11 +112,14 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 # 1) 把采集 JSON 合并到本地包（新增词条译文默认空字符串）
 node src/tools/overlaylex-i18n-flow.mjs merge-collected --input tmp/collector.selected.json
 
-# 2) 本地主动把“当前改动包”推送到 ParaTranz（推荐）
-# 说明：可以直接 push，不需要先执行 to-paratranz。
-# 原因：push-paratranz 命令内部会自动把本地包转换为 ParaTranz 数组并上传。
+# 2) 先把“要上传到 ParaTranz 的包”放入暂存区（你自己决定上传范围）
+git add src/packages/obr-theatre-battle-system-com.json src/packages/obr-smoke-battle-system-com.json
+
+# 2.1) 按暂存区一键：自动 commit + 推送到 ParaTranz（推荐）
+# 说明：不再依赖 --changed-only/--base-ref；只处理你暂存的翻译包。
 # 先决条件：先设置 PARATRANZ_TOKEN（例如 PowerShell：$env:PARATRANZ_TOKEN="你的Token"）
-node src/tools/overlaylex-i18n-flow.mjs push-paratranz --changed-only --base-ref origin/main --project-id 17950
+# 自动 commit message 示例：chore(i18n): submit en theatre,smoke
+node src/tools/overlaylex-i18n-flow.mjs push-paratranz --staged-only --commit-staged --project-id 17950
 
 # 3) 一步拉取 ParaTranz 并回写到本地包（推荐，直接可复制）
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --project-id 17950
@@ -135,6 +138,9 @@ node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
 # 5) 校验 main 分支本地译文改动策略（CI 同款）
 node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-ref origin/main
 ```
+
+进阶说明（仅 CI/自动化常用）：
+- `push-paratranz --changed-only --base-ref <ref>`：按提交历史计算变更包；适合流水线，不适合“本地未提交就想精准上传”的交互场景。
 
 ### 采集临时文件格式
 
