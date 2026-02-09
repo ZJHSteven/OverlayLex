@@ -341,6 +341,54 @@ function getCurrentBranch() {
   return runGitText(["rev-parse", "--abbrev-ref", "HEAD"]);
 }
 
+function getUnmergedFiles() {
+  const output = runGitText(["diff", "--name-only", "--diff-filter=U"]);
+  if (!output) {
+    return [];
+  }
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function isCherryPickInProgress() {
+  const result = tryRunGitText(["rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD"]);
+  return result.ok;
+}
+
+function tryAutoResolveCherryPickConflictsForPackages() {
+  const unmergedFiles = getUnmergedFiles();
+  if (unmergedFiles.length === 0) {
+    return {
+      resolved: false,
+      packageConflicts: [],
+      blockedConflicts: [],
+    };
+  }
+
+  const packageConflicts = unmergedFiles.filter((filePath) => isPackagePath(filePath));
+  const blockedConflicts = unmergedFiles.filter((filePath) => !isPackagePath(filePath));
+  if (blockedConflicts.length > 0 || packageConflicts.length === 0) {
+    return {
+      resolved: false,
+      packageConflicts,
+      blockedConflicts,
+    };
+  }
+
+  // 对“仅包文件冲突”场景采用 cherry-pick 的 theirs（即 main 提交版本），
+  // 这与当前发布策略一致：发布提交内容以 main 刚产生的发布提交为准。
+  runGit(["checkout", "--theirs", ...packageConflicts], { stdio: "inherit" });
+  runGit(["add", ...packageConflicts], { stdio: "inherit" });
+
+  return {
+    resolved: true,
+    packageConflicts,
+    blockedConflicts: [],
+  };
+}
+
 function ensureCleanForPrepare(stagedFiles) {
   if (stagedFiles.length === 0) {
     throw new Error("暂存区为空。请先在 UI 或命令行中暂存要发布的包文件。");
@@ -992,7 +1040,28 @@ async function commandPrepareFromStaged(options) {
 
   try {
     ensureReleaseBranchAndSwitch();
-    runGit(["cherry-pick", commitHash], { stdio: "inherit" });
+    try {
+      runGit(["cherry-pick", commitHash], { stdio: "inherit" });
+    } catch (cherryPickError) {
+      const resolveResult = tryAutoResolveCherryPickConflictsForPackages();
+      if (!resolveResult.resolved) {
+        if (resolveResult.blockedConflicts.length > 0) {
+          logError("release 分支存在非包文件冲突，已停止自动处理，请手动解决后执行 git cherry-pick --continue。");
+          for (const filePath of resolveResult.blockedConflicts) {
+            logError("  - 冲突文件：", filePath);
+          }
+        } else {
+          logError("cherry-pick 失败且未检测到可自动解决的包冲突，请手动处理。");
+        }
+        throw cherryPickError;
+      }
+
+      logWarn("检测到仅包文件冲突，已自动采用 main 提交版本并继续 cherry-pick。");
+      for (const filePath of resolveResult.packageConflicts) {
+        logInfo("  - 自动解决：", filePath);
+      }
+      runGit(["cherry-pick", "--continue"], { stdio: "inherit" });
+    }
 
     const remoteRelease = tryRunGitText(["show-ref", "--verify", "--quiet", "refs/remotes/origin/release"]);
     if (remoteRelease.ok) {
@@ -1001,7 +1070,15 @@ async function commandPrepareFromStaged(options) {
       runGit(["push", "-u", "origin", "release"], { stdio: "inherit" });
     }
   } finally {
-    runGit(["switch", "main"], { stdio: "inherit" });
+    if (isCherryPickInProgress()) {
+      logWarn("检测到 cherry-pick 仍在进行，已保留当前分支，避免覆盖现场。请先手动完成或中止 cherry-pick。");
+      return;
+    }
+
+    const switchResult = runGit(["switch", "main"], { allowFailure: true, stdio: "inherit" });
+    if (switchResult.error || switchResult.status !== 0) {
+      logWarn("自动切回 main 失败，请手动执行 git switch main。");
+    }
   }
 
   logInfo("发布链路完成：main 已提交并推送，release 已 cherry-pick 并推送。");

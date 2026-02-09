@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-09
+  - 更新 `src/tools/release-from-staged.mjs`：新增 `cherry-pick` 冲突自动兜底；当冲突仅出现在 `src/packages/*.json` 时，脚本自动执行 `git checkout --theirs` + `git add` + `git cherry-pick --continue`，默认以 `main` 刚生成的发布提交为准；若出现非包文件冲突则停止自动处理并保留现场，提示人工处理后继续。
+  - 更新 `src/tools/release-from-staged.mjs`：优化收尾逻辑；若检测到 `CHERRY_PICK_HEAD` 仍存在，不再强制 `git switch main` 覆盖原始错误，而是输出明确提示，避免“切分支失败”掩盖真正冲突原因。
+  - 更新 `README.md`：在“本地一键发布（按暂存区驱动）”补充冲突策略说明，明确“包文件冲突自动按 main 版本解决、非包文件冲突人工处理”的行为与后续操作。
   - 更新 `src/tools/overlaylex-i18n-flow.mjs`：`push-paratranz` 新增“按暂存区驱动”能力，支持 `--staged-only`（仅同步暂存区翻译包）、`--commit-staged`（推送前自动本地提交）与 `--commit-message`（自定义提交信息）；同时保留 `--changed-only` 兼容 CI 历史用法，并新增参数冲突校验与清晰报错。
   - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 i18n 自动提交信息生成规则（示例：`chore(i18n): submit en theatre,smoke`），提交前短名由包 ID 自动提取，避免与 release 提交流混淆。
   - 更新 `README.md`：i18n 主流程改为“先 `git add` 选包，再执行 `push-paratranz --staged-only --commit-staged`”，并补充 `PARATRANZ_TOKEN` 先决条件、自动提交信息示例，以及 `--changed-only --base-ref` 仅作为 CI/自动化进阶用法说明。
