@@ -39,7 +39,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-clash-battle-system-com",
     "name": "Clash 插件中文包（clash.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.5",
+    "version": "0.1.6",
     "enabledByDefault": true,
     "description": "Clash 插件翻译包（自动采集生成）"
   },
@@ -58,6 +58,14 @@ export const PACKAGE_CATALOG = {
     "version": "0.1.1",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo（自动同步）"
+  },
+  "obr-marked-battle-system-com": {
+    "id": "obr-marked-battle-system-com",
+    "name": "OBR 自动翻译包 - marked.battle-system.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - marked.battle-system.com（自动同步）"
   },
   "obr-movement-tracker-abarbre-com": {
     "id": "obr-movement-tracker-abarbre-com",
