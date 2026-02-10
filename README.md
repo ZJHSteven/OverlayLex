@@ -242,6 +242,7 @@ node src/tools/release-from-staged.mjs prepare-from-staged
 - 发布上传是“整文件覆盖”，但文件集合只取本次 Git 改动包，不会全量重传全部包。
 - 发布包选择权在你手里：脚本只会把“你暂存的翻译包”加入发布目录（`PACKAGE_CATALOG`），不会按译文内容自动替你筛选。
 - 工作区可以不干净：脚本不会强制你清空其他改动；提交时只会包含“你原始暂存的包 + 自动维护的 `overlaylex-domain-allowlist.json` + `src/worker/src/data.js`”。
+- 默认自动 `stash`：在 `main push` 后、切换到 `release` 前，脚本会自动暂存当前未暂存/未跟踪改动，并在发布流程结束后自动恢复，减少“切分支失败（本地有开发中改动）”中断；如需关闭可传 `--no-auto-stash`。
 - 若脚本提示“检测到 cherry-pick 仍在进行”，说明遇到了非包文件冲突并保留了现场；请按提示手动解决后执行 `git cherry-pick --continue`（或 `--abort`）。
 
 ## CI Secrets 配置

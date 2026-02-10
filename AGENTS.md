@@ -8,6 +8,10 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-02-10
+  - 更新 `src/tools/release-from-staged.mjs`：新增发布阶段自动 `stash`/自动恢复机制（默认开启）；在 `main push` 成功后、切换 `release` 前自动暂存未暂存/未跟踪改动，发布流程收尾时自动恢复，降低“工作区有开发中改动导致 `git switch release` 失败”的中断概率。
+  - 更新 `src/tools/release-from-staged.mjs`：新增 `--auto-stash` 与 `--no-auto-stash` 参数，并在帮助信息中补充说明；当 `cherry-pick` 冲突未结束或切回 `main` 失败时，脚本不强行恢复暂存，改为保留现场并输出手动恢复命令，避免二次污染冲突上下文。
+  - 更新 `README.md`：在“本地一键发布（按暂存区驱动）”补充自动 `stash` 行为说明与 `--no-auto-stash` 开关用法。
 - 2026-02-09
   - 更新 `src/tools/release-from-staged.mjs`：新增 `cherry-pick` 冲突自动兜底；当冲突仅出现在 `src/packages/*.json` 时，脚本自动执行 `git checkout --theirs` + `git add` + `git cherry-pick --continue`，默认以 `main` 刚生成的发布提交为准；若出现非包文件冲突则停止自动处理并保留现场，提示人工处理后继续。
   - 更新 `src/tools/release-from-staged.mjs`：优化收尾逻辑；若检测到 `CHERRY_PICK_HEAD` 仍存在，不再强制 `git switch main` 覆盖原始错误，而是输出明确提示，避免“切分支失败”掩盖真正冲突原因。

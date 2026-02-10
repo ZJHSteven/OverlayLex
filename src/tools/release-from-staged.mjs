@@ -35,6 +35,7 @@ const DOMAIN_ALLOWLIST_PATH = path.resolve(PACKAGES_DIR, "overlaylex-domain-allo
 const DEFAULT_API_URL = "https://overlaylex-demo-api.zhangjiahe0830.workers.dev";
 const AUTO_RULE_COMMENT = "自动同步包域名";
 const ALLOWED_AUTO_STAGE_FILES = new Set(["src/worker/src/data.js"]);
+const AUTO_STASH_MESSAGE_PREFIX = "release-flow:auto-stash";
 
 function logInfo(message, extra = "") {
   if (extra) {
@@ -74,6 +75,8 @@ function printHelp() {
   --base-ref <ref>       CI 校验基线（verify-release 必填）
   --api-url <url>        线上 API 地址（默认 ${DEFAULT_API_URL}）
   --yes                  跳过两次交互确认（仅建议在自动化场景使用）
+  --auto-stash           发布阶段切分支前自动 stash 当前工作区并在结束后恢复（默认开启）
+  --no-auto-stash        关闭自动 stash（遇到脏工作区切分支冲突时需手工处理）
 `);
 }
 
@@ -97,6 +100,36 @@ function parseArgs(argv) {
     i += 1;
   }
   return { command, options };
+}
+
+/**
+ * 解析“布尔开关”参数，兼容下列写法：
+ * - --flag
+ * - --flag true/false
+ * - --no-flag
+ * 若传入值非法，则回退 defaultValue，避免参数拼写错误直接中断发布流程。
+ */
+function parseBooleanOption(rawValue, defaultValue) {
+  if (rawValue === undefined) {
+    return defaultValue;
+  }
+  if (rawValue === true) {
+    return true;
+  }
+  if (rawValue === false) {
+    return false;
+  }
+  const text = String(rawValue || "").trim().toLowerCase();
+  if (!text) {
+    return defaultValue;
+  }
+  if (["1", "true", "yes", "y", "on"].includes(text)) {
+    return true;
+  }
+  if (["0", "false", "no", "n", "off"].includes(text)) {
+    return false;
+  }
+  return defaultValue;
 }
 
 function runGit(args, { allowFailure = false, stdio = "pipe" } = {}) {
@@ -355,6 +388,82 @@ function getUnmergedFiles() {
 function isCherryPickInProgress() {
   const result = tryRunGitText(["rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD"]);
   return result.ok;
+}
+
+/**
+ * 读取 refs/stash 的提交哈希（若不存在则返回空串）。
+ * 用提交哈希而非 stash@{0} 可以避免“流程中用户又手动 stash”导致索引漂移。
+ */
+function getStashHeadHash() {
+  const result = tryRunGitText(["rev-parse", "-q", "--verify", "refs/stash"]);
+  if (!result.ok) {
+    return "";
+  }
+  return result.output;
+}
+
+function hasLocalWorktreeChanges() {
+  const unstaged = getUnstagedFiles();
+  if (unstaged.length > 0) {
+    return true;
+  }
+  const untracked = getUntrackedFiles();
+  return untracked.length > 0;
+}
+
+/**
+ * 自动暂存当前工作区（未暂存 + 未跟踪文件）。
+ * 设计目标：
+ * - 仅用于“切到 release 前”做隔离，避免发布流程误伤当前开发中的未提交改动；
+ * - 若工作区本来干净，直接返回 null，不做多余动作。
+ */
+function createAutoStashSnapshot() {
+  if (!hasLocalWorktreeChanges()) {
+    return null;
+  }
+
+  const beforeHash = getStashHeadHash();
+  const message = `${AUTO_STASH_MESSAGE_PREFIX}:${new Date().toISOString()}`;
+  runGit(["stash", "push", "--include-untracked", "-m", message], { stdio: "inherit" });
+  const afterHash = getStashHeadHash();
+  if (!afterHash || afterHash === beforeHash) {
+    return null;
+  }
+
+  logInfo("已自动暂存当前工作区改动：", `${afterHash.slice(0, 8)} (${message})`);
+  return {
+    hash: afterHash,
+    message,
+  };
+}
+
+/**
+ * 尝试恢复自动暂存的改动。
+ * 恢复策略：
+ * 1) 先 apply 指定 hash，确保恢复目标稳定；
+ * 2) apply 成功后再 drop；
+ * 3) apply 失败时保留 stash，不做 drop，避免数据丢失。
+ */
+function restoreAutoStashSnapshot(stashSnapshot) {
+  if (!stashSnapshot?.hash) {
+    return;
+  }
+
+  logInfo("正在自动恢复发布前暂存的工作区改动。");
+  const applyResult = runGit(["stash", "apply", stashSnapshot.hash], { allowFailure: true, stdio: "inherit" });
+  if (applyResult.error || applyResult.status !== 0) {
+    logWarn("自动恢复失败，已保留 stash。请手动执行：");
+    logWarn(`  git stash apply ${stashSnapshot.hash}`);
+    return;
+  }
+
+  const dropResult = runGit(["stash", "drop", stashSnapshot.hash], { allowFailure: true, stdio: "inherit" });
+  if (dropResult.error || dropResult.status !== 0) {
+    logWarn("改动已恢复，但自动清理 stash 失败；可稍后手动 drop。");
+    return;
+  }
+
+  logInfo("自动恢复完成。");
 }
 
 function tryAutoResolveCherryPickConflictsForPackages() {
@@ -950,6 +1059,7 @@ function buildReleaseCommitMessage(changedPackageIds) {
 
 async function commandPrepareFromStaged(options) {
   const autoYes = Boolean(options.yes);
+  const autoStashEnabled = options["no-auto-stash"] ? false : parseBooleanOption(options["auto-stash"], true);
   const currentBranch = getCurrentBranch();
   if (currentBranch !== "main") {
     throw new Error(`请在 main 分支执行该命令，当前分支：${currentBranch}`);
@@ -1038,6 +1148,11 @@ async function commandPrepareFromStaged(options) {
 
   runGit(["push", "origin", "main"], { stdio: "inherit" });
 
+  let autoStashSnapshot = null;
+  if (autoStashEnabled) {
+    autoStashSnapshot = createAutoStashSnapshot();
+  }
+
   try {
     ensureReleaseBranchAndSwitch();
     try {
@@ -1072,12 +1187,25 @@ async function commandPrepareFromStaged(options) {
   } finally {
     if (isCherryPickInProgress()) {
       logWarn("检测到 cherry-pick 仍在进行，已保留当前分支，避免覆盖现场。请先手动完成或中止 cherry-pick。");
+      if (autoStashSnapshot) {
+        logWarn("由于 cherry-pick 未结束，自动 stash 暂不恢复，避免把临时改动混入冲突现场。");
+        logWarn(`可在冲突处理完成后手动恢复：git stash apply ${autoStashSnapshot.hash}`);
+      }
       return;
     }
 
     const switchResult = runGit(["switch", "main"], { allowFailure: true, stdio: "inherit" });
     if (switchResult.error || switchResult.status !== 0) {
       logWarn("自动切回 main 失败，请手动执行 git switch main。");
+      if (autoStashSnapshot) {
+        logWarn("当前分支未切回 main，自动 stash 暂不恢复，避免污染 release 分支现场。");
+        logWarn(`可切回 main 后手动恢复：git stash apply ${autoStashSnapshot.hash}`);
+      }
+      return;
+    }
+
+    if (autoStashSnapshot) {
+      restoreAutoStashSnapshot(autoStashSnapshot);
     }
   }
 
