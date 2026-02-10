@@ -402,6 +402,36 @@ function getStashHeadHash() {
   return result.output;
 }
 
+/**
+ * 通过 stash 提交哈希反查当前 reflog 引用（如 stash@{0}）。
+ * 说明：
+ * - `git stash drop` 不接受裸哈希，只接受 reflog 引用；
+ * - 这里按哈希匹配，避免 “stash@{0}” 因新建 stash 漂移到别的条目。
+ */
+function findStashRefByHash(targetHash) {
+  const normalizedTarget = String(targetHash || "").trim().toLowerCase();
+  if (!normalizedTarget) {
+    return "";
+  }
+  const output = runGitText(["stash", "list", "--format=%gd %H"]);
+  if (!output) {
+    return "";
+  }
+  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const matched = line.match(/^(stash@\{\d+\})\s+([0-9a-f]{40})$/i);
+    if (!matched) {
+      continue;
+    }
+    const ref = matched[1];
+    const hash = matched[2].toLowerCase();
+    if (hash === normalizedTarget) {
+      return ref;
+    }
+  }
+  return "";
+}
+
 function hasLocalWorktreeChanges() {
   const unstaged = getUnstagedFiles();
   if (unstaged.length > 0) {
@@ -457,7 +487,13 @@ function restoreAutoStashSnapshot(stashSnapshot) {
     return;
   }
 
-  const dropResult = runGit(["stash", "drop", stashSnapshot.hash], { allowFailure: true, stdio: "inherit" });
+  const stashRef = findStashRefByHash(stashSnapshot.hash);
+  if (!stashRef) {
+    logWarn("改动已恢复，但未找到对应 stash 引用，未自动清理。");
+    return;
+  }
+
+  const dropResult = runGit(["stash", "drop", stashRef], { allowFailure: true, stdio: "inherit" });
   if (dropResult.error || dropResult.status !== 0) {
     logWarn("改动已恢复，但自动清理 stash 失败；可稍后手动 drop。");
     return;
