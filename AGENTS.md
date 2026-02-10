@@ -9,6 +9,7 @@
 
 ## 变更日志
 - 2026-02-10
+  - 更新 `src/packages/obr-smoke-battle-system-com.json`：修复关键词条翻译（`Double-Side Walls`、`Smoke`、`This will change ALL walls...`），并通过 `release-from-staged` 重新发布；版本由 `0.1.5` 递增至 `0.1.6`，提交 `main/release`。
   - 更新 `src/tools/release-from-staged.mjs`：新增发布阶段自动 `stash`/自动恢复机制（默认开启）；在 `main push` 成功后、切换 `release` 前自动暂存未暂存/未跟踪改动，发布流程收尾时自动恢复，降低“工作区有开发中改动导致 `git switch release` 失败”的中断概率。
   - 更新 `src/tools/release-from-staged.mjs`：新增 `--auto-stash` 与 `--no-auto-stash` 参数，并在帮助信息中补充说明；当 `cherry-pick` 冲突未结束或切回 `main` 失败时，脚本不强行恢复暂存，改为保留现场并输出手动恢复命令，避免二次污染冲突上下文。
   - 更新 `src/tools/release-from-staged.mjs`：修复自动恢复收尾时的 `stash drop` 目标引用问题；由“直接传哈希”改为“先按哈希反查 `stash@{n}` 再 drop”，避免“已恢复但误报清理失败”。
