@@ -103,7 +103,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-smoke-battle-system-com",
     "name": "Smoke 插件中文包（smoke.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "enabledByDefault": true,
     "description": "Smoke & Spectre 插件翻译包（自动采集生成）"
   },
