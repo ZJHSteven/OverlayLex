@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-15
+  - 更新 `src/userscript/overlaylex.user.js`：将 allowlist 缓存从“仅 localStorage（按域隔离）”扩展为“GM 共享存储优先 + localStorage 兜底”，新增 `GM_getValue/GM_setValue` 元数据权限，实现跨域 iframe 场景共享同一份域名包缓存。
+  - 更新 `src/userscript/overlaylex.user.js`：新增共享缓存读写与启动迁移逻辑（共享缓存存在则回填本域；共享缓存不存在但本域有旧缓存时自动迁移到共享区），降低升级后冷启动割裂问题。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级到 `0.2.16`（`@version` 与 `SCRIPT_VERSION` 同步），用于触发油猴自动更新。
   - 回退 `src/userscript/overlaylex.user.js`：将 `LOCAL_DOMAIN_SEEDS` 恢复为最小主站种子（`owlbear.rodeo / www.owlbear.rodeo / .owlbear.rodeo / .owlbear.app`），不再把 seeds 扩展为完整 allowlist。
   - 重构 `src/userscript/overlaylex.user.js` 启动门禁：改为“本地 allowlist 缓存优先判定；仅在无缓存时使用 seed 兜底”，并且“是否运行”判定阶段不再发起网络请求。
   - 调整 `src/userscript/overlaylex.user.js` 更新时机：云端 manifest / domain allowlist 拉取统一放到脚本成功启动后（后台异步）执行，失败时继续沿用现有可视化报错提示。
