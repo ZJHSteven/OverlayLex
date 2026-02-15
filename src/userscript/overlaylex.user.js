@@ -1,14 +1,15 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.15
+// @version      0.2.16
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
 // @updateURL    https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.user.js
 // @downloadURL  https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.user.js
 // @run-at       document-end
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
 // ==/UserScript==
 
 /**
@@ -29,13 +30,14 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.15";
+  const SCRIPT_VERSION = "0.2.16";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
     USER_SWITCHES: "overlaylex:user-switches:v2",
     UI_STATE: "overlaylex:ui-state:v3",
     DOMAIN_PACKAGE_CACHE: "overlaylex:domain-package-cache:v1",
+    DOMAIN_PACKAGE_SHARED_CACHE: "overlaylex:domain-package-cache:shared:v1",
   };
   const CONFIG = {
     /**
@@ -300,12 +302,87 @@
     }
   }
 
+  /**
+   * 从脚本管理器共享存储读取值（跨域共享）。
+   * 输入：
+   * - key: 存储键
+   * - fallbackValue: 失败时回退值
+   * 输出：
+   * - 读取到的值或回退值
+   *
+   * 说明：
+   * - 这里使用 GM_getValue（同步 API），在 Tampermonkey/Violentmonkey 中可跨域复用。
+   * - 若当前环境只暴露异步 API（返回 Promise），这里会安全回退到 fallback，
+   *   不会把 Promise 当作真实缓存对象污染运行时状态。
+   */
+  function safeSharedStorageGet(key, fallbackValue) {
+    try {
+      if (typeof GM_getValue !== "function") {
+        return fallbackValue;
+      }
+      const value = GM_getValue(key, fallbackValue);
+      if (value && typeof value === "object" && typeof value.then === "function") {
+        Logger.warn(`GM_getValue 返回 Promise，当前流程回退到本地存储: ${key}`);
+        return fallbackValue;
+      }
+      return typeof value === "undefined" ? fallbackValue : value;
+    } catch (error) {
+      Logger.warn(`读取共享存储失败: ${key}`, error);
+      return fallbackValue;
+    }
+  }
+
+  /**
+   * 写入脚本管理器共享存储（跨域共享）。
+   * 输入：
+   * - key: 存储键
+   * - value: 要写入的值
+   * 输出：
+   * - 无
+   */
+  function safeSharedStorageSet(key, value) {
+    try {
+      if (typeof GM_setValue === "function") {
+        GM_setValue(key, value);
+      }
+    } catch (error) {
+      Logger.warn(`写入共享存储失败: ${key}`, error);
+    }
+  }
+
+  /**
+   * 初始化域名包缓存（共享缓存优先，本地缓存次之）。
+   * 输入：
+   * - 无
+   * 输出：
+   * - 域名包对象或 null
+   *
+   * 同步策略：
+   * 1) 若共享缓存存在：以共享缓存为准，并回填到当前域 localStorage（便于本域快速读取）。
+   * 2) 若共享缓存不存在但本地有缓存：把本地缓存迁移到共享缓存，打通跨域可见性。
+   */
+  function getInitialDomainPackageCache() {
+    const sharedCache = safeSharedStorageGet(STORAGE_KEYS.DOMAIN_PACKAGE_SHARED_CACHE, null);
+    if (sharedCache && typeof sharedCache === "object") {
+      safeLocalStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, sharedCache);
+      return sharedCache;
+    }
+
+    const localCache = safeLocalStorageGet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, null);
+    if (localCache && typeof localCache === "object") {
+      safeSharedStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_SHARED_CACHE, localCache);
+      return localCache;
+    }
+
+    return null;
+  }
+
   // ------------------------------
   // 运行时状态
   // ------------------------------
   const state = {
     manifest: null,
-    domainPackage: safeLocalStorageGet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, null),
+    domainPackage: getInitialDomainPackageCache(),
     packageCache: safeLocalStorageGet(STORAGE_KEYS.PACKAGE_CACHE, {}),
     userSwitches: safeLocalStorageGet(STORAGE_KEYS.USER_SWITCHES, {}),
     translationMap: new Map(),
@@ -385,6 +462,7 @@
   function setCachedDomainPackage(domainPackage) {
     state.domainPackage = domainPackage;
     safeLocalStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, domainPackage);
+    safeSharedStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_SHARED_CACHE, domainPackage);
   }
 
   function needsPackageUpdate(pkgMeta) {
