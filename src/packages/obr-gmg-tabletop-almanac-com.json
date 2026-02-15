@@ -5,7 +5,7 @@
     "host": "gmg.tabletop-almanac.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.2",
+  "version": "0.1.4",
   "translations": {
     ". Because all other themes will only be available for dddice Patreon Supports see": "",
     "(bigger than the current viewport is not possible)": "（不可能比当前窗口更大）",

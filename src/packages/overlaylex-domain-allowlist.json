@@ -2,7 +2,7 @@
   "id": "overlaylex-domain-allowlist",
   "name": "OverlayLex 域名准入包",
   "kind": "domain-allowlist",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "rules": [
     {
       "type": "exact",
