@@ -2,7 +2,7 @@
   "id": "overlaylex-domain-seeds",
   "name": "OverlayLex 本地种子域名",
   "kind": "domain-seeds",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "rules": [
     {
       "type": "exact",
@@ -23,6 +23,61 @@
       "type": "suffix",
       "value": ".owlbear.app",
       "comment": "OBR 生态域名"
+    },
+    {
+      "type": "suffix",
+      "value": ".battle-system.com",
+      "comment": "Battle-System 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "dddice.com",
+      "comment": "DDDice 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "aoe.owlbear.davidsev.co.uk",
+      "comment": "AoE 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "owlbear-hp-tracker.pages.dev",
+      "comment": "HP Tracker 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "resident-uhlig.gitlab.io",
+      "comment": "resident-uhlig 插件域名"
+    },
+    {
+      "type": "exact",
+      "value": "bubbles-for-owlbear-rodeo.pages.dev",
+      "comment": "自动同步包域名",
+      "source": "obr-bubbles-for-owlbear-rodeo-pages-dev"
+    },
+    {
+      "type": "exact",
+      "value": "movement-tracker.abarbre.com",
+      "comment": "自动同步包域名",
+      "source": "obr-movement-tracker-abarbre-com"
+    },
+    {
+      "type": "exact",
+      "value": "music-player-adrf.onrender.com",
+      "comment": "自动同步包域名",
+      "source": "obr-music-player-adrf-onrender-com"
+    },
+    {
+      "type": "exact",
+      "value": "owlbear-rodeo-bubbles-extension.onrender.com",
+      "comment": "自动同步包域名",
+      "source": "obr-owlbear-rodeo-bubbles-extension-onrender-com"
+    },
+    {
+      "type": "exact",
+      "value": "www.dummysheet.com",
+      "comment": "自动同步包域名",
+      "source": "obr-www-dummysheet-com"
     }
   ],
   "note": "该文件用于仓库内维护种子规则；用户脚本内置同款规则用于毫秒级门禁，不依赖网络。"

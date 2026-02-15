@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.13
+// @version      0.2.14
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
@@ -29,7 +29,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.13";
+  const SCRIPT_VERSION = "0.2.14";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -63,7 +63,7 @@
   const LOCAL_DOMAIN_SEEDS = {
     id: "overlaylex-domain-seeds",
     kind: "domain-seeds",
-    version: "0.1.0",
+    version: "0.1.1",
     rules: [
       {
         type: "exact",
@@ -80,6 +80,46 @@
       {
         type: "suffix",
         value: ".owlbear.app",
+      },
+      {
+        type: "suffix",
+        value: ".battle-system.com",
+      },
+      {
+        type: "exact",
+        value: "dddice.com",
+      },
+      {
+        type: "exact",
+        value: "aoe.owlbear.davidsev.co.uk",
+      },
+      {
+        type: "exact",
+        value: "owlbear-hp-tracker.pages.dev",
+      },
+      {
+        type: "exact",
+        value: "resident-uhlig.gitlab.io",
+      },
+      {
+        type: "exact",
+        value: "bubbles-for-owlbear-rodeo.pages.dev",
+      },
+      {
+        type: "exact",
+        value: "movement-tracker.abarbre.com",
+      },
+      {
+        type: "exact",
+        value: "music-player-adrf.onrender.com",
+      },
+      {
+        type: "exact",
+        value: "owlbear-rodeo-bubbles-extension.onrender.com",
+      },
+      {
+        type: "exact",
+        value: "www.dummysheet.com",
       },
     ],
   };

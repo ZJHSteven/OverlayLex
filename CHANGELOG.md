@@ -9,6 +9,9 @@
 
 ## 变更日志
 - 2026-02-15
+  - 修复 `src/userscript/overlaylex.user.js`：本地 `LOCAL_DOMAIN_SEEDS` 规则过窄导致 iframe 插件页被提前门禁拦截的问题；将 seeds 扩展为覆盖 `battle-system.com`、`onrender.com`、`pages.dev`、`dummysheet` 等已收录插件域名，恢复 iframe 注入翻译。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级到 `0.2.14`（`@version` 与 `SCRIPT_VERSION` 同步），用于触发油猴自动更新。
+  - 更新 `src/packages/overlaylex-domain-seeds.json`：同步种子规则到 `0.1.1`，与脚本内置 seeds 保持一致，避免规则漂移。
   - 更新 `src/userscript/overlaylex.user.js`：将 `@version` 与 `SCRIPT_VERSION` 同步到 `0.2.13`，避免版本号不一致造成排查干扰。
   - 更新 `src/userscript/overlaylex.user.js`：新增内置 `LOCAL_DOMAIN_SEEDS`（与 `overlaylex-domain-seeds` 同源规则），启动时先做本地毫秒级门禁；不在 seeds 内的站点直接退出，不再进入后端拉取流程。
   - 更新 `src/userscript/overlaylex.user.js`：`ensureCurrentHostAllowed` 改为返回结构化结果（`allowed/from/remoteFailed/hasCache`），用于区分“正常拒绝”和“后端不可达且无缓存”的失败场景。
