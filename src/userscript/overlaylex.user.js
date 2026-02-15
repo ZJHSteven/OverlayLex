@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.12
+// @version      0.2.13
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
@@ -29,7 +29,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.11";
+  const SCRIPT_VERSION = "0.2.13";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -48,6 +48,49 @@
     domainPackagePath: "/domain-package.json",
     observerDebounceMs: 80,
   };
+  /**
+   * 本地内置域名 seeds（首层毫秒级门禁）。
+   *
+   * 设计目的：
+   * 1) 保证“首次访问”不依赖网络也能做快速放行/退出判断。
+   * 2) 只让疑似 OBR 生态页面进入后续网络流程，减少无关站点开销。
+   * 3) 该 seeds 仅用于“快速放行”，真正准入仍由云端 domain-allowlist 决定。
+   *
+   * 维护说明：
+   * - 这里与 `src/packages/overlaylex-domain-seeds.json` 保持同源规则。
+   * - 若后续新增 OBR 生态顶级域名，请同步两处。
+   */
+  const LOCAL_DOMAIN_SEEDS = {
+    id: "overlaylex-domain-seeds",
+    kind: "domain-seeds",
+    version: "0.1.0",
+    rules: [
+      {
+        type: "exact",
+        value: "owlbear.rodeo",
+      },
+      {
+        type: "exact",
+        value: "www.owlbear.rodeo",
+      },
+      {
+        type: "suffix",
+        value: ".owlbear.rodeo",
+      },
+      {
+        type: "suffix",
+        value: ".owlbear.app",
+      },
+    ],
+  };
+  /**
+   * 运行期提示层常量（用于网络失败可视化提醒）。
+   * 说明：
+   * - 仅在顶层窗口渲染，不在 iframe 内重复弹提示。
+   * - 样式与容器按需注入，避免无意义 DOM 常驻。
+   */
+  const RUNTIME_NOTICE_STYLE_ID = "overlaylex-runtime-notice-style";
+  const RUNTIME_NOTICE_CONTAINER_ID = "overlaylex-runtime-notice-container";
   /**
    * UI 可调参数（教学向）
    *
@@ -85,6 +128,147 @@
       console.error("[OverlayLex]", ...args);
     },
   };
+
+  /**
+   * 按需注入“运行期提示”样式。
+   * 输入：
+   * - 无
+   * 输出：
+   * - 无
+   * 核心逻辑：
+   * - 样式只注入一次，避免重复 DOM 污染。
+   * - 不依赖主面板是否已创建，可用于启动早期错误提示。
+   */
+  function ensureRuntimeNoticeStyle() {
+    if (!isTopWindow || !document.head) {
+      return;
+    }
+    if (document.getElementById(RUNTIME_NOTICE_STYLE_ID)) {
+      return;
+    }
+    const style = document.createElement("style");
+    style.id = RUNTIME_NOTICE_STYLE_ID;
+    style.textContent = `
+      #${RUNTIME_NOTICE_CONTAINER_ID} {
+        position: fixed;
+        top: 14px;
+        right: 14px;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .overlaylex-runtime-notice {
+        min-width: 260px;
+        max-width: 380px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        color: #f8fafc;
+        font-size: 12px;
+        line-height: 1.45;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.35);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        animation: overlaylexRuntimeNoticeIn 180ms ease-out;
+      }
+      .overlaylex-runtime-notice[data-level="warn"] {
+        background: linear-gradient(135deg, rgba(180, 83, 9, 0.9), rgba(146, 64, 14, 0.92));
+      }
+      .overlaylex-runtime-notice[data-level="error"] {
+        background: linear-gradient(135deg, rgba(153, 27, 27, 0.9), rgba(127, 29, 29, 0.92));
+      }
+      .overlaylex-runtime-notice-title {
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .overlaylex-runtime-notice-text {
+        opacity: 0.98;
+      }
+      @keyframes overlaylexRuntimeNoticeIn {
+        from {
+          transform: translateY(-6px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /**
+   * 获取或创建运行期提示容器。
+   * 输入：
+   * - 无
+   * 输出：
+   * - HTMLDivElement | null
+   */
+  function ensureRuntimeNoticeContainer() {
+    if (!isTopWindow || !document.body) {
+      return null;
+    }
+    let container = document.getElementById(RUNTIME_NOTICE_CONTAINER_ID);
+    if (container instanceof HTMLDivElement) {
+      return container;
+    }
+    container = document.createElement("div");
+    container.id = RUNTIME_NOTICE_CONTAINER_ID;
+    document.body.appendChild(container);
+    return container;
+  }
+
+  /**
+   * 显示运行期提示（小气泡）。
+   * 输入：
+   * - message: 提示正文
+   * - options.level: "warn" | "error"
+   * - options.durationMs: 自动消失时间（毫秒）
+   * 输出：
+   * - 无
+   * 说明：
+   * - 若 DOM 注入失败，回退到 `alert`，保证至少有一种可见错误反馈。
+   */
+  function showRuntimeNotice(message, options = {}) {
+    if (!isTopWindow || !message) {
+      return;
+    }
+    const level = options.level === "error" ? "error" : "warn";
+    const durationMsRaw = Number(options.durationMs);
+    const durationMs = Number.isFinite(durationMsRaw) && durationMsRaw > 0 ? durationMsRaw : 5200;
+    try {
+      ensureRuntimeNoticeStyle();
+      const container = ensureRuntimeNoticeContainer();
+      if (!container) {
+        window.alert(`[OverlayLex] ${message}`);
+        return;
+      }
+      const item = document.createElement("div");
+      item.className = "overlaylex-runtime-notice";
+      item.dataset.level = level;
+      const title = document.createElement("div");
+      title.className = "overlaylex-runtime-notice-title";
+      title.textContent = level === "error" ? "OverlayLex 连接异常" : "OverlayLex 提示";
+      const text = document.createElement("div");
+      text.className = "overlaylex-runtime-notice-text";
+      text.textContent = message;
+      item.appendChild(title);
+      item.appendChild(text);
+      container.appendChild(item);
+      window.setTimeout(() => {
+        item.remove();
+      }, durationMs);
+    } catch (error) {
+      Logger.warn("显示运行期提示失败，回退 alert。", error);
+      try {
+        window.alert(`[OverlayLex] ${message}`);
+      } catch (alertError) {
+        Logger.warn("alert 提示也失败。", alertError);
+      }
+    }
+  }
 
   function safeJsonParse(raw, fallbackValue) {
     try {
@@ -391,26 +575,58 @@
     return rules.some((rule) => isHostMatchedByRule(hostname, rule));
   }
 
+  /**
+   * 基于“本地 seeds”做首层快速门禁。
+   * 输入：
+   * - hostname: 当前页面域名（小写）
+   * 输出：
+   * - true：可能属于 OBR 生态，允许进入下一步
+   * - false：直接退出，避免无意义网络请求与 DOM 注入
+   */
+  function isHostAllowedByLocalSeeds(hostname) {
+    return isHostAllowedByDomainPackage(hostname, LOCAL_DOMAIN_SEEDS);
+  }
+
   async function ensureCurrentHostAllowed() {
     const hostname = window.location.hostname.toLowerCase();
 
     // 先用缓存快速判断，减少每次页面打开都阻塞网络。
     if (state.domainPackage && isHostAllowedByDomainPackage(hostname, state.domainPackage)) {
-      return true;
+      return {
+        allowed: true,
+        from: "cache",
+        remoteFailed: false,
+        hasCache: true,
+      };
     }
 
     // 缓存命不中，再请求最新域名包。
     try {
       const remoteDomainPackage = await fetchDomainPackageByBestUrl();
       setCachedDomainPackage(remoteDomainPackage);
-      return isHostAllowedByDomainPackage(hostname, remoteDomainPackage);
+      return {
+        allowed: isHostAllowedByDomainPackage(hostname, remoteDomainPackage),
+        from: "remote",
+        remoteFailed: false,
+        hasCache: Boolean(state.domainPackage),
+      };
     } catch (error) {
       Logger.warn("域名包拉取失败，回退到缓存判断。", error);
       // 网络失败时，如果缓存存在就按缓存兜底，否则 fail-close。
       if (state.domainPackage) {
-        return isHostAllowedByDomainPackage(hostname, state.domainPackage);
+        return {
+          allowed: isHostAllowedByDomainPackage(hostname, state.domainPackage),
+          from: "cache-fallback",
+          remoteFailed: true,
+          hasCache: true,
+        };
       }
-      return false;
+      return {
+        allowed: false,
+        from: "none",
+        remoteFailed: true,
+        hasCache: false,
+      };
     }
   }
 
@@ -1503,6 +1719,10 @@
         setCachedDomainPackage(latestDomainPackage);
       } catch (error) {
         Logger.warn("检查更新时拉取域名包失败，保留本地缓存。", error);
+        showRuntimeNotice("手动更新时域名白名单拉取失败，已继续使用本地缓存。", {
+          level: "warn",
+          durationMs: 5800,
+        });
       }
 
       await reloadEnabledPackages({ showUpdatingIndicator: true });
@@ -1512,6 +1732,10 @@
     } catch (error) {
       Logger.error("手动检查更新失败", error);
       setStatus("检查更新失败，已保留本地缓存。");
+      showRuntimeNotice("手动更新失败：无法连接翻译后端，请检查网络或代理设置。", {
+        level: "error",
+        durationMs: 6800,
+      });
     }
   }
 
@@ -2042,6 +2266,10 @@
         setCachedDomainPackage(latestDomainPackage);
       } catch (error) {
         Logger.warn("后台刷新域名包失败，继续使用缓存。", error);
+        showRuntimeNotice("自动更新时域名白名单拉取失败，已继续使用本地缓存。", {
+          level: "warn",
+          durationMs: 5200,
+        });
       }
 
       await reloadEnabledPackages();
@@ -2051,6 +2279,10 @@
     } catch (error) {
       Logger.warn("后台更新 manifest 失败，继续使用本地缓存。", error);
       setStatus("后台更新失败，继续使用本地缓存。");
+      showRuntimeNotice("自动更新失败：暂时无法连接翻译后端，已保留本地缓存。", {
+        level: "warn",
+        durationMs: 5600,
+      });
     }
   }
 
@@ -2060,17 +2292,32 @@
       return;
     }
 
-    // 第一步：先拿到 manifest（缓存优先），用于定位域名包 URL。
+    // 第一步：本地 seeds 快速门禁（毫秒级）。
+    // 不在本地 OBR 生态 seeds 内的页面直接退出，避免全站无谓开销。
+    const currentHostname = window.location.hostname.toLowerCase();
+    if (!isHostAllowedByLocalSeeds(currentHostname)) {
+      return;
+    }
+
+    // 第二步：先拿到 manifest（缓存优先），用于定位域名包 URL。
     await bootManifestFromCacheFirst();
 
-    // 第二步：域名门禁。未命中白名单则立刻结束，避免全站额外开销。
-    const allowed = await ensureCurrentHostAllowed();
-    if (!allowed) {
+    // 第三步：云端域名门禁。未命中白名单则立刻结束，避免无关页面继续执行。
+    const gateResult = await ensureCurrentHostAllowed();
+    if (!gateResult.allowed) {
+      // 特别处理：仅在“首轮拉取失败且无本地缓存”时弹可视化错误，
+      // 防止用户遇到“脚本亮起但页面毫无变化”却不知原因。
+      if (gateResult.remoteFailed && !gateResult.hasCache) {
+        showRuntimeNotice("首次启动失败：后端域名包无法访问，且本地无缓存。请先检查后端可达性。", {
+          level: "error",
+          durationMs: 7600,
+        });
+      }
       Logger.info(`当前域名不在 OverlayLex 域名包白名单内，已退出。hostname=${location.hostname}`);
       return;
     }
 
-    // 第三步：进入正常翻译链路。
+    // 第四步：进入正常翻译链路。
     await reloadEnabledPackages();
     createFloatingUi();
     setupMutationObserver();

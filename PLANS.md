@@ -20,6 +20,6 @@
 
 ## 当前执行状态
 - [x] Step 1: 建立执行计划并落盘
-- [ ] Step 2: 修改 `src/userscript/overlaylex.user.js`
-- [ ] Step 3: 更新 `CHANGELOG.md` 与 `PROGRESS.md`
-- [ ] Step 4: 提交（不包含 `src/packages/obr-theatre-battle-system-com.json`）
+- [x] Step 2: 修改 `src/userscript/overlaylex.user.js`
+- [x] Step 3: 更新 `CHANGELOG.md` 与 `PROGRESS.md`
+- [x] Step 4: 提交（不包含 `src/packages/obr-theatre-battle-system-com.json`）
