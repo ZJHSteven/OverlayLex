@@ -5,7 +5,7 @@
     "host": "bubbles-for-owlbear-rodeo.pages.dev",
     "pathPrefix": "/"
   },
-  "version": "0.1.8",
+  "version": "0.1.10",
   "translations": {
     "& MAXIMUM": "& 最大值",
     "enter": "进入",
