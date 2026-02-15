@@ -5,7 +5,7 @@
     "host": "owlbear-rodeo-bubbles-extension.onrender.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.2",
+  "version": "0.1.5",
   "translations": {
     "& MAXIMUM": "",
     "+ Justification": "",
@@ -27,7 +27,7 @@
     "HIT POINTS": "生命值",
     "Hit Points / Maximum Hit Points, Temporary Hit Points": "生命值/最大生命值，临时生命值",
     "Hit Points Maximum": "最大生命值",
-    "Instructions": "",
+    "Instructions": "简介",
     "Justification": "",
     "Make a roll": "掷骰",
     "Move stat bubbles up or down": "",
@@ -36,7 +36,7 @@
     "Name Tags": "名字标签",
     "None": "无",
     "Offset": "",
-    "Only show when creatures drop to certain fractions of their health": "",
+    "Only show when creatures drop to certain fractions of their health": "只有当生物的健康状况差到一定程度的时候才会显示",
     "Operation": "",
     "Override the active room's settings for this scene.": "",
     "Overwrite Multiple": "",

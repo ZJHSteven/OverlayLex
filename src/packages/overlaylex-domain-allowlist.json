@@ -2,7 +2,7 @@
   "id": "overlaylex-domain-allowlist",
   "name": "OverlayLex 域名准入包",
   "kind": "domain-allowlist",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "rules": [
     {
       "type": "exact",
@@ -54,6 +54,12 @@
       "value": "bubbles-for-owlbear-rodeo.pages.dev",
       "comment": "自动同步包域名",
       "source": "obr-bubbles-for-owlbear-rodeo-pages-dev"
+    },
+    {
+      "type": "exact",
+      "value": "gmg.tabletop-almanac.com",
+      "comment": "自动同步包域名",
+      "source": "obr-gmg-tabletop-almanac-com"
     },
     {
       "type": "exact",

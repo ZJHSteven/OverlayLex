@@ -5,13 +5,13 @@
     "host": "bubbles-for-owlbear-rodeo.pages.dev",
     "pathPrefix": "/"
   },
-  "version": "0.1.4",
+  "version": "0.1.6",
   "translations": {
     "& MAXIMUM": "& 最大值",
     "enter": "进入",
     "gr": "",
     "HIT POINTS": "生命值",
-    "Make a roll": "掷骰子",
-    "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": "要拾取可拖动物品，请按空格键。拖动过程中，使用方向键移动物品。再次按空格键可将物品放置在新位置，或按ESC键取消操作。"
+    "Make a roll": "掷骰",
+    "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": "要拾取可拖动物品，请按空格键。拖动过程中，使用方向键移动物品。再次按空格键可将物品放置在新位置。若要取消操作，请按ESC键。"
   }
 }

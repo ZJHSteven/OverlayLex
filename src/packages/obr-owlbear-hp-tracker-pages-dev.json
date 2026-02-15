@@ -1,29 +1,29 @@
-﻿{
+{
   "id": "obr-owlbear-hp-tracker-pages-dev",
   "name": "OBR 自动翻译包 - owlbear-hp-tracker.pages.dev",
   "target": {
     "host": "owlbear-hp-tracker.pages.dev",
     "pathPrefix": "/"
   },
-  "version": "0.1.0",
+  "version": "0.1.2",
   "translations": {
     "assign": "分配",
     "Changelog": "变更日志",
     "Clear": "清除",
     "Default": "默认",
     "discord": "discord",
-    "Game Master's Grimoire": "游戏大师的魔典",
-    "GM": "通用汽车",
+    "Game Master's Grimoire": "游戏主持人的魔典",
+    "GM": "游戏主持人/GM",
     "GM's Grimoire - initializing...": "GM 的魔法书 - 正在初始化...",
     "Help": "帮助",
     "HIDE": "隐藏",
     "Login": "登录",
-    "Patreon Link": "帕特伦链接",
-    "Press space bar to start a drag. When dragging you can use the arrow keys to move the item around and escape to cancel. Some screen readers may require you to be in focus mode or to use your pass through key": "按空格键开始拖动。拖动时，您可以使用箭头键来移动项目并使用 Esc 键来取消。某些屏幕阅读器可能要求您处于焦点模式或使用直通键",
+    "Patreon Link": "Patreon链接",
+    "Press space bar to start a drag. When dragging you can use the arrow keys to move the item around and escape to cancel. Some screen readers may require you to be in focus mode or to use your pass through key": "按空格键开始移动。移动时，您可以使用鼠标箭头来移动项目并使用 Esc 键来取消移动。某些屏幕阅读器可能需要您处于焦点模式或使用直通键",
     "Room Link": "房间链接",
     "Settings": "设置",
     "Statblocks": "统计块",
     "Tabletop Almanac": "桌面年历",
-    "Waiting for owlbear rodeo": "等待猫头鹰牛仔竞技表演"
+    "Waiting for owlbear rodeo": "等待枭熊"
   }
 }

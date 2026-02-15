@@ -31,7 +31,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-bubbles-for-owlbear-rodeo-pages-dev",
     "name": "OBR 自动翻译包 - bubbles-for-owlbear-rodeo.pages.dev",
     "kind": "translation",
-    "version": "0.1.4",
+    "version": "0.1.6",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - bubbles-for-owlbear-rodeo.pages.dev（自动同步）"
   },
@@ -39,7 +39,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-clash-battle-system-com",
     "name": "Clash 插件中文包（clash.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.6",
+    "version": "0.1.8",
     "enabledByDefault": true,
     "description": "Clash 插件翻译包（自动采集生成）"
   },
@@ -59,11 +59,19 @@ export const PACKAGE_CATALOG = {
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo（自动同步）"
   },
+  "obr-gmg-tabletop-almanac-com": {
+    "id": "obr-gmg-tabletop-almanac-com",
+    "name": "OBR 自动翻译包 - gmg.tabletop-almanac.com",
+    "kind": "translation",
+    "version": "0.1.2",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - gmg.tabletop-almanac.com（自动同步）"
+  },
   "obr-marked-battle-system-com": {
     "id": "obr-marked-battle-system-com",
     "name": "OBR 自动翻译包 - marked.battle-system.com",
     "kind": "translation",
-    "version": "0.1.1",
+    "version": "0.1.3",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - marked.battle-system.com（自动同步）"
   },
@@ -95,7 +103,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-owlbear-hp-tracker-pages-dev",
     "name": "HP Tracker 插件中文包（owlbear-hp-tracker.pages.dev）",
     "kind": "translation",
-    "version": "0.1.0",
+    "version": "0.1.2",
     "enabledByDefault": true,
     "description": "HP Tracker 插件翻译包（自动采集生成）"
   },
@@ -103,7 +111,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-owlbear-rodeo-bubbles-extension-onrender-com",
     "name": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.5",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com（自动同步）"
   },
@@ -135,7 +143,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-owlbear-rodeo",
     "name": "OBR 主站与房间中文包（owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.2.6",
+    "version": "0.2.8",
     "enabledByDefault": true,
     "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
@@ -143,7 +151,7 @@ export const PACKAGE_CATALOG = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "enabledByDefault": true,
     "description": "控制脚本允许在哪些域名继续执行"
   }
@@ -195,7 +203,7 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "rules": [
       {
         "type": "exact",
@@ -247,6 +255,12 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
         "value": "bubbles-for-owlbear-rodeo.pages.dev",
         "comment": "自动同步包域名",
         "source": "obr-bubbles-for-owlbear-rodeo-pages-dev"
+      },
+      {
+        "type": "exact",
+        "value": "gmg.tabletop-almanac.com",
+        "comment": "自动同步包域名",
+        "source": "obr-gmg-tabletop-almanac-com"
       },
       {
         "type": "exact",
