@@ -127,7 +127,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-theatre-battle-system-com",
     "name": "OBR 自动翻译包 - theatre.battle-system.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.4",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - theatre.battle-system.com（自动同步）"
   },
@@ -135,7 +135,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-dummysheet-com",
     "name": "OBR 自动翻译包 - www.dummysheet.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.4",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - www.dummysheet.com（自动同步）"
   },
