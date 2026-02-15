@@ -1,10 +1,10 @@
 # 项目状态快照
 
 ## 当前结论（必须最新）
-- 现状：已定位 2026-02-15 那次 release 失败根因是 `Verify Release Metadata` 版本未提升，导致 R2/线上包未更新；本轮正在对 4 个包做重发修复。
-- 已完成：确认 `obr-www-owlbear-rodeo`、`obr-www-dummysheet-com`、`obr-theatre-battle-system-com`、`obr-owlbear-rodeo-bubbles-extension-onrender-com` 线上内容落后于本地；已将这 4 包版本提升到 `0.2.6/0.1.2/0.1.2/0.1.2` 并同步 worker catalog。
-- 正在做：执行 `main -> release` 推送，重新触发发布 CI。
-- 下一步：发布成功后逐个回归验证 4 个包线上 JSON 与 UI 翻译效果（重点 `Make a roll -> 掷骰`）。
+- 现状：发布链路已改为“release 仅同步发包目标文件”，不再使用 `cherry-pick` 全量提交，避免无关文件冲突。
+- 已完成：修复 `Check Paratranz Drift`（`obr-www-owlbear-rodeo` 同步远端 38 条差异）；已完成 4 包重发并确认线上版本：`obr-www-owlbear-rodeo=0.2.7`、`bubbles=0.1.4`、`theatre=0.1.4`、`dummysheet=0.1.4`。
+- 正在做：收敛发布脚本为“main 真值源 + release 最小同步集（包文件 + worker catalog）”并固化文档。
+- 下一步：按新脚本执行一次标准发包演练（仅暂存包文件）并确认全流程无冲突。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。
@@ -15,6 +15,7 @@
 - 决策F：本地 seeds 必须覆盖“已知插件域名集合”（原因：seeds 位于启动最前置门禁，过窄会直接导致 iframe 页面无法进入翻译链路）。
 - 决策F：撤销“扩 seeds 覆盖插件域名”的方案，改为“allowlist 缓存判准 + seed 最小兜底”（原因：seeds 语义是首装冷启动入口，不应替代 allowlist）。
 - 决策G：allowlist 缓存采用 GM 共享存储作为主存（原因：localStorage 按域隔离，不满足跨域 iframe 场景的缓存复用需求）。
+- 决策H：`main -> release` 取消 `cherry-pick`，改为“按文件从 main 提交快照覆盖同步”（原因：release 仅用于触发发包 CI，应只接收本次发包目标文件，避免无关文件冲突与历史噪音）。
 
 ## 常见坑 / 复现方法
 - 坑1：油猴脚本显示“启用/亮起”不等于翻译流程已生效；脚本可能在域名门禁阶段提前退出。

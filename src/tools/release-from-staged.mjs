@@ -10,7 +10,7 @@
  *    - 自动同步 Worker 的 PACKAGE_CATALOG 版本与目录项
  * 3) 一条命令完成 main -> release：
  *    - 在 main 提交
- *    - cherry-pick 到 release
+ *    - 按文件把 main 提交快照同步到 release
  *    - push release 触发发布 CI
  *
  * 命令：
@@ -374,22 +374,6 @@ function getCurrentBranch() {
   return runGitText(["rev-parse", "--abbrev-ref", "HEAD"]);
 }
 
-function getUnmergedFiles() {
-  const output = runGitText(["diff", "--name-only", "--diff-filter=U"]);
-  if (!output) {
-    return [];
-  }
-  return output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function isCherryPickInProgress() {
-  const result = tryRunGitText(["rev-parse", "-q", "--verify", "CHERRY_PICK_HEAD"]);
-  return result.ok;
-}
-
 /**
  * 读取 refs/stash 的提交哈希（若不存在则返回空串）。
  * 用提交哈希而非 stash@{0} 可以避免“流程中用户又手动 stash”导致索引漂移。
@@ -500,38 +484,6 @@ function restoreAutoStashSnapshot(stashSnapshot) {
   }
 
   logInfo("自动恢复完成。");
-}
-
-function tryAutoResolveCherryPickConflictsForPackages() {
-  const unmergedFiles = getUnmergedFiles();
-  if (unmergedFiles.length === 0) {
-    return {
-      resolved: false,
-      packageConflicts: [],
-      blockedConflicts: [],
-    };
-  }
-
-  const packageConflicts = unmergedFiles.filter((filePath) => isPackagePath(filePath));
-  const blockedConflicts = unmergedFiles.filter((filePath) => !isPackagePath(filePath));
-  if (blockedConflicts.length > 0 || packageConflicts.length === 0) {
-    return {
-      resolved: false,
-      packageConflicts,
-      blockedConflicts,
-    };
-  }
-
-  // 对“仅包文件冲突”场景采用 cherry-pick 的 theirs（即 main 提交版本），
-  // 这与当前发布策略一致：发布提交内容以 main 刚产生的发布提交为准。
-  runGit(["checkout", "--theirs", ...packageConflicts], { stdio: "inherit" });
-  runGit(["add", ...packageConflicts], { stdio: "inherit" });
-
-  return {
-    resolved: true,
-    packageConflicts,
-    blockedConflicts: [],
-  };
 }
 
 function ensureCleanForPrepare(stagedFiles) {
@@ -1075,6 +1027,35 @@ function ensureReleaseBranchAndSwitch() {
   runGit(["switch", "-c", "release"], { stdio: "inherit" });
 }
 
+/**
+ * 将 main 的发布提交按“文件快照”同步到当前分支（release）。
+ * 这样可以避开 cherry-pick 的跨文件冲突，并且确保 main 是唯一真值源。
+ */
+function syncCommitFilesToCurrentBranch(commitHash, relativeFiles) {
+  const uniqueFiles = [...new Set(relativeFiles.filter(Boolean))];
+  if (uniqueFiles.length === 0) {
+    return { hasChanges: false, stagedFiles: [] };
+  }
+
+  // release 只允许包文件与发布元数据文件，阻断任何无关文件进入发布分支。
+  const invalidFiles = uniqueFiles.filter((item) => !isPackagePath(item) && !ALLOWED_AUTO_STAGE_FILES.has(item));
+  if (invalidFiles.length > 0) {
+    throw new Error(`release 同步文件非法（仅允许包文件与发布元数据）：${invalidFiles.join(", ")}`);
+  }
+
+  logInfo("release 文件同步（来自 main 提交快照）：");
+  for (const file of uniqueFiles) {
+    console.log(`  - ${file}`);
+  }
+
+  runGit(["checkout", commitHash, "--", ...uniqueFiles], { stdio: "inherit" });
+  runGit(["add", "--", ...uniqueFiles], { stdio: "inherit" });
+
+  const stagedSet = new Set(getStagedFiles());
+  const stagedFiles = uniqueFiles.filter((item) => stagedSet.has(item));
+  return { hasChanges: stagedFiles.length > 0, stagedFiles };
+}
+
 function buildReleaseCommitMessage(changedPackageIds) {
   const shortNames = changedPackageIds
     .map((id) => {
@@ -1171,7 +1152,7 @@ async function commandPrepareFromStaged(options) {
 
   const confirmedRound2 = autoYes
     ? true
-    : await promptYes("第二次确认：将执行 commit + push main + cherry-pick 到 release + push release。");
+    : await promptYes("第二次确认：将执行 commit + push main + 按文件同步到 release + push release。");
   if (!confirmedRound2) {
     logWarn("你取消了发布推送流程（改动仍保留在本地与暂存区）。");
     return;
@@ -1179,6 +1160,7 @@ async function commandPrepareFromStaged(options) {
 
   const publishIds = finalStaged.packageRecords.map((item) => item.id);
   const commitMessage = buildReleaseCommitMessage(publishIds);
+  const releaseSyncFiles = [...new Set([...finalStaged.packageFiles, ...finalStaged.metadataFiles])];
   runGit(["commit", "-m", commitMessage], { stdio: "inherit" });
   const commitHash = runGitText(["rev-parse", "HEAD"]);
 
@@ -1191,27 +1173,11 @@ async function commandPrepareFromStaged(options) {
 
   try {
     ensureReleaseBranchAndSwitch();
-    try {
-      runGit(["cherry-pick", commitHash], { stdio: "inherit" });
-    } catch (cherryPickError) {
-      const resolveResult = tryAutoResolveCherryPickConflictsForPackages();
-      if (!resolveResult.resolved) {
-        if (resolveResult.blockedConflicts.length > 0) {
-          logError("release 分支存在非包文件冲突，已停止自动处理，请手动解决后执行 git cherry-pick --continue。");
-          for (const filePath of resolveResult.blockedConflicts) {
-            logError("  - 冲突文件：", filePath);
-          }
-        } else {
-          logError("cherry-pick 失败且未检测到可自动解决的包冲突，请手动处理。");
-        }
-        throw cherryPickError;
-      }
-
-      logWarn("检测到仅包文件冲突，已自动采用 main 提交版本并继续 cherry-pick。");
-      for (const filePath of resolveResult.packageConflicts) {
-        logInfo("  - 自动解决：", filePath);
-      }
-      runGit(["cherry-pick", "--continue"], { stdio: "inherit" });
+    const syncResult = syncCommitFilesToCurrentBranch(commitHash, releaseSyncFiles);
+    if (syncResult.hasChanges) {
+      runGit(["commit", "-m", commitMessage], { stdio: "inherit" });
+    } else {
+      logWarn("release 目标文件无变化，跳过 release 提交。");
     }
 
     const remoteRelease = tryRunGitText(["show-ref", "--verify", "--quiet", "refs/remotes/origin/release"]);
@@ -1221,15 +1187,6 @@ async function commandPrepareFromStaged(options) {
       runGit(["push", "-u", "origin", "release"], { stdio: "inherit" });
     }
   } finally {
-    if (isCherryPickInProgress()) {
-      logWarn("检测到 cherry-pick 仍在进行，已保留当前分支，避免覆盖现场。请先手动完成或中止 cherry-pick。");
-      if (autoStashSnapshot) {
-        logWarn("由于 cherry-pick 未结束，自动 stash 暂不恢复，避免把临时改动混入冲突现场。");
-        logWarn(`可在冲突处理完成后手动恢复：git stash apply ${autoStashSnapshot.hash}`);
-      }
-      return;
-    }
-
     const switchResult = runGit(["switch", "main"], { allowFailure: true, stdio: "inherit" });
     if (switchResult.error || switchResult.status !== 0) {
       logWarn("自动切回 main 失败，请手动执行 git switch main。");
@@ -1245,7 +1202,7 @@ async function commandPrepareFromStaged(options) {
     }
   }
 
-  logInfo("发布链路完成：main 已提交并推送，release 已 cherry-pick 并推送。");
+  logInfo("发布链路完成：main 已提交并推送，release 已按文件同步并推送。");
 }
 
 async function commandVerifyRelease(options) {
