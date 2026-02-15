@@ -9,6 +9,12 @@
 
 ## 变更日志
 - 2026-02-15
+  - 重发修复：针对上次 `release-publish` 在 `Verify Release Metadata` 阶段失败导致 R2 未更新的问题，重新提升并发布 4 个受影响翻译包版本：
+    - `obr-www-owlbear-rodeo`: `0.2.5 -> 0.2.6`
+    - `obr-www-dummysheet-com`: `0.1.1 -> 0.1.2`
+    - `obr-theatre-battle-system-com`: `0.1.1 -> 0.1.2`
+    - `obr-owlbear-rodeo-bubbles-extension-onrender-com`: `0.1.1 -> 0.1.2`
+  - 更新 `src/worker/src/data.js`：同步 `PACKAGE_CATALOG` 中上述 4 包版本，确保发布校验一致。
   - 更新 `src/userscript/overlaylex.user.js`：将 allowlist 缓存从“仅 localStorage（按域隔离）”扩展为“GM 共享存储优先 + localStorage 兜底”，新增 `GM_getValue/GM_setValue` 元数据权限，实现跨域 iframe 场景共享同一份域名包缓存。
   - 更新 `src/userscript/overlaylex.user.js`：新增共享缓存读写与启动迁移逻辑（共享缓存存在则回填本域；共享缓存不存在但本域有旧缓存时自动迁移到共享区），降低升级后冷启动割裂问题。
   - 更新 `src/userscript/overlaylex.user.js`：版本升级到 `0.2.16`（`@version` 与 `SCRIPT_VERSION` 同步），用于触发油猴自动更新。

@@ -1,10 +1,10 @@
 # 项目状态快照
 
 ## 当前结论（必须最新）
-- 现状：allowlist 缓存已切换为“GM 共享存储优先 + localStorage 兜底”，跨域 iframe 可共享域名包缓存。
-- 已完成：自定义域部署（`overlaylex-api.zjhstudio.com`）；主脚本失败提示；启动门禁重构到本地规则；跨域共享缓存改造；脚本版本升级到 `0.2.16`。
-- 正在做：等待用户侧验证“主域先启动后，跨域插件页可直接翻译”的链路。
-- 下一步：若验证通过，保持 seed 最小策略不变；若仍有漏网，优先补 allowlist 发布流程，不扩大 seed。
+- 现状：已定位 2026-02-15 那次 release 失败根因是 `Verify Release Metadata` 版本未提升，导致 R2/线上包未更新；本轮正在对 4 个包做重发修复。
+- 已完成：确认 `obr-www-owlbear-rodeo`、`obr-www-dummysheet-com`、`obr-theatre-battle-system-com`、`obr-owlbear-rodeo-bubbles-extension-onrender-com` 线上内容落后于本地；已将这 4 包版本提升到 `0.2.6/0.1.2/0.1.2/0.1.2` 并同步 worker catalog。
+- 正在做：执行 `main -> release` 推送，重新触发发布 CI。
+- 下一步：发布成功后逐个回归验证 4 个包线上 JSON 与 UI 翻译效果（重点 `Make a roll -> 掷骰`）。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。
