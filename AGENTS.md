@@ -1,143 +1,28 @@
-# OverlayLex 协作记录
+# OverlayLex Agent 协作规范
 
-## 目的
-- 记录本仓库中由代理执行的关键改动，方便初学者回溯与学习。
+## 目标
+- 让协作过程可追踪、可复盘、可持续迭代。
+- 在不影响普通网页体验的前提下，优先保障 OBR 相关站点的可用性与可诊断性。
 
-## 约定
-- 每次完成一批可运行的改动后立即提交。
-- 提交信息推荐采用 Conventional Commits 风格。
+## 强制流程
+- 复杂任务必须先写执行计划（ExecPlan），并落地到 `PLANS.md`。
+- 每次提交前必须更新 `PROGRESS.md`，确保“现状 / 已完成 / 下一步”是最新状态。
+- 保持主脚本“快速门禁、命中才继续”的设计，不在无关站点引入额外负担。
 
-## 变更日志
-- 2026-02-10
-  - 更新 `src/packages/obr-smoke-battle-system-com.json`：修复关键词条翻译（`Double-Side Walls`、`Smoke`、`This will change ALL walls...`），并通过 `release-from-staged` 重新发布；版本由 `0.1.5` 递增至 `0.1.6`，提交 `main/release`。
-  - 更新 `src/tools/release-from-staged.mjs`：新增发布阶段自动 `stash`/自动恢复机制（默认开启）；在 `main push` 成功后、切换 `release` 前自动暂存未暂存/未跟踪改动，发布流程收尾时自动恢复，降低“工作区有开发中改动导致 `git switch release` 失败”的中断概率。
-  - 更新 `src/tools/release-from-staged.mjs`：新增 `--auto-stash` 与 `--no-auto-stash` 参数，并在帮助信息中补充说明；当 `cherry-pick` 冲突未结束或切回 `main` 失败时，脚本不强行恢复暂存，改为保留现场并输出手动恢复命令，避免二次污染冲突上下文。
-  - 更新 `src/tools/release-from-staged.mjs`：修复自动恢复收尾时的 `stash drop` 目标引用问题；由“直接传哈希”改为“先按哈希反查 `stash@{n}` 再 drop”，避免“已恢复但误报清理失败”。
-  - 更新 `README.md`：在“本地一键发布（按暂存区驱动）”补充自动 `stash` 行为说明与 `--no-auto-stash` 开关用法。
-- 2026-02-09
-  - 更新 `src/tools/release-from-staged.mjs`：新增 `cherry-pick` 冲突自动兜底；当冲突仅出现在 `src/packages/*.json` 时，脚本自动执行 `git checkout --theirs` + `git add` + `git cherry-pick --continue`，默认以 `main` 刚生成的发布提交为准；若出现非包文件冲突则停止自动处理并保留现场，提示人工处理后继续。
-  - 更新 `src/tools/release-from-staged.mjs`：优化收尾逻辑；若检测到 `CHERRY_PICK_HEAD` 仍存在，不再强制 `git switch main` 覆盖原始错误，而是输出明确提示，避免“切分支失败”掩盖真正冲突原因。
-  - 更新 `README.md`：在“本地一键发布（按暂存区驱动）”补充冲突策略说明，明确“包文件冲突自动按 main 版本解决、非包文件冲突人工处理”的行为与后续操作。
-  - 更新 `src/tools/overlaylex-i18n-flow.mjs`：`push-paratranz` 新增“按暂存区驱动”能力，支持 `--staged-only`（仅同步暂存区翻译包）、`--commit-staged`（推送前自动本地提交）与 `--commit-message`（自定义提交信息）；同时保留 `--changed-only` 兼容 CI 历史用法，并新增参数冲突校验与清晰报错。
-  - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 i18n 自动提交信息生成规则（示例：`chore(i18n): submit en theatre,smoke`），提交前短名由包 ID 自动提取，避免与 release 提交流混淆。
-  - 更新 `README.md`：i18n 主流程改为“先 `git add` 选包，再执行 `push-paratranz --staged-only --commit-staged`”，并补充 `PARATRANZ_TOKEN` 先决条件、自动提交信息示例，以及 `--changed-only --base-ref` 仅作为 CI/自动化进阶用法说明。
-  - 更新 `README.md`：重排 i18n 教学流程顺序为“合并采集 -> 第 2 步直接 `push-paratranz` -> `from-paratranz` 回写 -> 可选 `to-paratranz` 导出检查 -> 第 5 步策略校验”；并在 push 示例旁新增 `PARATRANZ_TOKEN` 先决条件提示（含 PowerShell 设置示例）。
-  - 更新 `README.md`：在 i18n 命令示例中补充本地主动推送 ParaTranz 的可复制命令 `push-paratranz --changed-only --base-ref origin/main --project-id 17950`，并明确该命令可直接推送（无需先执行 `to-paratranz`，脚本会在命令内部自动转换上传格式）。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：修复按钮类 `input[value]` 未被采集的问题；新增仅针对 `input[type=button|submit|reset]` 的 `value` 采集逻辑，并将采集观察器 `attributeFilter` 扩展为 `["placeholder","title","value","src"]`，避免漏采动态按钮文案。
-  - 更新 `src/userscript/overlaylex.user.js`：修复按钮类 `input[value]` 未被翻译的问题；新增仅针对 `input[type=button|submit|reset]` 的 `value` 翻译逻辑，同时把主文档与同源 iframe 的观察器 `attributeFilter` 扩展为 `["placeholder","title","value"]`。
-- 2026-02-08
-  - 更新 `.github/workflows/release-publish.yml`：新增“变更包收集”步骤；当本次 push 无 `src/packages/*.json` 变化时，发布链路自动 no-op（跳过漂移检查/校验/R2 同步/Worker 部署）；并将 ParaTranz 漂移门禁从“全仓比较”改为“仅比较本次变更包”。
-  - 更新 `README.md`：同步 release 工作流新规则，明确“无包改动自动跳过发布”与“漂移检查仅针对本次变更包”。
-  - 更新 `src/tools/release-from-staged.mjs`：移除“工作区必须干净”硬限制，允许存在未暂存/未跟踪改动；发布来源仍只取暂存区。并将自动 `git add` 范围收敛为“原始暂存包 + `overlaylex-domain-allowlist.json` + `src/worker/src/data.js`”，避免误带其他文件。
-  - 更新 `README.md`：补充“工作区可不干净，但发布 commit 仅包含暂存包与自动维护元数据文件”的规则说明。
-  - 更新 `src/tools/release-from-staged.mjs`：回退“按中文译文自动筛包”策略，改为“仅按发布者暂存区选择决定新增发布包”；脚本不再自动替用户做包选择，只负责版本递增、allowlist/catalog 同步与发布链路执行。
-  - 更新 `README.md`：将发布规则说明改为“选择权在暂存区”，明确脚本不会按译文内容自动筛选包。
-  - 更新 `src/tools/release-from-staged.mjs`：发布目录改为仅纳入“至少包含 1 条中文译文”的翻译包；未翻译（纯英文采集）包会被自动排除出 Worker `PACKAGE_CATALOG` 与 manifest，同时发布前校验会阻止这类包进入发布流程。
-  - 更新 `README.md`：补充“manifest 只暴露含中文译文包，纯英文采集包不展示”的规则说明。
-  - 更新 `src/tools/release-from-staged.mjs`：新增 `sync-metadata` 子命令，支持仅同步 `overlaylex-domain-allowlist` 与 Worker `PACKAGE_CATALOG`（不触发 Git 推送），用于修复历史流程导致的元数据版本漂移。
-  - 更新 `src/tools/release-from-staged.mjs`：修复 Windows 下 `git commit -m` 参数被 shell 拆分导致失败的问题；Git 子进程改为 `shell: false`，保证包含空格/逗号的提交信息可稳定提交。
-  - 更新 `src/tools/release-from-staged.mjs`：新增 `--yes` 非交互参数，支持自动化场景跳过两次确认，避免管道输入场景下第二次确认读不到输入导致流程提前结束。
-  - 新增 `src/tools/release-from-staged.mjs`：提供“按暂存区驱动发布”的本地一键脚本，支持两次确认、发布包 patch 自动递增、自动维护 `overlaylex-domain-allowlist`、自动同步 `src/worker/src/data.js` 的 `PACKAGE_CATALOG`，并自动执行 `main commit -> push main -> cherry-pick 到 release -> push release`。
-  - 更新 `.github/workflows/release-publish.yml`：移除云端自动 bump/自动提交步骤，改为 `verify-release` 校验（版本号必须高于线上、allowlist 覆盖、worker catalog 一致）+ 仅上传相对 `base_ref` 的改动包。
-  - 更新 `src/tools/sync-r2-packages.mjs`：新增 `--changed-only --base-ref`，支持按 Git 变更集上传包，避免 release 流程全量重传全部包。
-  - 更新 `README.md`：补充“本地一键发布（按暂存区）”操作说明，并同步 release CI 最新流程。
-  - 更新 `src/tools/overlaylex-i18n-flow.mjs`：将 `from-paratranz` 升级为双模式命令；当传入 `--project-id` 时自动执行 `pull-paratranz -> from-paratranz`，未传时保持“仅本地回写”旧行为；保留 `sync-paratranz` 兼容别名。
-  - 更新 `README.md`：第 3 步改为 `from-paratranz --project-id 17950` 一键命令；补充 `--out-dir` 为可选参数（默认 `.tmp/paratranz`）与 `PARATRANZ_TOKEN` 读取规则说明。
-  - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 `sync-paratranz` 聚合子命令，一步执行 `pull-paratranz -> from-paratranz`，用于“从 ParaTranz 拉取并直接回写本地包”的常规场景。
-  - 更新 `README.md`：将第 3 步改为 `sync-paratranz` 一键命令（推荐），并保留 `pull-paratranz` + `from-paratranz` 的等价拆分写法用于调试中间目录。
-  - 更新 `src/userscript/overlaylex.user.js`：修复“球与面板共用锚点导致收起后偏移”问题，改为球/面板双锚点独立管理；展开时面板从球坐标计算并独立 `clamp`，收起时仅恢复球自身坐标，不再被面板位置反向覆盖。
-  - 更新 `src/userscript/overlaylex.user.js`：`UI_STATE` 新增 `panelTop/panelRight` 字段用于分离持久化；同时保持 `ballTop/ballRight` 独立保存，确保边界场景下球位置稳定可复现。
-  - 更新 `src/userscript/overlaylex.user.js`：版本升至 `0.2.11`（`@version` 与 `SCRIPT_VERSION` 同步）。
-  - 更新 `src/userscript/overlaylex.user.js`：将悬浮球尺寸按约 `1/3` 放大（`22px -> 30px`），并同步图标/呼吸圈/状态点参数，版本升至 `0.2.10`。
-  - 更新 `src/userscript/overlaylex.user.js`：悬浮球拖拽改为 `requestAnimationFrame` 逐帧渲染，新增拖拽中视觉降级样式（临时关闭高成本模糊/动效），修复拖动不跟手与卡顿感。
-  - 更新 `src/userscript/overlaylex.user.js`：新增“开合前按当前可见元素实时回写锚点”逻辑，修复点击面板外收起后悬浮球位置右偏问题。
-  - 更新 GitHub 仓库描述：补充项目定位说明（Owlbear Rodeo / DnD5e 场景下的 OverlayLex 双脚本翻译方案）。
-  - 更新 `src/userscript/overlaylex.user.js`：`@name` 调整为 `OverlayLex Translator`，`@namespace` 改为仓库地址，新增 `@updateURL/@downloadURL`（Raw 链接），并补充发布用 `@description`，版本升至 `0.2.9`。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：`@namespace` 改为仓库地址，新增 `@updateURL/@downloadURL`（Raw 链接），并补充发布用 `@description`，版本升至 `0.1.2`。
-  - 更新 `README.md`：补充“译文真源规则 + 本地改动策略（允许新增词条预翻译、禁止修改已存在词条译文）”、新增 `check-local-translation-policy` 示例命令，并更新 `main/release/每日同步 PR` 三条工作流说明。
-  - 新增 `.github/workflows/paratranz-sync-pr.yml`：支持“每天定时 + 手动触发”从 ParaTranz 回拉译文并回写 `src/packages`，仅在有差异时自动创建/更新 `bot/paratranz-sync` PR，无变化时自动跳过提交。
-  - 更新 `.github/workflows/release-publish.yml`：新增发布前 `Check Paratranz Drift` 门禁（拉取并回写远端译文后检测 `src/packages` 是否有差异），未对齐时阻断发布；并补充 `PARATRANZ_TOKEN`、`PARATRANZ_PROJECT_ID` secrets 校验。
-  - 更新 `.github/workflows/main-paratranz-sync.yml`：新增 `Validate Local Translation Policy` 步骤，在上推 ParaTranz 前执行 `check-local-translation-policy`，阻止“修改已存在 original 译文”的本地改动进入主流程。
-  - 更新 `src/tools/overlaylex-i18n-flow.mjs`：新增 `check-local-translation-policy` 子命令，用于校验 `main` 分支本地译文改动策略；规则为“允许新增 `original` 携带空/非空预翻译，禁止修改已存在 `original` 的译文”。
-  - 新增 `src/worker/package-lock.json`：补齐 Worker 依赖锁文件，保证 GitHub Actions 中 `npm ci` 可稳定执行。
-  - 修复 `src/tools/sync-r2-packages.mjs`：R2 上传默认改为远端模式（自动附加 `--remote`），并新增 `--local` 调试开关，避免误写入 Wrangler 本地模拟桶导致线上包未更新。
-  - 修复 `src/tools/sync-r2-packages.mjs`：调整 `wrangler` 调用方式为跨平台 `npx` 执行（Windows 启用 shell 解析），并补充子进程错误/退出码日志，解决 Windows 环境下 R2 同步首包失败问题。
-  - 更新 `README.md`：补充 OverlayLex i18n 闭环文档（采集临时 JSON 格式、`overlaylex-i18n-flow.mjs` 命令、ParaTranz 互转规则、`main/release` 分支 CI/CD 流程与 Secrets 配置）。
-  - 更新 `.gitignore`：新增 `.tmp/` 与 `tmp/collector.selected.json` 忽略规则，避免临时导出文件误入版本库。
-  - 新增 `.github/workflows/main-paratranz-sync.yml`：`main` 分支自动执行 ParaTranz 增量同步（按 `base_ref` 计算变更包，调用 `push-paratranz --changed-only`）。
-  - 新增 `.github/workflows/release-publish.yml`：`release` 分支自动执行“版本号 patch 递增 -> 提交回推 -> R2 同步 -> Worker 部署 -> manifest 冒烟检查”发布流程。
-  - 新增 `src/tools/sync-r2-packages.mjs`：按 `packages/{filename}.json` 规则批量上传可发布包（翻译包/域名准入包）到 R2。
-  - 新增 `src/tools/overlaylex-i18n-flow.mjs`：实现 OverlayLex i18n 一体化流程脚本，支持 `merge-collected`、`to-paratranz`、`from-paratranz`、`pull-paratranz`、`push-paratranz`、`bump-release-version` 六个子命令。
-  - 新增 `config/overlaylex-i18n.config.json`：补充流程脚本默认配置（包目录、临时目录、Paratranz 基础地址/项目ID/路径前缀、合并策略与导入策略）。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：采集导出格式从“按域名文本串”改为“按域名分组 JSON 对象”（`{ host: [texts...] }`），并同步复制成功提示文案与脚本版本到 `0.1.1`。
-- 2026-02-07
-  - 更新 `src/userscript/overlaylex.user.js`：按反馈将悬浮球从 `11px` 调整为 `22px`（翻倍），并按比例同步图标、呼吸圈与状态点参数，兼顾可见性与遮挡控制。
-  - 更新 `src/userscript/overlaylex.user.js`：新增“点击面板外区域自动收起为悬浮球”逻辑（捕获阶段监听 `pointerdown`），提升收起交互直觉性。
-  - 更新 `src/userscript/overlaylex.user.js`：翻译包列表右侧状态图标改为“常态不显示，只有手动更新过程中下载该包时显示云下载图标”，移除常态对勾展示。
-  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.8`。
-  - 更新 `src/userscript/overlaylex.user.js`：按用户要求将悬浮球缩减到上一版约 `1/4` 尺寸（`44px -> 11px`），并同步缩小图标、呼吸圈与状态点参数。
-  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.7`。
-  - 更新 `src/userscript/overlaylex.user.js`：悬浮球默认尺寸由 `56px` 缩小到 `44px`，并同步缩小图标、呼吸圈与状态点，降低遮挡感。
-  - 更新 `src/userscript/overlaylex.user.js`：新增 `UI_TUNING.floatingBall` 集中配置（`sizePx/iconPx/ringInsetPx/ringBlurPx/dotSizePx/dotOffsetPx`），支持初学者在单一位置手动微调悬浮球视觉尺寸。
-  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.6`。
-  - 更新 `src/userscript/overlaylex.user.js`：将 `translate/language/settings/cloud_sync` 四个手绘图标替换为用户提供的官方 Material Symbols SVG 路径，修复图形风格不一致问题；同时把图标填充色统一为 `currentColor` 以复用亮暗主题配色。
-  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.5`，用于区分“官方 SVG 图标替换”修复版本。
-  - 更新 `src/userscript/overlaylex.user.js`：移除外部字体图标依赖，统一改为内置 SVG 图标渲染，修复 `translate/settings/cloud_sync/close/done/cloud_download` 在部分站点显示为英文文本的问题。
-  - 更新 `src/userscript/overlaylex.user.js`：重写浮窗显隐控制为 `overlaylex-hidden` 类，规避宿主站样式覆盖 `hidden` 属性导致的“关闭按钮无响应/面板无法收起”问题。
-  - 更新 `src/userscript/overlaylex.user.js`：拖拽事件改为 `mousedown/touchstart` 双通道，修复部分设备与页面环境下“显示可拖动手型但实际拖不动”的问题，并保持面板与悬浮球位置一体化。
-  - 更新 `src/userscript/overlaylex.user.js`：悬浮球升级为玻璃态气泡样式，新增轻微呼吸光环与“长按 650ms 触发重注入”交互。
-  - 更新 `AGENTS.md`：补充本次 `paratranz-api` skill 提交记录，确保协作日志与仓库提交保持一致。
-  - 新增 `skills/paratranz-api/SKILL.md`：创建 ParaTranz API 交互技能，明确触发条件、标准工作流、错误处理和最小可运行示例。
-  - 新增 `skills/paratranz-api/agents/openai.yaml`：补充技能 UI 元信息与默认提示词，便于在 Codex 技能列表中触发。
-  - 新增 `skills/paratranz-api/scripts/paratranz-api-client.mjs`：实现通用 API CLI（按 operationId 调用、支持 path/query/header/json/form/raw-body、dry-run 与输出落盘）。
-  - 新增 `skills/paratranz-api/references/api-docs.yml`：收录 ParaTranz OpenAPI 原始文档副本，保证技能自包含。
-  - 新增 `skills/paratranz-api/references/operation-index.json`：从 OpenAPI 自动抽取 48 个接口的机器可读索引，避免遗漏调用方式。
-  - 新增 `skills/paratranz-api/references/endpoints.md`：生成逐接口教学向参考文档，覆盖每个 operationId 的参数、请求体与最小调用示例。
-  - 更新 `src/userscript/overlaylex.user.js`：补齐 Material 图标体系（翻译、设置、更新、关闭、下载/状态图标），修复图标缺失与样式不一致问题。
-  - 更新 `src/userscript/overlaylex.user.js`：修复包开关样式层级，恢复“开启后仍保留白色圆点滑块”的正常开关动画表现。
-  - 更新 `src/userscript/overlaylex.user.js`：新增面板顶部拖动条拖拽能力，并将悬浮球与面板绑定为同一位置锚点；展开面板时隐藏悬浮球，关闭面板时恢复到同位置。
-  - 更新 `src/userscript/overlaylex.user.js`：版本升级至 `0.2.3`。
-  - 更新 `src/userscript/overlaylex.user.js`：重构主控制台 UI 为新玻璃态浮窗风格（亮色/暗色双主题），新增“明亮/暗夜/跟随系统”主题设置与系统主题联动监听，同时保持包列表、按钮、状态文本等业务内容动态渲染，不再使用示例写死文案。
-  - 更新 `src/userscript/overlaylex.user.js`：保留并强化“域名门禁优先”启动顺序，确保仅在命中域名包白名单后才注入悬浮球与控制面板，未命中域名直接退出。
-  - 合并 `src/packages/obr-room-core.json` 与 `src/packages/obr-www-owlbear-rodeo.json`：统一保留 `obr-www-owlbear-rodeo`，并合并词条。
-  - 更新 `src/packages/obr-www-owlbear-rodeo.json`：升级为主站与房间共用包，`target` 改为 `hosts` 双域名匹配，版本升至 `0.2.0`。
-  - 删除 `src/packages/obr-room-core.json`：移除重复翻译包，避免同站点重复加载与冲突覆盖。
-  - 更新 `src/worker/src/data.js`：下线 `obr-room-core` 目录项，提升 `obr-www-owlbear-rodeo` 目录版本到 `0.2.0`，并新增 `obr-room-core` 内置兼容别名回退，避免旧缓存 manifest 404。
-  - 更新 `src/userscript/overlaylex.user.js`：`isPackageTargetMatched` 新增 `target.hosts` 多域名匹配支持，并将冷启动回退包改为 `obr-www-owlbear-rodeo`。
-  - 更新 `src/worker/src/index.js`：修正包路由示例注释为新包 ID。
-  - 更新 `README.md`：移除 `obr-room-core` 说明，统一示例到 `obr-www-owlbear-rodeo`。
-- 2026-02-06
-  - 新增 `src/userscript/overlaylex.user.js`：实现 OverlayLex 用户脚本首版（缓存、包加载、增量翻译、悬浮面板、手动更新）。
-  - 新增 `src/worker/src/data.js`：实现 Worker 侧翻译包注册表与 manifest 生成函数。
-  - 新增 `src/worker/src/index.js`：实现 Worker API 路由与 CORS 响应封装。
-  - 新增 `src/worker/package.json` 与 `src/worker/wrangler.toml`：补齐 Worker 本地开发与部署配置。
-  - 新增 `src/packages/obr-room-core.json`：提供房间页第一版示例翻译包。
-  - 新增 `src/tools/extract-visible-texts.js`：提供 HTML 候选文本抽取工具，用于快速建词典。
-  - 新增 `README.md`：补充最小可运行步骤、API 说明与抽词翻译工作流。
-  - 新增 `src/packages/overlaylex-domain-allowlist.json`：补充域名准入包，用于全站触发后的快速放行判断。
-  - 更新 `src/worker/src/data.js`：升级 manifest 为“翻译包 + 域名包”，并添加 R2 失败时内置回退包。
-  - 更新 `src/worker/src/index.js`：新增 `/packages`、`/domain-package.json`，并改为优先从 R2 读取包正文。
-  - 更新 `src/worker/wrangler.toml`：绑定 R2 桶 `PACKAGES_BUCKET`。
-  - 重写 `src/userscript/overlaylex.user.js`：实现全站 match、域名包门禁、iframe 补充翻译、顶层独立控制台与新版 manifest 适配。
-  - 更新 `src/userscript/overlaylex.user.js`：回填已部署 Worker 地址 `overlaylex-demo-api.zhangjiahe0830.workers.dev`。
-  - 更新 `README.md`：补充线上 API 地址、R2 桶信息、新增接口与运行策略说明。
-  - 更新 `src/packages/obr-room-core.json`：纳入用户手动翻译修订（`Owlbear Rodeo -> 枭熊VTT`）。
-  - 更新 `.gitignore`：忽略 `src/worker/node_modules/` 与 `src/worker/.wrangler/`。
-  - 云端部署：Worker `overlaylex-demo-api` 已发布到 `https://overlaylex-demo-api.zhangjiahe0830.workers.dev`，R2 桶 `overlaylex-packages-bfdcb419` 已绑定并上传两个包对象。
-  - 远程验证：`/health`、`/manifest`、`/packages`、`/packages/obr-room-core.json`、`/packages/overlaylex-domain-allowlist.json`、`/domain-package.json` 均可返回有效数据。
-  - 更新 `src/userscript/overlaylex.user.js`：新增本地种子域名冷启动门禁、缓存优先拒绝策略、运行期自动采集器（按域名分层、跨会话去重、增量复制、iframe 域名记录）。
-  - 新增 `src/packages/overlaylex-domain-seeds.json`：仓库内维护种子域名规则说明。
-  - 删除 `src/tools/extract-visible-texts.js`：废弃静态 HTML 抽词流程，改为用户脚本实时采集。
-  - 更新 `README.md`：抽词流程改为“运行期自动采集器”使用说明。
-  - 回退 `src/userscript/overlaylex.user.js`：移除采集逻辑，恢复主脚本“仅负责翻译注入”的单一职责。
-  - 新增 `src/userscript/overlaylex.collector.user.js`：独立实时采集脚本（全站运行、按域名去重、增量复制、iframe 域名记录）。
-  - 更新 `README.md`：改为双脚本说明，明确“主翻译脚本”与“独立采集脚本”分离安装与使用流程。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：采集脚本悬浮球支持拖动，并避免拖拽后误触发点击开关面板。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：采集仅保留“纯英文向”词条（过滤中文/无字母噪声），并排除采集器自身 UI 文案，修复计数自循环增长问题。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：复制导出改为简洁行格式 `"英文",""`，新增“一键复制全部合并”按钮（跨域名去重合并导出）。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：新增“清空当前域数据 / 清空全部采集数据”按钮，并加入二次确认，便于快速清理历史缓存。
-  - 更新 `src/userscript/overlaylex.collector.user.js`：修复误采集脚本/CSS 代码文本（过滤 script/style 等节点及代码特征），并将复制格式改为“按域名分组 + 词条逗号串”（`"A","B","C"`）；新增域名下拉与“复制选定域名”按钮。
-  - 新增 `src/packages/obr-www-owlbear-rodeo.json`、`src/packages/obr-clash-battle-system-com.json`、`src/packages/obr-smoke-battle-system-com.json`、`src/packages/obr-outliner-owlbear-rodeo.json`、`src/packages/obr-owlbear-hp-tracker-pages-dev.json`：将 `采集数据.csv` 的 5 个域名词条按域名拆包并批量翻译为中英映射。
-  - 更新 `src/userscript/overlaylex.user.js`：新增按包 `target.host/pathPrefix` 的命中判断，只加载当前页面命中的域名包，避免跨域包混载污染翻译结果。
-  - 更新 `src/packages/overlaylex-domain-allowlist.json`：扩充插件域名白名单（Battle-System、DDDice、AoE、HP Tracker、GitLab 插件域名），版本升至 `0.2.0`。
-  - 更新 `src/worker/src/data.js`：补充 5 个域名翻译包目录元信息，并同步域名准入包版本与回退规则为 `0.2.0`。
+## 提交规范
+- 推荐使用 Conventional Commits：
+  - `feat(scope): ...`
+  - `fix(scope): ...`
+  - `docs: ...`
+  - `chore: ...`
+- 提交信息要求简洁且可读，能一眼看出“改了什么、为什么改”。
+
+## 文档规范
+- `PLANS.md`：记录任务计划、执行顺序、状态变化。
+- `PROGRESS.md`：记录项目状态快照（最新结论、关键决策、常见坑）。
+- `CHANGELOG.md`：记录对外可见的重要改动点。
+
+## 开发原则（教学向）
+- 优先简单直观实现，避免过度抽象和深层嵌套。
+- 错误处理与主流程分离，统一日志与提示出口。
+- 注释聚焦“为什么这样做”，不是重复代码字面含义。
