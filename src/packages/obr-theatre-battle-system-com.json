@@ -5,7 +5,7 @@
     "host": "theatre.battle-system.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.6",
+  "version": "0.1.8",
   "translations": {
     "1. Dialogue": "",
     "1. Token Selector": "1. Token选择器",

@@ -5,7 +5,7 @@
     "host": "marked.battle-system.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.7",
+  "version": "0.1.9",
   "translations": {
     "Add another label row to the list for a new item.": "在先攻表中为新成员添加先攻序列。",
     "Add Label": "添加标签",
