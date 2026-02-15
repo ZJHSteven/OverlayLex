@@ -99,6 +99,14 @@ export const PACKAGE_CATALOG = {
     "enabledByDefault": true,
     "description": "HP Tracker 插件翻译包（自动采集生成）"
   },
+  "obr-owlbear-rodeo-bubbles-extension-onrender-com": {
+    "id": "obr-owlbear-rodeo-bubbles-extension-onrender-com",
+    "name": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com（自动同步）"
+  },
   "obr-smoke-battle-system-com": {
     "id": "obr-smoke-battle-system-com",
     "name": "Smoke 插件中文包（smoke.battle-system.com）",
@@ -107,11 +115,27 @@ export const PACKAGE_CATALOG = {
     "enabledByDefault": true,
     "description": "Smoke & Spectre 插件翻译包（自动采集生成）"
   },
+  "obr-theatre-battle-system-com": {
+    "id": "obr-theatre-battle-system-com",
+    "name": "OBR 自动翻译包 - theatre.battle-system.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - theatre.battle-system.com（自动同步）"
+  },
+  "obr-www-dummysheet-com": {
+    "id": "obr-www-dummysheet-com",
+    "name": "OBR 自动翻译包 - www.dummysheet.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - www.dummysheet.com（自动同步）"
+  },
   "obr-www-owlbear-rodeo": {
     "id": "obr-www-owlbear-rodeo",
     "name": "OBR 主站与房间中文包（owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "enabledByDefault": true,
     "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
@@ -119,7 +143,7 @@ export const PACKAGE_CATALOG = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "enabledByDefault": true,
     "description": "控制脚本允许在哪些域名继续执行"
   }
@@ -171,7 +195,7 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "rules": [
       {
         "type": "exact",
@@ -235,6 +259,18 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
         "value": "music-player-adrf.onrender.com",
         "comment": "自动同步包域名",
         "source": "obr-music-player-adrf-onrender-com"
+      },
+      {
+        "type": "exact",
+        "value": "owlbear-rodeo-bubbles-extension.onrender.com",
+        "comment": "自动同步包域名",
+        "source": "obr-owlbear-rodeo-bubbles-extension-onrender-com"
+      },
+      {
+        "type": "exact",
+        "value": "www.dummysheet.com",
+        "comment": "自动同步包域名",
+        "source": "obr-www-dummysheet-com"
       }
     ]
   }
