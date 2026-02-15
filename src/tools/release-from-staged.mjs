@@ -835,7 +835,7 @@ function syncWorkerCatalogWithPackages(allRecords, releasedTranslationIds) {
   };
 }
 
-function bumpVersionsForStagedPackages(stagedRecords) {
+function bumpVersionsForStagedPackages(stagedRecords, remoteVersionMap = null) {
   const bumps = [];
   for (const record of stagedRecords) {
     // 域名准入包由“同步逻辑”统一管理版本，避免同一轮改动重复 bump。
@@ -844,11 +844,27 @@ function bumpVersionsForStagedPackages(stagedRecords) {
     }
 
     const currentVersion = String(record.data.version || "").trim();
-    const nextVersion = bumpPatch(currentVersion);
-    if (!nextVersion) {
-      throw new Error(`包 version 不是 semver（x.y.z）：${record.relativePath} -> ${currentVersion}`);
+    const remoteVersion = remoteVersionMap ? String(remoteVersionMap.get(record.id) || "").trim() : "";
+    let bumpBaseVersion = currentVersion;
+    if (remoteVersion) {
+      const remoteVsLocal = compareSemver(remoteVersion, currentVersion);
+      if (remoteVsLocal === null) {
+        throw new Error(
+          `线上或本地版本不是 semver（x.y.z）：${record.id} local=${currentVersion} remote=${remoteVersion}`
+        );
+      }
+      // 若 main 本地版本落后于线上，自动以“线上版本”为基线继续 +1，
+      // 避免出现“脚本自动 bump 后仍 <= 线上”的失败体验。
+      if (remoteVsLocal > 0) {
+        bumpBaseVersion = remoteVersion;
+      }
     }
-    if (nextVersion === currentVersion) {
+
+    const nextVersion = bumpPatch(bumpBaseVersion);
+    if (!nextVersion) {
+      throw new Error(`包 version 不是 semver（x.y.z）：${record.relativePath} -> ${bumpBaseVersion}`);
+    }
+    if (nextVersion === currentVersion && !remoteVersion) {
       continue;
     }
 
@@ -863,6 +879,7 @@ function bumpVersionsForStagedPackages(stagedRecords) {
       relativePath: record.relativePath,
       from: currentVersion,
       to: nextVersion,
+      remote: remoteVersion || "",
     });
   }
   return bumps;
@@ -956,11 +973,7 @@ function assertWorkerCatalogConsistency(allRecords, releasedTranslationIds) {
   }
 }
 
-async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl) {
-  if (changedFiles.length === 0) {
-    return;
-  }
-
+async function fetchRemoteVersionMap(apiUrl) {
   const manifestUrl = `${String(apiUrl || DEFAULT_API_URL).replace(/\/+$/, "")}/manifest`;
   const response = await fetch(manifestUrl);
   if (!response.ok) {
@@ -981,6 +994,15 @@ async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl
   if (manifest?.domainPackage?.id && manifest?.domainPackage?.version) {
     remoteVersionMap.set(String(manifest.domainPackage.id), String(manifest.domainPackage.version));
   }
+  return remoteVersionMap;
+}
+
+async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl, injectedRemoteVersionMap = null) {
+  if (changedFiles.length === 0) {
+    return;
+  }
+
+  const remoteVersionMap = injectedRemoteVersionMap || (await fetchRemoteVersionMap(apiUrl));
 
   const errors = [];
   for (const relativePath of changedFiles) {
@@ -1097,7 +1119,8 @@ async function commandPrepareFromStaged(options) {
     return;
   }
 
-  const bumpedPackages = bumpVersionsForStagedPackages(stagedRecords);
+  const remoteVersionMap = await fetchRemoteVersionMap(DEFAULT_API_URL);
+  const bumpedPackages = bumpVersionsForStagedPackages(stagedRecords, remoteVersionMap);
   const releasedTranslationIds = getReleasedTranslationIdsFromWorkerCatalog();
   for (const record of stagedRecords) {
     if (record.kind === "translation") {
@@ -1124,14 +1147,15 @@ async function commandPrepareFromStaged(options) {
   const latestAllRecords = readAllPublishablePackages();
   assertAllowlistCoverage(latestAllRecords, releasedTranslationIds);
   assertWorkerCatalogConsistency(latestAllRecords, releasedTranslationIds);
-  await assertChangedPackageVersionGreaterThanRemote(finalStaged.packageFiles, DEFAULT_API_URL);
+  await assertChangedPackageVersionGreaterThanRemote(finalStaged.packageFiles, DEFAULT_API_URL, remoteVersionMap);
 
   logInfo("自动处理结果：");
   if (bumpedPackages.length === 0) {
     logInfo("  - 本轮无翻译包版本递增（可能只改了域名包）。");
   } else {
     for (const item of bumpedPackages) {
-      logInfo("  - 版本递增：", `${item.id} ${item.from} -> ${item.to}`);
+      const remoteHint = item.remote ? `（remote=${item.remote}）` : "";
+      logInfo("  - 版本递增：", `${item.id} ${item.from} -> ${item.to}${remoteHint}`);
     }
   }
   if (allowlistResult.changed) {
