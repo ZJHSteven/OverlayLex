@@ -9,6 +9,11 @@
 
 ## 变更日志
 - 2026-02-15
+  - 回退 `src/userscript/overlaylex.user.js`：将 `LOCAL_DOMAIN_SEEDS` 恢复为最小主站种子（`owlbear.rodeo / www.owlbear.rodeo / .owlbear.rodeo / .owlbear.app`），不再把 seeds 扩展为完整 allowlist。
+  - 重构 `src/userscript/overlaylex.user.js` 启动门禁：改为“本地 allowlist 缓存优先判定；仅在无缓存时使用 seed 兜底”，并且“是否运行”判定阶段不再发起网络请求。
+  - 调整 `src/userscript/overlaylex.user.js` 更新时机：云端 manifest / domain allowlist 拉取统一放到脚本成功启动后（后台异步）执行，失败时继续沿用现有可视化报错提示。
+  - 更新 `src/userscript/overlaylex.user.js`：版本升级到 `0.2.15`（`@version` 与 `SCRIPT_VERSION` 同步），用于触发油猴自动更新。
+  - 回退 `src/packages/overlaylex-domain-seeds.json`：恢复最小 seeds 规则并保持版本 `0.1.0`。
   - 修复 `src/userscript/overlaylex.user.js`：本地 `LOCAL_DOMAIN_SEEDS` 规则过窄导致 iframe 插件页被提前门禁拦截的问题；将 seeds 扩展为覆盖 `battle-system.com`、`onrender.com`、`pages.dev`、`dummysheet` 等已收录插件域名，恢复 iframe 注入翻译。
   - 更新 `src/userscript/overlaylex.user.js`：版本升级到 `0.2.14`（`@version` 与 `SCRIPT_VERSION` 同步），用于触发油猴自动更新。
   - 更新 `src/packages/overlaylex-domain-seeds.json`：同步种子规则到 `0.1.1`，与脚本内置 seeds 保持一致，避免规则漂移。

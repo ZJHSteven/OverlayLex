@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.14
+// @version      0.2.15
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
@@ -29,7 +29,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.14";
+  const SCRIPT_VERSION = "0.2.15";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -63,7 +63,7 @@
   const LOCAL_DOMAIN_SEEDS = {
     id: "overlaylex-domain-seeds",
     kind: "domain-seeds",
-    version: "0.1.1",
+    version: "0.1.0",
     rules: [
       {
         type: "exact",
@@ -80,46 +80,6 @@
       {
         type: "suffix",
         value: ".owlbear.app",
-      },
-      {
-        type: "suffix",
-        value: ".battle-system.com",
-      },
-      {
-        type: "exact",
-        value: "dddice.com",
-      },
-      {
-        type: "exact",
-        value: "aoe.owlbear.davidsev.co.uk",
-      },
-      {
-        type: "exact",
-        value: "owlbear-hp-tracker.pages.dev",
-      },
-      {
-        type: "exact",
-        value: "resident-uhlig.gitlab.io",
-      },
-      {
-        type: "exact",
-        value: "bubbles-for-owlbear-rodeo.pages.dev",
-      },
-      {
-        type: "exact",
-        value: "movement-tracker.abarbre.com",
-      },
-      {
-        type: "exact",
-        value: "music-player-adrf.onrender.com",
-      },
-      {
-        type: "exact",
-        value: "owlbear-rodeo-bubbles-extension.onrender.com",
-      },
-      {
-        type: "exact",
-        value: "www.dummysheet.com",
       },
     ],
   };
@@ -627,47 +587,33 @@
     return isHostAllowedByDomainPackage(hostname, LOCAL_DOMAIN_SEEDS);
   }
 
-  async function ensureCurrentHostAllowed() {
-    const hostname = window.location.hostname.toLowerCase();
-
-    // 先用缓存快速判断，减少每次页面打开都阻塞网络。
-    if (state.domainPackage && isHostAllowedByDomainPackage(hostname, state.domainPackage)) {
+  /**
+   * 启动门禁判定（纯本地，无网络）。
+   * 输入：
+   * - hostname: 当前页面域名
+   * 输出：
+   * - allowed: 是否允许进入运行链路
+   * - from: "allowlist-cache" | "seed"
+   * - hasAllowlistCache: 是否存在 allowlist 本地缓存
+   *
+   * 设计约束（按当前协作约定）：
+   * 1) 判定“要不要运行”只看本地（缓存 allowlist 优先，seed 仅首装兜底）。
+   * 2) 任何云端更新都在插件运行起来后再进行，不阻塞首轮判定。
+   */
+  function resolveStartupGateByLocalRules(hostname) {
+    const hasAllowlistCache = Boolean(state.domainPackage);
+    if (hasAllowlistCache) {
       return {
-        allowed: true,
-        from: "cache",
-        remoteFailed: false,
-        hasCache: true,
+        allowed: isHostAllowedByDomainPackage(hostname, state.domainPackage),
+        from: "allowlist-cache",
+        hasAllowlistCache: true,
       };
     }
-
-    // 缓存命不中，再请求最新域名包。
-    try {
-      const remoteDomainPackage = await fetchDomainPackageByBestUrl();
-      setCachedDomainPackage(remoteDomainPackage);
-      return {
-        allowed: isHostAllowedByDomainPackage(hostname, remoteDomainPackage),
-        from: "remote",
-        remoteFailed: false,
-        hasCache: Boolean(state.domainPackage),
-      };
-    } catch (error) {
-      Logger.warn("域名包拉取失败，回退到缓存判断。", error);
-      // 网络失败时，如果缓存存在就按缓存兜底，否则 fail-close。
-      if (state.domainPackage) {
-        return {
-          allowed: isHostAllowedByDomainPackage(hostname, state.domainPackage),
-          from: "cache-fallback",
-          remoteFailed: true,
-          hasCache: true,
-        };
-      }
-      return {
-        allowed: false,
-        from: "none",
-        remoteFailed: true,
-        hasCache: false,
-      };
-    }
+    return {
+      allowed: isHostAllowedByLocalSeeds(hostname),
+      from: "seed",
+      hasAllowlistCache: false,
+    };
   }
 
   // ------------------------------
@@ -2332,39 +2278,22 @@
       return;
     }
 
-    // 第一步：本地 seeds 快速门禁（毫秒级）。
-    // 不在本地 OBR 生态 seeds 内的页面直接退出，避免全站无谓开销。
+    // 第一步：纯本地门禁判定（缓存 allowlist 优先，seed 仅首装兜底）。
     const currentHostname = window.location.hostname.toLowerCase();
-    if (!isHostAllowedByLocalSeeds(currentHostname)) {
+    const startupGate = resolveStartupGateByLocalRules(currentHostname);
+    if (!startupGate.allowed) {
       return;
     }
 
     // 第二步：先拿到 manifest（缓存优先），用于定位域名包 URL。
     await bootManifestFromCacheFirst();
-
-    // 第三步：云端域名门禁。未命中白名单则立刻结束，避免无关页面继续执行。
-    const gateResult = await ensureCurrentHostAllowed();
-    if (!gateResult.allowed) {
-      // 特别处理：仅在“首轮拉取失败且无本地缓存”时弹可视化错误，
-      // 防止用户遇到“脚本亮起但页面毫无变化”却不知原因。
-      if (gateResult.remoteFailed && !gateResult.hasCache) {
-        showRuntimeNotice("首次启动失败：后端域名包无法访问，且本地无缓存。请先检查后端可达性。", {
-          level: "error",
-          durationMs: 7600,
-        });
-      }
-      Logger.info(`当前域名不在 OverlayLex 域名包白名单内，已退出。hostname=${location.hostname}`);
-      return;
-    }
-
-    // 第四步：进入正常翻译链路。
+    // 第三步：进入正常翻译链路（仅依据本地门禁结果）。
     await reloadEnabledPackages();
     createFloatingUi();
     setupMutationObserver();
     scheduleFullReapply();
     setStatus("OverlayLex 已启动。");
-
-    // 后台异步更新，不阻塞首屏。
+    // 第四步：后台异步更新，不阻塞首屏。
     backgroundRefreshManifestAndDomain();
   }
 
