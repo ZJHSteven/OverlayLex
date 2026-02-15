@@ -7,7 +7,7 @@ OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。
 
 ## 线上 API（已部署）
 
-- Worker 地址：`https://overlaylex-demo-api.zhangjiahe0830.workers.dev`
+- Worker 地址：`https://overlaylex-api.zjhstudio.com`
 - R2 桶：`overlaylex-packages-bfdcb419`
 
 ## 目录结构

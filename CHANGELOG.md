@@ -16,6 +16,10 @@
   - 新增 `PLANS.md`：落地本轮 ExecPlan（seeds 内置、失败提示、文档同步、提交流程）。
   - 新增 `PROGRESS.md`：建立项目状态快照，记录当前结论、关键决策与常见坑。
   - 重建 `AGENTS.md`：补齐当前协作规范，明确 ExecPlan、PROGRESS 与提交要求。
+  - Cloudflare 部署：为 Worker `overlaylex-demo-api` 成功绑定自定义域 `overlaylex-api.zjhstudio.com`，并验证 `GET /health`、`GET /manifest` 返回 `200`。
+  - 更新 `src/worker/wrangler.toml`：新增 `routes` 自定义域名配置，确保后续常规部署持续保留该域名绑定。
+  - 更新 `src/userscript/overlaylex.user.js`：默认 `apiBaseUrl` 切换为 `https://overlaylex-api.zjhstudio.com`，优先使用自有域名提升可达性。
+  - 更新 `README.md`：线上 API 地址同步为 `https://overlaylex-api.zjhstudio.com`。
 - 2026-02-10
   - 更新 `src/packages/obr-smoke-battle-system-com.json`：修复关键词条翻译（`Double-Side Walls`、`Smoke`、`This will change ALL walls...`），并通过 `release-from-staged` 重新发布；版本由 `0.1.5` 递增至 `0.1.6`，提交 `main/release`。
   - 更新 `src/tools/release-from-staged.mjs`：新增发布阶段自动 `stash`/自动恢复机制（默认开启）；在 `main push` 成功后、切换 `release` 前自动暂存未暂存/未跟踪改动，发布流程收尾时自动恢复，降低“工作区有开发中改动导致 `git switch release` 失败”的中断概率。

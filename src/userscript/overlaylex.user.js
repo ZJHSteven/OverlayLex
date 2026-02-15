@@ -39,10 +39,10 @@
   };
   const CONFIG = {
     /**
-     * 这里会在部署后替换成真实 worker URL。
-     * 你可以先手动改成你自己的 workers.dev 地址。
+     * 默认后端地址（优先使用自有域名，提高部分地区可达性）。
+     * 如需切换测试环境，可手动替换为其它 Worker 域名。
      */
-    apiBaseUrl: "https://overlaylex-demo-api.zhangjiahe0830.workers.dev",
+    apiBaseUrl: "https://overlaylex-api.zjhstudio.com",
     manifestPath: "/manifest",
     packagePathPrefix: "/packages/",
     domainPackagePath: "/domain-package.json",
