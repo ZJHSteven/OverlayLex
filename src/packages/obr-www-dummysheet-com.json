@@ -5,7 +5,7 @@
     "host": "www.dummysheet.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.1",
+  "version": "0.1.2",
   "translations": {
     "• ... and you can IMPORT it back again.": "… 并且你可以再次将它重新导入回来",
     "• Edit the righthand columns by clicking on them.": "• 通过点击右边的列来编辑",
