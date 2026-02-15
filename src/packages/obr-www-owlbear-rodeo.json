@@ -8,7 +8,7 @@
     ],
     "pathPrefix": "/"
   },
-  "version": "0.2.6",
+  "version": "0.2.7",
   "translations": {
     "A barebones dice roller that allows for hidden rolls and logging rolls.": "一个基础的骰子投掷器，支持隐藏投掷和记录投掷结果。",
     "A basic initiative tracker with a shared view for you and your players": "一个基本的先攻跟踪器，为您和您的玩家提供共享视图",
@@ -512,12 +512,6 @@
     "Undead": "",
     "Unlock Proportions": "",
     "Update": "",
-    "v0.1.0": "v0.1.0",
-    "v0.1.0 · obr-clash-battle-system-com": "",
-    "v0.1.0 · obr-outliner-owlbear-rodeo": "",
-    "v0.1.0 · obr-owlbear-hp-tracker-pages-dev": "",
-    "v0.1.0 · obr-smoke-battle-system-com": "",
-    "v0.2.0 · obr-www-owlbear-rodeo": "",
     "Viewport Controls": "视口控件",
     "Visible": "",
     "Warlock": "",

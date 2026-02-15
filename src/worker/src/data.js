@@ -103,7 +103,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-owlbear-rodeo-bubbles-extension-onrender-com",
     "name": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com（自动同步）"
   },
@@ -119,7 +119,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-theatre-battle-system-com",
     "name": "OBR 自动翻译包 - theatre.battle-system.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - theatre.battle-system.com（自动同步）"
   },
@@ -127,7 +127,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-dummysheet-com",
     "name": "OBR 自动翻译包 - www.dummysheet.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - www.dummysheet.com（自动同步）"
   },
@@ -135,7 +135,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-owlbear-rodeo",
     "name": "OBR 主站与房间中文包（owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.2.6",
+    "version": "0.2.7",
     "enabledByDefault": true,
     "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
