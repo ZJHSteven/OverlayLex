@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Collector
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.1.3
+// @version      0.2.0
 // @description  OverlayLex 采集脚本：实时收集页面英文词条并导出为翻译原文素材。
 // @author       OverlayLex
 // @match        *://*/*
@@ -30,11 +30,16 @@
   // 常量区
   // ------------------------------
   const STORAGE_KEY = "overlaylex:collector:global:v1";
+  const SETTINGS_KEY = "overlaylex:collector:settings:v1";
   const MESSAGE_TYPE = "overlaylex:collector-message:v1";
   const IS_TOP_WINDOW = window.top === window.self;
   const UI_ID_PREFIX = "overlaylex-collector";
   const OBSERVER_DEBOUNCE_MS = 80;
   const ACTIVITY_CAPTURE_DELAY_MS = 90;
+  const COLLECTOR_UPLOAD_API_BASE = "https://overlaylex-api.zjhstudio.com";
+  const COLLECTOR_UPLOAD_SCOPE = "current-host-incremental";
+  const COLLECTOR_UPLOAD_API_PATH = "/collector/submissions";
+  const SCRIPT_VERSION = "0.2.0";
   const CJK_REGEX = /[\u3400-\u9fff]/;
   const IGNORED_TEXT_PARENT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "TEMPLATE"]);
 
@@ -113,14 +118,103 @@
     }
   }
 
+  /**
+   * createDefaultSettings:
+   * - 目标：保存采集器 UI 布局、邀请码、协作者昵称等“配置类状态”。
+   * - 说明：与采集数据分离，避免清空采集数据时误删配置。
+   */
+  function createDefaultSettings() {
+    return {
+      version: 1,
+      inviteCode: "",
+      alias: "",
+      lastSubmissionId: "",
+      ui: {
+        ballTop: 170,
+        ballRight: 16,
+        panelTop: 120,
+        panelRight: 16,
+        panelOpen: false,
+        advancedOpen: false,
+        settingsOpen: false,
+      },
+    };
+  }
+
+  function normalizeSettingsShape(raw) {
+    const defaults = createDefaultSettings();
+    if (!raw || typeof raw !== "object") {
+      return defaults;
+    }
+    const normalized = {
+      ...defaults,
+      ...raw,
+      ui: {
+        ...defaults.ui,
+        ...(raw.ui && typeof raw.ui === "object" ? raw.ui : {}),
+      },
+    };
+    normalized.inviteCode = String(normalized.inviteCode || "");
+    normalized.alias = String(normalized.alias || "");
+    normalized.lastSubmissionId = String(normalized.lastSubmissionId || "");
+    return normalized;
+  }
+
+  function readSettings() {
+    try {
+      if (typeof GM_getValue === "function") {
+        return normalizeSettingsShape(GM_getValue(SETTINGS_KEY, createDefaultSettings()));
+      }
+    } catch (error) {
+      Logger.warn("读取采集器设置（GM）失败，将回退 localStorage。", error);
+    }
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) {
+        return createDefaultSettings();
+      }
+      return normalizeSettingsShape(JSON.parse(raw));
+    } catch (error) {
+      Logger.warn("读取采集器设置（localStorage）失败，使用默认设置。", error);
+      return createDefaultSettings();
+    }
+  }
+
+  function writeSettings(settings) {
+    try {
+      if (typeof GM_setValue === "function") {
+        GM_setValue(SETTINGS_KEY, settings);
+        return;
+      }
+    } catch (error) {
+      Logger.warn("写入采集器设置（GM）失败，将回退 localStorage。", error);
+    }
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (error) {
+      Logger.warn("写入采集器设置（localStorage）失败。", error);
+    }
+  }
+
   const state = {
     store: readStore(),
+    settings: readSettings(),
     persistTimerId: null,
     ui: {
       ball: null,
       panel: null,
       status: null,
       hostSelect: null,
+      uploadButton: null,
+      inviteInput: null,
+      aliasInput: null,
+      settingsDetails: null,
+      advancedDetails: null,
+      currentHostLabel: null,
+      uploadHint: null,
+      statusLevel: "info",
+      statusLockUntil: 0,
+      isUploading: false,
     },
   };
 
@@ -585,6 +679,7 @@
       payload[host] = texts;
     }
     return {
+      payload,
       serialized: JSON.stringify(payload, null, 2),
       selectedByHost,
     };
@@ -619,9 +714,14 @@
     schedulePersistStore();
   }
 
-  function setStatusText(text) {
+  function setStatusText(text, level = "info", holdMs = 0) {
     if (state.ui.status) {
       state.ui.status.textContent = text;
+      state.ui.status.dataset.level = level;
+    }
+    state.ui.statusLevel = level;
+    if (holdMs > 0) {
+      state.ui.statusLockUntil = Date.now() + holdMs;
     }
   }
 
@@ -629,12 +729,21 @@
     if (!IS_TOP_WINDOW) {
       return;
     }
+    if (Date.now() < (state.ui.statusLockUntil || 0)) {
+      return;
+    }
     const host = window.location.hostname.toLowerCase();
     const bucket = ensureHostBucket(host);
     const total = Object.keys(bucket.texts).length;
     const pending = Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
     const iframeHosts = Object.keys(bucket.iframeHosts).length;
-    setStatusText(`当前域名：总计 ${total}，未导出 ${pending}，iframe 域名 ${iframeHosts}。`);
+    if (state.ui.currentHostLabel) {
+      state.ui.currentHostLabel.textContent = host;
+    }
+    if (state.ui.uploadHint) {
+      state.ui.uploadHint.textContent = `当前域名未导出词条：${pending} 条（将作为一键上传默认范围）`;
+    }
+    setStatusText(`当前域名：总计 ${total}，未导出 ${pending}，iframe 域名 ${iframeHosts}。`, "info");
     refreshHostSelectorOptions();
   }
 
@@ -671,61 +780,225 @@
     selector.value = hosts[0];
   }
 
+  function updateCollectorSettings(partial) {
+    const patch = partial && typeof partial === "object" ? partial : {};
+    const next = {
+      ...state.settings,
+      ...patch,
+      ui: {
+        ...state.settings.ui,
+        ...(patch.ui && typeof patch.ui === "object" ? patch.ui : {}),
+      },
+    };
+    state.settings = normalizeSettingsShape(next);
+    writeSettings(state.settings);
+  }
+
+  function getCurrentHostPendingCount() {
+    const host = window.location.hostname.toLowerCase();
+    const bucket = ensureHostBucket(host);
+    return Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
+  }
+
+  function setUploadButtonBusy(isBusy, label = "") {
+    state.ui.isUploading = Boolean(isBusy);
+    if (!state.ui.uploadButton) {
+      return;
+    }
+    state.ui.uploadButton.disabled = Boolean(isBusy);
+    const labelNode = state.ui.uploadButton.querySelector(`[data-role="upload-label"]`);
+    if (!labelNode) {
+      return;
+    }
+    labelNode.textContent = label || "一键上传（本域增量）";
+  }
+
+  function readResponseJsonSafe(response) {
+    return response
+      .json()
+      .catch(() => ({ ok: false, error: "INVALID_JSON_RESPONSE", message: `服务端返回了非 JSON（HTTP ${response.status}）。` }));
+  }
+
+  async function submitCurrentHostIncremental() {
+    if (state.ui.isUploading) {
+      return;
+    }
+    const inviteCode = String(state.settings.inviteCode || "").trim();
+    if (!inviteCode) {
+      if (state.ui.settingsDetails) {
+        state.ui.settingsDetails.open = true;
+      }
+      updateCollectorSettings({ ui: { settingsOpen: true } });
+      setStatusText("请先在“上传设置”里填写邀请码，再执行一键上传。", "warn", 7000);
+      return;
+    }
+
+    const host = window.location.hostname.toLowerCase();
+    const { payload, selectedByHost } = buildHostScopedExport([host], true);
+    const selectedList = selectedByHost[host] || [];
+    if (selectedList.length === 0) {
+      setStatusText("当前域名没有未导出的增量词条，无需上传。", "warn", 5000);
+      return;
+    }
+
+    const body = {
+      version: 1,
+      scope: COLLECTOR_UPLOAD_SCOPE,
+      host,
+      payload,
+      meta: {
+        pageUrl: String(window.location.href || ""),
+        userAgent: String(navigator.userAgent || ""),
+        collectorScriptVersion: SCRIPT_VERSION,
+        alias: String(state.settings.alias || "").trim(),
+      },
+    };
+
+    setUploadButtonBusy(true, "上传中...");
+    setStatusText(`正在上传当前域名增量：${selectedList.length} 条...`, "info", 4000);
+
+    try {
+      const response = await fetch(`${COLLECTOR_UPLOAD_API_BASE}${COLLECTOR_UPLOAD_API_PATH}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-OverlayLex-Invite-Code": inviteCode,
+        },
+        body: JSON.stringify(body),
+      });
+      const responseJson = await readResponseJsonSafe(response);
+      if (!response.ok || !responseJson?.ok) {
+        setStatusText(`上传失败：${String(responseJson?.message || `HTTP ${response.status}`)}`, "error", 10000);
+        return;
+      }
+
+      markExportedByHost(selectedByHost);
+      updateCollectorSettings({ lastSubmissionId: String(responseJson.submissionId || "") });
+      setStatusText(
+        `上传成功：${selectedList.length} 条；提交编号 ${String(responseJson.submissionId || "unknown")}；已进入 CI 审核队列。`,
+        "success",
+        10000
+      );
+      refreshStatusText();
+    } catch (error) {
+      Logger.error("一键上传失败。", error);
+      setStatusText(`上传失败：${String(error?.message || error)}`, "error", 10000);
+    } finally {
+      setUploadButtonBusy(false);
+    }
+  }
+
   // ------------------------------
   // UI（仅顶层窗口）
   // ------------------------------
   function injectStyles() {
     const style = document.createElement("style");
     style.textContent = `
+      .${UI_ID_PREFIX}-hidden { display: none !important; }
       #${UI_ID_PREFIX}-ball {
         position: fixed;
         z-index: 2147483100;
-        top: 170px;
-        right: 16px;
-        width: 44px;
-        height: 44px;
+        width: 48px;
+        height: 48px;
         border-radius: 50%;
         border: none;
-        background: #0e9f6e;
+        padding: 0;
         color: #fff;
-        font-weight: 700;
-        cursor: move;
-        box-shadow: 0 6px 18px rgba(0,0,0,.22);
+        cursor: grab;
+        background: radial-gradient(circle at 30% 30%, #28d295 0%, #0d9d70 68%, #0a6e51 100%);
+        box-shadow: 0 10px 22px rgba(12, 94, 68, 0.32);
+      }
+      #${UI_ID_PREFIX}-ball:active { cursor: grabbing; transform: scale(0.98); }
+      .${UI_ID_PREFIX}-ball-ring {
+        position: absolute;
+        inset: -4px;
+        border-radius: 50%;
+        border: 1px solid rgba(45, 212, 191, 0.35);
+        box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.12);
+      }
+      .${UI_ID_PREFIX}-ball-core {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font: 700 18px/1 "Microsoft YaHei UI", "PingFang SC", sans-serif;
       }
       #${UI_ID_PREFIX}-panel {
         position: fixed;
         z-index: 2147483101;
-        top: 130px;
-        right: 16px;
-        width: 390px;
-        max-height: 72vh;
+        width: min(420px, calc(100vw - 12px));
+        max-height: 80vh;
         overflow: auto;
-        border-radius: 12px;
-        border: 1px solid #d0d7de;
-        background: #ffffff;
-        color: #1f2328;
+        border-radius: 14px;
+        border: 1px solid #dbe5ef;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        color: #1f2937;
         font: 14px/1.45 "Microsoft YaHei UI", "PingFang SC", sans-serif;
-        box-shadow: 0 12px 32px rgba(0,0,0,.25);
-        padding: 12px;
+        box-shadow: 0 18px 44px rgba(15, 23, 42, 0.2);
       }
-      .${UI_ID_PREFIX}-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        margin-bottom: 8px;
+      #${UI_ID_PREFIX}-panel * { box-sizing: border-box; }
+      .${UI_ID_PREFIX}-drag-handle {
+        height: 14px;
+        cursor: move;
+        background: radial-gradient(circle, rgba(100,116,139,.32) 1px, transparent 1.4px) center/10px 5px repeat-x;
       }
+      .${UI_ID_PREFIX}-panel-body { padding: 10px 12px 12px; }
+      .${UI_ID_PREFIX}-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+      .${UI_ID_PREFIX}-title { margin:0; font-size:15px; font-weight:700; }
+      .${UI_ID_PREFIX}-subtitle { margin:2px 0 0; font-size:12px; color:#64748b; }
+      .${UI_ID_PREFIX}-close-btn {
+        border:1px solid #d7e0ea; background:#fff; border-radius:10px; padding:6px 10px; cursor:pointer;
+      }
+      .${UI_ID_PREFIX}-card {
+        border:1px solid #e5ecf4; background:rgba(255,255,255,.86); border-radius:12px; padding:10px; margin-bottom:10px;
+      }
+      .${UI_ID_PREFIX}-host-pill {
+        display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border-radius:999px;
+        border:1px solid #cfe0ff; background:#eff6ff; color:#1d4ed8; font-size:12px;
+      }
+      .${UI_ID_PREFIX}-hint { margin:8px 0; color:#475569; font-size:12px; }
+      .${UI_ID_PREFIX}-primary {
+        width:100%; border:1px solid #0d9d70; border-radius:12px; padding:10px 12px; cursor:pointer; color:#fff;
+        background:linear-gradient(180deg,#18b37f 0%,#0d9d70 100%); box-shadow:0 8px 16px rgba(13,157,112,.2); font-weight:700;
+      }
+      .${UI_ID_PREFIX}-primary:disabled { opacity:.7; cursor:not-allowed; }
+      .${UI_ID_PREFIX}-primary-sub { display:block; margin-top:4px; font-size:12px; font-weight:400; opacity:.92; }
+      .${UI_ID_PREFIX}-details {
+        border:1px solid #e5ecf4; border-radius:12px; background:rgba(255,255,255,.86); margin-bottom:10px; overflow:hidden;
+      }
+      .${UI_ID_PREFIX}-details > summary {
+        list-style:none; cursor:pointer; padding:10px 12px; font-weight:600;
+      }
+      .${UI_ID_PREFIX}-details > summary::-webkit-details-marker { display:none; }
+      .${UI_ID_PREFIX}-details[open] > summary { border-bottom:1px solid #e5ecf4; background:#f8fbff; }
+      .${UI_ID_PREFIX}-details-content { padding:10px 12px 12px; }
+      .${UI_ID_PREFIX}-field { margin-bottom:10px; }
+      .${UI_ID_PREFIX}-field:last-child { margin-bottom:0; }
+      .${UI_ID_PREFIX}-field label { display:block; margin-bottom:4px; color:#475569; font-size:12px; }
+      .${UI_ID_PREFIX}-field input, .${UI_ID_PREFIX}-field select {
+        width:100%; border:1px solid #d3dce6; border-radius:10px; background:#fff; padding:8px 10px; font:inherit;
+      }
+      .${UI_ID_PREFIX}-mini { color:#64748b; font-size:12px; }
+      .${UI_ID_PREFIX}-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+      .${UI_ID_PREFIX}-row:last-child { margin-bottom:0; }
       .${UI_ID_PREFIX}-row button {
-        border: 1px solid #d0d7de;
-        background: #f6f8fa;
-        padding: 6px 10px;
-        border-radius: 8px;
-        cursor: pointer;
+        flex:1; min-width:0; border:1px solid #d3dce6; background:#f8fafc; border-radius:10px; padding:8px 10px; cursor:pointer;
       }
-      #${UI_ID_PREFIX}-status {
-        margin-top: 8px;
-        color: #57606a;
-        font-size: 12px;
+      .${UI_ID_PREFIX}-row button:hover { background:#eef4fa; }
+      .${UI_ID_PREFIX}-status {
+        margin-top:8px; border-radius:10px; border:1px solid #dbe5ef; background:#f8fafc; color:#334155; padding:8px 10px; font-size:12px;
+        white-space:pre-wrap; word-break:break-word;
+      }
+      .${UI_ID_PREFIX}-status[data-level="success"] { border-color:#a7f3d0; background:#ecfdf5; color:#065f46; }
+      .${UI_ID_PREFIX}-status[data-level="warn"] { border-color:#fde68a; background:#fffbeb; color:#92400e; }
+      .${UI_ID_PREFIX}-status[data-level="error"] { border-color:#fecaca; background:#fef2f2; color:#991b1b; }
+      .${UI_ID_PREFIX}-btn-row { display:flex; gap:8px; margin-top:8px; }
+      .${UI_ID_PREFIX}-btn-row button {
+        flex:1; border:1px solid #d3dce6; background:#fff; border-radius:10px; padding:8px 10px; cursor:pointer;
+      }
+      @media (max-width: 480px) {
+        .${UI_ID_PREFIX}-row, .${UI_ID_PREFIX}-btn-row { flex-direction: column; align-items: stretch; }
       }
     `;
     document.head.appendChild(style);
@@ -736,40 +1009,109 @@
       return;
     }
     injectStyles();
+    const persistedUi = state.settings.ui || {};
+    const EDGE_PADDING = 8;
+    const BALL_SIZE = 48;
+    const PANEL_FALLBACK_WIDTH = 420;
+    const PANEL_FALLBACK_HEIGHT = 520;
+    const DRAG_THRESHOLD = 3;
+    let ballAnchorTop = Number(persistedUi.ballTop);
+    let ballAnchorRight = Number(persistedUi.ballRight);
+    let panelAnchorTop = Number(persistedUi.panelTop);
+    let panelAnchorRight = Number(persistedUi.panelRight);
+    let isPanelOpen = Boolean(persistedUi.panelOpen);
+    let suppressOpenUntil = 0;
+
+    if (!Number.isFinite(ballAnchorTop)) {
+      ballAnchorTop = 170;
+    }
+    if (!Number.isFinite(ballAnchorRight)) {
+      ballAnchorRight = 16;
+    }
+    if (!Number.isFinite(panelAnchorTop)) {
+      panelAnchorTop = 120;
+    }
+    if (!Number.isFinite(panelAnchorRight)) {
+      panelAnchorRight = 16;
+    }
 
     const ball = document.createElement("button");
     ball.id = `${UI_ID_PREFIX}-ball`;
-    ball.textContent = "采";
+    ball.type = "button";
     ball.title = "OverlayLex 采集器";
+    ball.innerHTML = `
+      <span class="${UI_ID_PREFIX}-ball-ring"></span>
+      <span class="${UI_ID_PREFIX}-ball-core">采</span>
+    `;
 
     const panel = document.createElement("div");
     panel.id = `${UI_ID_PREFIX}-panel`;
-    panel.hidden = true;
+    panel.classList.add(`${UI_ID_PREFIX}-hidden`);
     panel.innerHTML = `
-      <h3 style="margin:0 0 10px;">OverlayLex 采集器</h3>
-      <div class="${UI_ID_PREFIX}-row">
-        <button id="${UI_ID_PREFIX}-copy-increment">复制本域增量</button>
-        <button id="${UI_ID_PREFIX}-copy-full">复制本域全量</button>
+      <div class="${UI_ID_PREFIX}-drag-handle" id="${UI_ID_PREFIX}-panel-drag-handle" title="拖动面板"></div>
+      <div class="${UI_ID_PREFIX}-panel-body">
+        <div class="${UI_ID_PREFIX}-header">
+          <div>
+            <h3 class="${UI_ID_PREFIX}-title">OverlayLex 采集器</h3>
+            <p class="${UI_ID_PREFIX}-subtitle">当前域名：<span id="${UI_ID_PREFIX}-current-host"></span></p>
+          </div>
+          <button class="${UI_ID_PREFIX}-close-btn" id="${UI_ID_PREFIX}-close" type="button">关闭</button>
+        </div>
+        <div class="${UI_ID_PREFIX}-card">
+          <div class="${UI_ID_PREFIX}-host-pill">
+            <span>默认上传范围</span>
+            <strong>本域增量</strong>
+          </div>
+          <div class="${UI_ID_PREFIX}-hint" id="${UI_ID_PREFIX}-upload-hint">当前域名未导出词条：0 条（将作为一键上传默认范围）</div>
+          <button class="${UI_ID_PREFIX}-primary" id="${UI_ID_PREFIX}-upload-current-increment" type="button">
+            <span data-role="upload-label">一键上传（本域增量）</span>
+            <span class="${UI_ID_PREFIX}-primary-sub">CI 自动生成采集 PR，你只需等待审核</span>
+          </button>
+        </div>
+        <details class="${UI_ID_PREFIX}-details" id="${UI_ID_PREFIX}-settings-details">
+          <summary>上传设置（邀请码 / 协作者昵称）</summary>
+          <div class="${UI_ID_PREFIX}-details-content">
+            <div class="${UI_ID_PREFIX}-field">
+              <label for="${UI_ID_PREFIX}-invite-input">邀请码（必填）</label>
+              <input id="${UI_ID_PREFIX}-invite-input" type="password" placeholder="输入共享邀请码" autocomplete="off" />
+              <div class="${UI_ID_PREFIX}-mini">仅保存在本地脚本配置中，不会清空采集数据时一起删除。</div>
+            </div>
+            <div class="${UI_ID_PREFIX}-field">
+              <label for="${UI_ID_PREFIX}-alias-input">协作者昵称（可选）</label>
+              <input id="${UI_ID_PREFIX}-alias-input" type="text" placeholder="例如：Smoke巡检-小王" />
+            </div>
+            <div class="${UI_ID_PREFIX}-btn-row">
+              <button id="${UI_ID_PREFIX}-save-settings" type="button">保存上传设置</button>
+              <button id="${UI_ID_PREFIX}-toggle-invite-visibility" type="button">显示/隐藏邀请码</button>
+            </div>
+          </div>
+        </details>
+        <details class="${UI_ID_PREFIX}-details" id="${UI_ID_PREFIX}-advanced-details">
+          <summary>高级操作（复制 / 清理 / 调试）</summary>
+          <div class="${UI_ID_PREFIX}-details-content">
+            <div class="${UI_ID_PREFIX}-row">
+              <button id="${UI_ID_PREFIX}-copy-increment" type="button">复制本域增量</button>
+              <button id="${UI_ID_PREFIX}-copy-full" type="button">复制本域全量</button>
+            </div>
+            <div class="${UI_ID_PREFIX}-row">
+              <button id="${UI_ID_PREFIX}-copy-all-merged" type="button">一键复制全部域名</button>
+            </div>
+            <div class="${UI_ID_PREFIX}-row">
+              <select id="${UI_ID_PREFIX}-host-select"></select>
+              <button id="${UI_ID_PREFIX}-copy-selected-host" type="button">复制选定域名</button>
+            </div>
+            <div class="${UI_ID_PREFIX}-row">
+              <button id="${UI_ID_PREFIX}-copy-iframe-hosts" type="button">复制本域 iframe 域名</button>
+              <button id="${UI_ID_PREFIX}-reset-exported" type="button">重置本域增量游标</button>
+            </div>
+            <div class="${UI_ID_PREFIX}-row">
+              <button id="${UI_ID_PREFIX}-clear-current-host" type="button">清空当前域数据</button>
+              <button id="${UI_ID_PREFIX}-clear-all-hosts" type="button">清空全部采集数据</button>
+            </div>
+          </div>
+        </details>
+        <div class="${UI_ID_PREFIX}-status" id="${UI_ID_PREFIX}-status" data-level="info">初始化中...</div>
       </div>
-      <div class="${UI_ID_PREFIX}-row">
-        <button id="${UI_ID_PREFIX}-copy-all-merged">一键复制全部域名</button>
-      </div>
-      <div class="${UI_ID_PREFIX}-row">
-        <select id="${UI_ID_PREFIX}-host-select" style="flex:1;border:1px solid #d0d7de;border-radius:8px;padding:6px;"></select>
-        <button id="${UI_ID_PREFIX}-copy-selected-host">复制选定域名</button>
-      </div>
-      <div class="${UI_ID_PREFIX}-row">
-        <button id="${UI_ID_PREFIX}-copy-iframe-hosts">复制本域 iframe 域名</button>
-        <button id="${UI_ID_PREFIX}-reset-exported">重置本域增量游标</button>
-      </div>
-      <div class="${UI_ID_PREFIX}-row">
-        <button id="${UI_ID_PREFIX}-clear-current-host">清空当前域数据</button>
-        <button id="${UI_ID_PREFIX}-clear-all-hosts">清空全部采集数据</button>
-      </div>
-      <div class="${UI_ID_PREFIX}-row">
-        <button id="${UI_ID_PREFIX}-close">关闭</button>
-      </div>
-      <div id="${UI_ID_PREFIX}-status">初始化中...</div>
     `;
 
     document.body.appendChild(ball);
@@ -778,57 +1120,332 @@
     state.ui.panel = panel;
     state.ui.status = panel.querySelector(`#${UI_ID_PREFIX}-status`);
     state.ui.hostSelect = panel.querySelector(`#${UI_ID_PREFIX}-host-select`);
+    state.ui.uploadButton = panel.querySelector(`#${UI_ID_PREFIX}-upload-current-increment`);
+    state.ui.inviteInput = panel.querySelector(`#${UI_ID_PREFIX}-invite-input`);
+    state.ui.aliasInput = panel.querySelector(`#${UI_ID_PREFIX}-alias-input`);
+    state.ui.settingsDetails = panel.querySelector(`#${UI_ID_PREFIX}-settings-details`);
+    state.ui.advancedDetails = panel.querySelector(`#${UI_ID_PREFIX}-advanced-details`);
+    state.ui.currentHostLabel = panel.querySelector(`#${UI_ID_PREFIX}-current-host`);
+    state.ui.uploadHint = panel.querySelector(`#${UI_ID_PREFIX}-upload-hint`);
+    if (state.ui.inviteInput) {
+      state.ui.inviteInput.value = state.settings.inviteCode || "";
+    }
+    if (state.ui.aliasInput) {
+      state.ui.aliasInput.value = state.settings.alias || "";
+    }
+    if (state.ui.settingsDetails) {
+      state.ui.settingsDetails.open = Boolean(persistedUi.settingsOpen);
+    }
+    if (state.ui.advancedDetails) {
+      state.ui.advancedDetails.open = Boolean(persistedUi.advancedOpen);
+    }
     refreshHostSelectorOptions(window.location.hostname.toLowerCase());
 
-    let lastPointerWasDrag = false;
-    ball.addEventListener("click", () => {
-      // 拖拽释放后会触发 click，这里要跳过一次，避免“拖一下就误打开面板”。
-      if (lastPointerWasDrag) {
-        lastPointerWasDrag = false;
+    function setVisible(element, visible) {
+      if (!element) {
         return;
       }
-      panel.hidden = !panel.hidden;
-      refreshStatusText();
-    });
+      element.classList.toggle(`${UI_ID_PREFIX}-hidden`, !visible);
+    }
 
-    // 悬浮球拖拽：支持拖到任意边缘，方便不遮挡页面内容。
-    let drag = null;
-    ball.addEventListener("pointerdown", (event) => {
-      const style = window.getComputedStyle(ball);
-      drag = {
-        startX: event.clientX,
-        startY: event.clientY,
-        startTop: parseFloat(style.top || "170"),
-        startRight: parseFloat(style.right || "16"),
-        moved: false,
+    function clampValue(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function getViewportSize() {
+      return {
+        width: Math.max(window.innerWidth || 0, document.documentElement.clientWidth || 0),
+        height: Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0),
       };
-      ball.setPointerCapture(event.pointerId);
-    });
-    ball.addEventListener("pointermove", (event) => {
-      if (!drag) {
+    }
+
+    function clampBallAnchor(top, right) {
+      const viewport = getViewportSize();
+      return {
+        top: clampValue(top, EDGE_PADDING, Math.max(EDGE_PADDING, viewport.height - BALL_SIZE - EDGE_PADDING)),
+        right: clampValue(right, EDGE_PADDING, Math.max(EDGE_PADDING, viewport.width - BALL_SIZE - EDGE_PADDING)),
+      };
+    }
+
+    function clampPanelAnchor(top, right) {
+      const viewport = getViewportSize();
+      const rect = panel.getBoundingClientRect();
+      const panelWidth = rect.width > 0 ? rect.width : PANEL_FALLBACK_WIDTH;
+      const panelHeight = rect.height > 0 ? rect.height : PANEL_FALLBACK_HEIGHT;
+      return {
+        top: clampValue(top, EDGE_PADDING, Math.max(EDGE_PADDING, viewport.height - panelHeight - EDGE_PADDING)),
+        right: clampValue(right, EDGE_PADDING, Math.max(EDGE_PADDING, viewport.width - panelWidth - EDGE_PADDING)),
+      };
+    }
+
+    function applyBallPosition() {
+      const next = clampBallAnchor(ballAnchorTop, ballAnchorRight);
+      ballAnchorTop = next.top;
+      ballAnchorRight = next.right;
+      ball.style.top = `${ballAnchorTop}px`;
+      ball.style.right = `${ballAnchorRight}px`;
+    }
+
+    function applyPanelPosition() {
+      const next = clampPanelAnchor(panelAnchorTop, panelAnchorRight);
+      panelAnchorTop = next.top;
+      panelAnchorRight = next.right;
+      panel.style.top = `${panelAnchorTop}px`;
+      panel.style.right = `${panelAnchorRight}px`;
+    }
+
+    function persistUiState() {
+      updateCollectorSettings({
+        ui: {
+          ballTop: Math.round(ballAnchorTop),
+          ballRight: Math.round(ballAnchorRight),
+          panelTop: Math.round(panelAnchorTop),
+          panelRight: Math.round(panelAnchorRight),
+          panelOpen: isPanelOpen,
+          advancedOpen: Boolean(state.ui.advancedDetails?.open),
+          settingsOpen: Boolean(state.ui.settingsDetails?.open),
+        },
+      });
+    }
+
+    function openPanelFromBall() {
+      panelAnchorTop = ballAnchorTop;
+      panelAnchorRight = ballAnchorRight;
+      isPanelOpen = true;
+      if (!String(state.settings.inviteCode || "").trim() && state.ui.settingsDetails) {
+        state.ui.settingsDetails.open = true;
+      }
+      setVisible(panel, true);
+      setVisible(ball, false);
+      applyPanelPosition();
+      persistUiState();
+      refreshStatusText();
+    }
+
+    function closePanelToBall() {
+      isPanelOpen = false;
+      setVisible(panel, false);
+      setVisible(ball, true);
+      applyBallPosition();
+      persistUiState();
+    }
+
+    function isInsidePanel(event) {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      if (Array.isArray(path) && path.includes(panel)) {
+        return true;
+      }
+      return panel.contains(event.target);
+    }
+
+    function handleOutsidePointerDown(event) {
+      if (!isPanelOpen) {
         return;
       }
-      const dy = event.clientY - drag.startY;
-      const dx = event.clientX - drag.startX;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-        drag.moved = true;
-      }
-      const nextTop = Math.max(4, Math.min(window.innerHeight - 48, drag.startTop + dy));
-      const nextRight = Math.max(4, Math.min(window.innerWidth - 48, drag.startRight - dx));
-      ball.style.top = `${nextTop}px`;
-      ball.style.right = `${nextRight}px`;
-    });
-    ball.addEventListener("pointerup", (event) => {
-      if (!drag) {
+      if (isInsidePanel(event)) {
         return;
       }
-      lastPointerWasDrag = drag.moved;
-      ball.releasePointerCapture(event.pointerId);
-      drag = null;
-    });
+      closePanelToBall();
+    }
+
+    function getEventPoint(event) {
+      if (event.touches?.length) {
+        return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+      }
+      if (event.changedTouches?.length) {
+        return { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
+      }
+      if (typeof event.clientX === "number" && typeof event.clientY === "number") {
+        return { x: event.clientX, y: event.clientY };
+      }
+      return null;
+    }
+
+    function bindDrag(startEvent, getStart, onMoveFrame, onEnd) {
+      const point = getEventPoint(startEvent);
+      if (!point) {
+        return;
+      }
+      if (startEvent.cancelable) {
+        startEvent.preventDefault();
+      }
+      const start = getStart(point);
+      function handleMove(moveEvent) {
+        const movePoint = getEventPoint(moveEvent);
+        if (!movePoint) {
+          return;
+        }
+        onMoveFrame(start, movePoint, moveEvent);
+      }
+      function handleEnd() {
+        window.removeEventListener("mousemove", handleMove);
+        window.removeEventListener("mouseup", handleEnd);
+        window.removeEventListener("touchmove", handleMove);
+        window.removeEventListener("touchend", handleEnd);
+        window.removeEventListener("touchcancel", handleEnd);
+        onEnd(start);
+      }
+      window.addEventListener("mousemove", handleMove);
+      window.addEventListener("mouseup", handleEnd);
+      window.addEventListener("touchmove", handleMove, { passive: false });
+      window.addEventListener("touchend", handleEnd);
+      window.addEventListener("touchcancel", handleEnd);
+    }
+
+    if (isPanelOpen) {
+      setVisible(panel, true);
+      setVisible(ball, false);
+      applyPanelPosition();
+    } else {
+      setVisible(panel, false);
+      setVisible(ball, true);
+      applyBallPosition();
+    }
 
     panel.querySelector(`#${UI_ID_PREFIX}-close`)?.addEventListener("click", () => {
-      panel.hidden = true;
+      closePanelToBall();
+    });
+    state.ui.uploadButton?.addEventListener("click", () => {
+      submitCurrentHostIncremental().catch((error) => {
+        Logger.error("上传流程未捕获异常。", error);
+        setUploadButtonBusy(false);
+        setStatusText(`上传失败：${String(error?.message || error)}`, "error", 10000);
+      });
+    });
+    panel.querySelector(`#${UI_ID_PREFIX}-save-settings`)?.addEventListener("click", () => {
+      updateCollectorSettings({
+        inviteCode: String(state.ui.inviteInput?.value || "").trim(),
+        alias: String(state.ui.aliasInput?.value || "").trim(),
+        ui: {
+          settingsOpen: Boolean(state.ui.settingsDetails?.open),
+          advancedOpen: Boolean(state.ui.advancedDetails?.open),
+        },
+      });
+      setStatusText("已保存上传设置。", "success", 3500);
+    });
+    panel.querySelector(`#${UI_ID_PREFIX}-toggle-invite-visibility`)?.addEventListener("click", () => {
+      if (!state.ui.inviteInput) {
+        return;
+      }
+      state.ui.inviteInput.type = state.ui.inviteInput.type === "password" ? "text" : "password";
+    });
+    state.ui.settingsDetails?.addEventListener("toggle", persistUiState);
+    state.ui.advancedDetails?.addEventListener("toggle", persistUiState);
+
+    ball.addEventListener("click", (event) => {
+      if (Date.now() < suppressOpenUntil) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      openPanelFromBall();
+    });
+    ball.addEventListener("mousedown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      bindDrag(
+        event,
+        (point) => ({
+          startX: point.x,
+          startY: point.y,
+          startTop: ballAnchorTop,
+          startRight: ballAnchorRight,
+          moved: false,
+        }),
+        (start, movePoint, moveEvent) => {
+          const dx = movePoint.x - start.startX;
+          const dy = movePoint.y - start.startY;
+          if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+            start.moved = true;
+          }
+          ballAnchorTop = start.startTop + dy;
+          ballAnchorRight = start.startRight - dx;
+          applyBallPosition();
+          if (moveEvent.cancelable && moveEvent.type.startsWith("touch")) {
+            moveEvent.preventDefault();
+          }
+        },
+        (start) => {
+          if (start.moved) {
+            suppressOpenUntil = Date.now() + 280;
+          }
+          persistUiState();
+        }
+      );
+    });
+    ball.addEventListener("touchstart", (event) => {
+      bindDrag(
+        event,
+        (point) => ({
+          startX: point.x,
+          startY: point.y,
+          startTop: ballAnchorTop,
+          startRight: ballAnchorRight,
+          moved: false,
+        }),
+        (start, movePoint, moveEvent) => {
+          const dx = movePoint.x - start.startX;
+          const dy = movePoint.y - start.startY;
+          if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+            start.moved = true;
+          }
+          ballAnchorTop = start.startTop + dy;
+          ballAnchorRight = start.startRight - dx;
+          applyBallPosition();
+          if (moveEvent.cancelable) {
+            moveEvent.preventDefault();
+          }
+        },
+        (start) => {
+          if (start.moved) {
+            suppressOpenUntil = Date.now() + 280;
+          }
+          persistUiState();
+        }
+      );
+    }, { passive: false });
+    panel.querySelector(`#${UI_ID_PREFIX}-panel-drag-handle`)?.addEventListener("mousedown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
+      bindDrag(
+        event,
+        (point) => ({ startX: point.x, startY: point.y, startTop: panelAnchorTop, startRight: panelAnchorRight }),
+        (start, movePoint, moveEvent) => {
+          panelAnchorTop = start.startTop + (movePoint.y - start.startY);
+          panelAnchorRight = start.startRight - (movePoint.x - start.startX);
+          applyPanelPosition();
+          if (moveEvent.cancelable && moveEvent.type.startsWith("touch")) {
+            moveEvent.preventDefault();
+          }
+        },
+        () => persistUiState()
+      );
+    });
+    panel.querySelector(`#${UI_ID_PREFIX}-panel-drag-handle`)?.addEventListener("touchstart", (event) => {
+      bindDrag(
+        event,
+        (point) => ({ startX: point.x, startY: point.y, startTop: panelAnchorTop, startRight: panelAnchorRight }),
+        (start, movePoint, moveEvent) => {
+          panelAnchorTop = start.startTop + (movePoint.y - start.startY);
+          panelAnchorRight = start.startRight - (movePoint.x - start.startX);
+          applyPanelPosition();
+          if (moveEvent.cancelable) {
+            moveEvent.preventDefault();
+          }
+        },
+        () => persistUiState()
+      );
+    }, { passive: false });
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true);
+    window.addEventListener("resize", () => {
+      if (isPanelOpen) {
+        applyPanelPosition();
+      } else {
+        applyBallPosition();
+      }
+      persistUiState();
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-increment`)?.addEventListener("click", () => {
@@ -836,11 +1453,12 @@
       const { serialized, selectedByHost } = buildHostScopedExport([host], true);
       const copied = copyToClipboard(serialized);
       if (!copied) {
-        setStatusText("复制失败：请检查剪贴板权限。");
+        setStatusText("复制失败：请检查剪贴板权限。", "error", 5000);
         return;
       }
       markExportedByHost(selectedByHost);
-      setStatusText(`复制本域增量 JSON 成功：${selectedByHost[host]?.length || 0} 条。`);
+      setStatusText(`复制本域增量 JSON 成功：${selectedByHost[host]?.length || 0} 条。`, "success", 4000);
+      refreshStatusText();
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-full`)?.addEventListener("click", () => {
@@ -848,10 +1466,10 @@
       const { serialized, selectedByHost } = buildHostScopedExport([host], false);
       const copied = copyToClipboard(serialized);
       if (!copied) {
-        setStatusText("复制失败：请检查剪贴板权限。");
+        setStatusText("复制失败：请检查剪贴板权限。", "error", 5000);
         return;
       }
-      setStatusText(`复制本域全量 JSON 成功：${selectedByHost[host]?.length || 0} 条。`);
+      setStatusText(`复制本域全量 JSON 成功：${selectedByHost[host]?.length || 0} 条。`, "success", 4000);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-all-merged`)?.addEventListener("click", () => {
@@ -859,25 +1477,25 @@
       const { serialized } = buildHostScopedExport(allHosts, false);
       const copied = copyToClipboard(serialized);
       if (!copied) {
-        setStatusText("复制失败：请检查剪贴板权限。");
+        setStatusText("复制失败：请检查剪贴板权限。", "error", 5000);
         return;
       }
-      setStatusText(`一键复制全部域名 JSON 成功：跨 ${allHosts.length} 个域名。`);
+      setStatusText(`一键复制全部域名 JSON 成功：跨 ${allHosts.length} 个域名。`, "success", 4000);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-selected-host`)?.addEventListener("click", () => {
       const selectedHost = state.ui.hostSelect?.value || "";
       if (!selectedHost) {
-        setStatusText("没有可复制的域名数据。");
+        setStatusText("没有可复制的域名数据。", "warn", 3500);
         return;
       }
       const { serialized, selectedByHost } = buildHostScopedExport([selectedHost], false);
       const copied = copyToClipboard(serialized);
       if (!copied) {
-        setStatusText("复制失败：请检查剪贴板权限。");
+        setStatusText("复制失败：请检查剪贴板权限。", "error", 5000);
         return;
       }
-      setStatusText(`复制选定域名 JSON 成功：${selectedByHost[selectedHost]?.length || 0} 条。`);
+      setStatusText(`复制选定域名 JSON 成功：${selectedByHost[selectedHost]?.length || 0} 条。`, "success", 4000);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-copy-iframe-hosts`)?.addEventListener("click", () => {
@@ -890,10 +1508,10 @@
       };
       const copied = copyToClipboard(JSON.stringify(payload, null, 2));
       if (!copied) {
-        setStatusText("复制 iframe 域名失败：请检查剪贴板权限。");
+        setStatusText("复制 iframe 域名失败：请检查剪贴板权限。", "error", 5000);
         return;
       }
-      setStatusText(`复制 iframe 域名成功：${payload.iframeHosts.length} 个。`);
+      setStatusText(`复制 iframe 域名成功：${payload.iframeHosts.length} 个。`, "success", 4000);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-reset-exported`)?.addEventListener("click", () => {
@@ -901,7 +1519,8 @@
       const bucket = ensureHostBucket(host);
       bucket.exportedTexts = {};
       schedulePersistStore();
-      setStatusText("已重置本域增量游标。");
+      setStatusText("已重置本域增量游标。", "success", 3500);
+      refreshStatusText();
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-clear-current-host`)?.addEventListener("click", () => {
@@ -913,10 +1532,10 @@
       const removed = clearCurrentHostData();
       refreshStatusText();
       if (!removed) {
-        setStatusText(`当前域名（${host}）没有可清空的数据。`);
+        setStatusText(`当前域名（${host}）没有可清空的数据。`, "warn", 4000);
         return;
       }
-      setStatusText(`已清空当前域名（${host}）的采集数据。`);
+      setStatusText(`已清空当前域名（${host}）的采集数据。`, "success", 4000);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-clear-all-hosts`)?.addEventListener("click", () => {
@@ -927,10 +1546,17 @@
       }
       clearAllCollectorData();
       refreshStatusText();
-      setStatusText("已清空全部采集数据。");
+      setStatusText("已清空全部采集数据。", "success", 4000);
     });
 
+    if (state.ui.currentHostLabel) {
+      state.ui.currentHostLabel.textContent = window.location.hostname.toLowerCase();
+    }
+    if (state.ui.uploadHint) {
+      state.ui.uploadHint.textContent = `当前域名未导出词条：${getCurrentHostPendingCount()} 条（将作为一键上传默认范围）`;
+    }
     refreshStatusText();
+    setUploadButtonBusy(false);
   }
 
   // ------------------------------
