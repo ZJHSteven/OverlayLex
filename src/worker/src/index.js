@@ -275,8 +275,6 @@ async function handleCollectorSubmission(request, env) {
     scope: COLLECTOR_UPLOAD_SCOPE,
     alias,
     uploadHosts: uploadHostsFromMeta,
-    pageUrl,
-    collectorScriptVersion,
     totalTexts,
     collected: normalizedPayload,
   };
