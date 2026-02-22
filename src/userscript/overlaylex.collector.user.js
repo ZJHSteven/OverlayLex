@@ -741,7 +741,9 @@
       state.ui.currentHostLabel.textContent = host;
     }
     if (state.ui.uploadHint) {
-      state.ui.uploadHint.textContent = `当前域名未导出词条：${pending} 条（将作为一键上传默认范围）`;
+      const relatedHosts = getCurrentPageRelatedHosts();
+      const relatedPending = getPendingCountByHosts(relatedHosts);
+      state.ui.uploadHint.textContent = `当前页面相关域名未导出词条：${relatedPending} 条（${relatedHosts.length} 个域名，将作为一键上传默认范围）`;
     }
     setStatusText(`当前域名：总计 ${total}，未导出 ${pending}，iframe 域名 ${iframeHosts}。`, "info");
     refreshHostSelectorOptions();
@@ -800,6 +802,35 @@
     return Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
   }
 
+  function getCurrentPageRelatedHosts() {
+    const currentHost = window.location.hostname.toLowerCase();
+    const currentBucket = ensureHostBucket(currentHost);
+    const candidateHosts = new Set([currentHost]);
+    for (const iframeHost of Object.keys(currentBucket.iframeHosts || {})) {
+      const normalized = String(iframeHost || "").trim().toLowerCase();
+      if (normalized) {
+        candidateHosts.add(normalized);
+      }
+    }
+    const hosts = [];
+    for (const host of candidateHosts) {
+      if (state.store.hosts[host]) {
+        hosts.push(host);
+      }
+    }
+    hosts.sort((a, b) => a.localeCompare(b, "en"));
+    return hosts;
+  }
+
+  function getPendingCountByHosts(hosts) {
+    let total = 0;
+    for (const host of hosts) {
+      const bucket = ensureHostBucket(host);
+      total += Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
+    }
+    return total;
+  }
+
   function setUploadButtonBusy(isBusy, label = "") {
     state.ui.isUploading = Boolean(isBusy);
     if (!state.ui.uploadButton) {
@@ -810,7 +841,7 @@
     if (!labelNode) {
       return;
     }
-    labelNode.textContent = label || "一键上传（本域增量）";
+    labelNode.textContent = label || "一键上传（本页相关增量）";
   }
 
   function readResponseJsonSafe(response) {
@@ -833,20 +864,31 @@
       return;
     }
 
-    const host = window.location.hostname.toLowerCase();
-    const { payload, selectedByHost } = buildHostScopedExport([host], true);
-    const selectedList = selectedByHost[host] || [];
-    if (selectedList.length === 0) {
-      setStatusText("当前域名没有未导出的增量词条，无需上传。", "warn", 5000);
+    const currentHost = window.location.hostname.toLowerCase();
+    const relatedHosts = getCurrentPageRelatedHosts();
+    const { selectedByHost } = buildHostScopedExport(relatedHosts, true);
+    const filteredPayload = {};
+    for (const [hostKey, list] of Object.entries(selectedByHost)) {
+      if (Array.isArray(list) && list.length > 0) {
+        filteredPayload[hostKey] = list;
+      }
+    }
+    const uploadHosts = Object.keys(filteredPayload).sort((a, b) => a.localeCompare(b, "en"));
+    const totalSelectedCount = uploadHosts.reduce((sum, hostKey) => sum + filteredPayload[hostKey].length, 0);
+    if (totalSelectedCount === 0) {
+      setStatusText("当前页面相关域名没有未导出的增量词条，无需上传。", "warn", 5000);
       return;
     }
+    const primaryHost = uploadHosts.includes(currentHost) ? currentHost : uploadHosts[0];
 
     const body = {
       version: 1,
       scope: COLLECTOR_UPLOAD_SCOPE,
-      host,
-      payload,
+      host: primaryHost,
+      payload: filteredPayload,
       meta: {
+        pageHost: currentHost,
+        uploadHosts,
         pageUrl: String(window.location.href || ""),
         userAgent: String(navigator.userAgent || ""),
         collectorScriptVersion: SCRIPT_VERSION,
@@ -855,7 +897,7 @@
     };
 
     setUploadButtonBusy(true, "上传中...");
-    setStatusText(`正在上传当前域名增量：${selectedList.length} 条...`, "info", 4000);
+    setStatusText(`正在上传本页相关域名增量：共 ${totalSelectedCount} 条（${uploadHosts.length} 个域名）...`, "info", 4000);
 
     try {
       const response = await fetch(`${COLLECTOR_UPLOAD_API_BASE}${COLLECTOR_UPLOAD_API_PATH}`, {
@@ -872,10 +914,12 @@
         return;
       }
 
-      markExportedByHost(selectedByHost);
+      markExportedByHost(filteredPayload);
       updateCollectorSettings({ lastSubmissionId: String(responseJson.submissionId || "") });
       setStatusText(
-        `上传成功：${selectedList.length} 条；提交编号 ${String(responseJson.submissionId || "unknown")}；已进入 CI 审核队列。`,
+        `上传成功：${totalSelectedCount} 条（${uploadHosts.length} 个域名）；提交编号 ${String(
+          responseJson.submissionId || "unknown"
+        )}；已进入 CI 审核队列。`,
         "success",
         10000
       );
@@ -1062,9 +1106,9 @@
             <span>默认上传范围</span>
             <strong>本域增量</strong>
           </div>
-          <div class="${UI_ID_PREFIX}-hint" id="${UI_ID_PREFIX}-upload-hint">当前域名未导出词条：0 条（将作为一键上传默认范围）</div>
+          <div class="${UI_ID_PREFIX}-hint" id="${UI_ID_PREFIX}-upload-hint">当前页面相关域名未导出词条：0 条（将作为一键上传默认范围）</div>
           <button class="${UI_ID_PREFIX}-primary" id="${UI_ID_PREFIX}-upload-current-increment" type="button">
-            <span data-role="upload-label">一键上传（本域增量）</span>
+            <span data-role="upload-label">一键上传（本页相关增量）</span>
             <span class="${UI_ID_PREFIX}-primary-sub">CI 自动生成采集 PR，你只需等待审核</span>
           </button>
         </div>
@@ -1553,7 +1597,8 @@
       state.ui.currentHostLabel.textContent = window.location.hostname.toLowerCase();
     }
     if (state.ui.uploadHint) {
-      state.ui.uploadHint.textContent = `当前域名未导出词条：${getCurrentHostPendingCount()} 条（将作为一键上传默认范围）`;
+      const relatedHosts = getCurrentPageRelatedHosts();
+      state.ui.uploadHint.textContent = `当前页面相关域名未导出词条：${getPendingCountByHosts(relatedHosts)} 条（${relatedHosts.length} 个域名，将作为一键上传默认范围）`;
     }
     refreshStatusText();
     setUploadButtonBusy(false);

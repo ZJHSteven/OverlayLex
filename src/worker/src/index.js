@@ -60,7 +60,7 @@ function optionsResponse() {
 
 const COLLECTOR_UPLOAD_SCOPE = "current-host-incremental";
 const COLLECTOR_MAX_REQUEST_BYTES = 48 * 1024;
-const COLLECTOR_MAX_HOST_COUNT = 1;
+const COLLECTOR_MAX_HOST_COUNT = 12;
 const COLLECTOR_MAX_TEXTS_PER_HOST = 2000;
 const COLLECTOR_MAX_TEXT_LENGTH = 500;
 
@@ -87,7 +87,7 @@ function normalizeCollectorPayload(rawPayload) {
     throw new Error("payload 不能为空。");
   }
   if (hostEntries.length > COLLECTOR_MAX_HOST_COUNT) {
-    throw new Error(`首版仅允许上传 ${COLLECTOR_MAX_HOST_COUNT} 个域名（当前请求过多）。`);
+    throw new Error(`上传域名数量超过上限（${COLLECTOR_MAX_HOST_COUNT}）。`);
   }
 
   for (const [hostKey, value] of hostEntries) {
@@ -256,20 +256,13 @@ async function handleCollectorSubmission(request, env) {
     );
   }
 
-  if (!Object.prototype.hasOwnProperty.call(normalizedPayload, host)) {
-    return noStoreJson(
-      {
-        ok: false,
-        error: "HOST_MISMATCH",
-        message: "host 与 payload 的域名键不一致。",
-      },
-      400
-    );
-  }
-
   const submissionId = buildSubmissionId();
   const submittedAt = new Date().toISOString();
   const alias = String(body?.meta?.alias || "").trim().slice(0, 64);
+  const pageHost = String(body?.meta?.pageHost || "").trim().toLowerCase().slice(0, 120);
+  const uploadHostsFromMeta = Array.isArray(body?.meta?.uploadHosts)
+    ? body.meta.uploadHosts.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean).slice(0, 20)
+    : [];
   const pageUrl = String(body?.meta?.pageUrl || "").trim().slice(0, 500);
   const collectorScriptVersion = String(body?.meta?.collectorScriptVersion || "").trim().slice(0, 32);
   const totalTexts = Object.values(normalizedPayload).reduce((sum, list) => sum + (Array.isArray(list) ? list.length : 0), 0);
@@ -278,8 +271,10 @@ async function handleCollectorSubmission(request, env) {
     submissionId,
     submittedAt,
     host,
+    pageHost,
     scope: COLLECTOR_UPLOAD_SCOPE,
     alias,
+    uploadHosts: uploadHostsFromMeta,
     pageUrl,
     collectorScriptVersion,
     totalTexts,
