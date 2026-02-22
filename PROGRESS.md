@@ -2,9 +2,9 @@
 
 ## 当前结论（必须最新）
 - 现状：在现有发布链路稳定的基础上，开始实施“采集脚本 UI 重构 + 一键上传自动 PR”协作链路。
-- 已完成：采集脚本 UI/上传入口改造；Worker 新增 `POST /collector/submissions`（邀请码校验 + 直接 `repository_dispatch`）；新增采集 PR 工作流与 `collector-sanitize` 过滤器；本地模拟上传返回 `202 accepted` 验证通过。
-- 正在做：补齐文档（README / PLANS / CHANGELOG）与部署步骤，并执行 Worker 实际部署/线上回归测试。
-- 下一步：完成 Worker 部署与线上接口验证，整理最小权限 GitHub Token 与 secret 配置命令。
+- 已完成：采集脚本 UI/上传入口改造；Worker 新增 `POST /collector/submissions`（邀请码校验 + 直接 `repository_dispatch`，无 R2 临时存储）；新增采集 PR 工作流与 `collector-sanitize` 过滤器；README/PLANS/CHANGELOG 已同步；Worker 已成功部署到 `overlaylex-api.zjhstudio.com` 并验证 `GET /health=200`、`POST /collector/submissions` 在未配 secrets 时返回 `SERVER_NOT_CONFIGURED`（符合预期）。
+- 正在做：等待配置 Worker secrets（邀请码 + GitHub dispatch token）后执行真实浏览器上传联调，确认自动 PR 创建成功。
+- 下一步：配置 secrets 并进行一次真实上传（建议用 `smoke.battle-system.com` 小样本词条），验证 CI 过滤报告、PR 描述和 `main-paratranz-sync` 后续衔接。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。

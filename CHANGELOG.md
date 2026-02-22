@@ -8,6 +8,14 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-02-22
+  - 更新 `src/userscript/overlaylex.collector.user.js`：重构采集器 UI（悬浮球样式升级、主上传按钮、设置区/高级操作折叠、状态分级提示），并新增面板拖动、外部点击关闭、球/面板位置持久化。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：新增“一键上传（本域增量）”能力，支持本地保存邀请码/协作者昵称，直接调用 Worker 上传接口触发采集 CI。
+  - 更新 `src/worker/src/index.js`：新增 `POST /collector/submissions`，实现邀请码校验、payload schema 校验、大小限制、GitHub `repository_dispatch` 触发；采集上传链路不再使用 R2 临时存储。
+  - 新增 `src/tools/collector-sanitize.mjs`：CI 侧保守垃圾过滤器，过滤高置信噪音词条（短数字、容量、URL、hash、长 token 等），并输出统计报告。
+  - 新增 `.github/workflows/collector-submission-pr.yml`：接收采集 dispatch 事件，自动执行 `collector-sanitize` + `merge-collected`，并创建/更新采集 PR 到 `main`。
+  - 更新 `README.md`：新增“协作者一键上传”主流程、保留“本地手工复制 JSON”高级备选流程，并补充 Worker 所需 secrets 与配置说明。
+  - 更新 `PLANS.md` / `PROGRESS.md`：记录本轮 ExecPlan、关键决策（改为 Worker 直 dispatch，不落 R2）与执行状态。
 - 2026-02-15
   - 重发修复：针对上次 `release-publish` 在 `Verify Release Metadata` 阶段失败导致 R2 未更新的问题，重新提升并发布 4 个受影响翻译包版本：
     - `obr-www-owlbear-rodeo`: `0.2.5 -> 0.2.6`

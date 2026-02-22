@@ -23,3 +23,30 @@
 - [x] Step 2: 修改 `src/userscript/overlaylex.user.js`
 - [x] Step 3: 更新 `CHANGELOG.md` 与 `PROGRESS.md`
 - [x] Step 4: 提交（不包含 `src/packages/obr-theatre-battle-system-com.json`）
+
+---
+
+## 任务：采集脚本 UI 重构 + 一键上传触发采集 CI 自动 PR（2026-02-22）
+
+1. 采集脚本 UI 重构
+- 目标：对齐正式脚本悬浮球/面板体验，支持面板拖动、外部点击关闭、状态分级提示。
+- 预期：协作者只看到一个主上传按钮，高级复制/清理能力折叠收纳。
+
+2. 采集上传 Worker 中转
+- 目标：新增 `POST /collector/submissions`，邀请码校验后直接触发 GitHub `repository_dispatch`（不做 R2 临时存储）。
+- 预期：前端无需 GitHub Token；Worker 只做鉴权与转发。
+
+3. 采集 CI 自动 PR
+- 目标：新增 GitHub Actions 工作流，执行“过滤 -> merge-collected -> 自动 PR”。
+- 预期：每次上传对应独立 PR，PR 描述包含过滤统计与包变更摘要。
+
+4. 文档、部署与验证
+- 目标：同步 `README.md` / `PROGRESS.md` / `CHANGELOG.md`，并完成 Worker 部署与接口回归测试。
+- 预期：协作者与维护者都能按文档完成配置与使用。
+
+## 当前执行状态（2026-02-22）
+- [x] Step 1: 重构 `src/userscript/overlaylex.collector.user.js` UI 与上传入口
+- [x] Step 2: 新增 Worker 上传接口（邀请码校验 + `repository_dispatch`）
+- [x] Step 3: 新增 `collector-sanitize` 与采集 PR 工作流
+- [x] Step 4: 更新文档与项目状态记录
+- [x] Step 5: Worker 部署与线上测试（当前缺少 secrets，上传接口返回 `SERVER_NOT_CONFIGURED` 属预期）

@@ -92,10 +92,28 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 5. 顶层页面注入“译”悬浮球；iframe 页面不重复注入主控制台，但仍可执行翻译。
 6. 采集逻辑全部放在 `overlaylex.collector.user.js`，与主翻译脚本彻底分离。
 
-## 运行期采集工作流（推荐）
+## 运行期采集工作流（协作者推荐：一键上传）
+
+### 协作者流程（无需本地 Node / Git）
 
 1. 启用 `overlaylex.collector.user.js` 后，在目标页面正常操作（点击菜单、悬浮提示、打开插件 iframe）。  
-2. 打开绿色“采”悬浮球，在采集面板里使用：
+2. 点击绿色“采”悬浮球，首次使用先在“上传设置”中填写：
+   - 邀请码（必填）
+   - 协作者昵称（可选）
+3. 点击主按钮 `一键上传（本域增量）`。  
+   - 默认上传范围是“当前域名未导出词条”（增量）
+   - 若该域名尚无本地包，CI 会复用 `merge-collected` 逻辑自动创建新包（与本地手工流程一致）
+4. Worker 会校验邀请码并触发 GitHub Actions，自动执行：
+   - 基础垃圾词条过滤（页码/容量/hash/url 等高置信噪音）
+   - `merge-collected` 合并到 `src/packages/*.json`
+   - 自动创建/更新一个采集 PR（提交到 `main` 的候选分支）
+5. 维护者审核该 PR（清理漏网无用词条、确认目标包正确）并合并到 `main`。  
+6. 合并后现有 `main-paratranz-sync` 会自动把新增英文词条推送到 ParaTranz；后续走正常翻译/回拉/发版流程。
+
+### 本地手工流程（高级 / 离线备选）
+
+1. 启用 `overlaylex.collector.user.js` 后，在目标页面正常操作（点击菜单、悬浮提示、打开插件 iframe）。  
+2. 打开绿色“采”悬浮球，在“高级操作”里使用：
    - `复制本域增量`：仅复制当前域名下“未导出过”的新词条。
    - `复制本域全量`：复制当前域名下所有已采集词条。
    - `复制 iframe 域名`：复制当前页面观察到的 iframe 域名列表。
@@ -103,6 +121,20 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 4. 执行本地合并命令，把临时采集 JSON 合并进正式包。  
 5. 通过 ParaTranz 协作翻译并回拉。  
 6. 合并到 `release` 后自动发包，页面点击“检查更新”即可获取新版本。
+
+### 采集上传链路（维护者配置）
+
+- Worker 接口：`POST /collector/submissions`
+- 触发工作流：`.github/workflows/collector-submission-pr.yml`
+- Worker 必需 secrets：
+  - `COLLECTOR_INVITE_CODE`
+  - `GITHUB_DISPATCH_TOKEN`
+  - `GITHUB_REPO_OWNER`
+  - `GITHUB_REPO_NAME`
+- GitHub Token 最小权限建议（用于 Worker 调用 `repository_dispatch`）：
+  - Fine-grained PAT（仓库级）
+  - `Actions: Read and write`
+  - 仓库访问仅授权当前仓库
 
 ## i18n 流程脚本（OverlayLex <-> ParaTranz）
 
