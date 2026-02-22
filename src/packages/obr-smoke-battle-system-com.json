@@ -194,6 +194,8 @@
     "Outer Angle: Outer angle of token vision, for hard edge, match with Inner Angle. Click to Mass Edit": "视野外角：token视野范围的外角，如果需要硬边请和视野内角相配合。点击以批量编辑",
     "Outer-Angle": "视野外角",
     "Overlay the Custom Fog image on top of your regular map.": "将该图片叠在对应地图的上方。",
+    "OverlayLex Repository Dispatch Smoke Test Button": "",
+    "OverlayLex Repository Dispatch Smoke Test Tooltip": "",
     "Owlbear Rodeo Discord": "枭熊Discord",
     "Owner Highlight": "玩家高亮",
     "Owner Highlight: This will enable/disable the colored rings that indicate a player's viewable range as a GM.": "玩家高亮：该选项会开启/关闭GM视角中玩家所持有的token的视野范围边缘的和玩家颜色对应的环形示意。",
