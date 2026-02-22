@@ -1,0 +1,351 @@
+name: collector-submission-pr
+
+on:
+  repository_dispatch:
+    types:
+      - collector_submission
+  workflow_dispatch:
+    inputs:
+      payload_json:
+        description: "手动调试用采集 JSON（{ host: [texts] }）"
+        required: true
+        type: string
+      submission_id:
+        description: "手动指定 submissionId（可选）"
+        required: false
+        type: string
+      host:
+        description: "当前域名（可选，未填则从 payload 第一个 key 推断）"
+        required: false
+        type: string
+      alias:
+        description: "协作者昵称（可选）"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  collector-submission-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Prepare Submission Payload
+        id: prepare
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CLIENT_PAYLOAD_JSON: ${{ toJson(github.event.client_payload) }}
+          INPUT_PAYLOAD_JSON: ${{ github.event.inputs.payload_json || '' }}
+          INPUT_SUBMISSION_ID: ${{ github.event.inputs.submission_id || '' }}
+          INPUT_HOST: ${{ github.event.inputs.host || '' }}
+          INPUT_ALIAS: ${{ github.event.inputs.alias || '' }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const crypto = require("node:crypto");
+
+          const eventName = process.env.EVENT_NAME || "";
+          const clientPayloadJson = process.env.CLIENT_PAYLOAD_JSON || "{}";
+          const inputPayloadJson = process.env.INPUT_PAYLOAD_JSON || "";
+          const inputSubmissionId = (process.env.INPUT_SUBMISSION_ID || "").trim();
+          const inputHost = (process.env.INPUT_HOST || "").trim().toLowerCase();
+          const inputAlias = (process.env.INPUT_ALIAS || "").trim();
+
+          function parseJson(raw, fallback = null) {
+            try {
+              return JSON.parse(raw);
+            } catch {
+              return fallback;
+            }
+          }
+
+          function ensureCollectedShape(collected) {
+            if (!collected || typeof collected !== "object" || Array.isArray(collected)) {
+              throw new Error("collected payload 必须是对象结构。");
+            }
+            const normalized = {};
+            for (const [hostKey, value] of Object.entries(collected)) {
+              const host = String(hostKey || "").trim().toLowerCase();
+              if (!host) continue;
+              if (!Array.isArray(value)) {
+                throw new Error(`域名 ${host} 对应值必须是数组。`);
+              }
+              const unique = new Set();
+              for (const item of value) {
+                const text = String(item ?? "").trim();
+                if (!text) continue;
+                unique.add(text);
+              }
+              normalized[host] = [...unique].sort((a, b) => a.localeCompare(b, "en"));
+            }
+            if (Object.keys(normalized).length === 0) {
+              throw new Error("collected payload 为空。");
+            }
+            return normalized;
+          }
+
+          const clientPayload = parseJson(clientPayloadJson, {}) || {};
+          let submissionId = "";
+          let host = "";
+          let scope = "current-host-incremental";
+          let alias = "";
+          let submittedAt = new Date().toISOString();
+          let pageUrl = "";
+          let collectorScriptVersion = "";
+          let collected = null;
+
+          if (eventName === "repository_dispatch") {
+            submissionId = String(clientPayload.submissionId || "").trim();
+            host = String(clientPayload.host || "").trim().toLowerCase();
+            scope = String(clientPayload.scope || scope).trim();
+            alias = String(clientPayload.alias || "").trim();
+            submittedAt = String(clientPayload.submittedAt || submittedAt).trim();
+            pageUrl = String(clientPayload.pageUrl || "").trim();
+            collectorScriptVersion = String(clientPayload.collectorScriptVersion || "").trim();
+            collected = clientPayload.collected;
+          } else {
+            if (!inputPayloadJson) {
+              throw new Error("workflow_dispatch 模式必须提供 payload_json。");
+            }
+            collected = parseJson(inputPayloadJson, null);
+            alias = inputAlias;
+            submittedAt = new Date().toISOString();
+          }
+
+          const normalizedCollected = ensureCollectedShape(collected);
+          const hostKeys = Object.keys(normalizedCollected);
+          host = host || inputHost || hostKeys[0];
+          if (!hostKeys.includes(host)) {
+            throw new Error(`host 不在 payload 中：${host}`);
+          }
+          if (!submissionId) {
+            const rand = crypto.randomBytes(4).toString("hex");
+            const d = new Date();
+            const stamp = [
+              d.getUTCFullYear(),
+              String(d.getUTCMonth() + 1).padStart(2, "0"),
+              String(d.getUTCDate()).padStart(2, "0"),
+            ].join("");
+            submissionId = `${inputSubmissionId || `${stamp}-manual-${rand}`}`;
+          }
+
+          const outDir = path.resolve(".tmp/collector-submissions");
+          fs.mkdirSync(outDir, { recursive: true });
+          const rawPath = path.join(outDir, `${submissionId}.raw.json`);
+          const cleanedPath = path.join(outDir, `${submissionId}.cleaned.json`);
+          const reportPath = path.join(outDir, `${submissionId}.filter-report.json`);
+          const metaPath = path.join(outDir, `${submissionId}.meta.json`);
+          fs.writeFileSync(rawPath, JSON.stringify(normalizedCollected, null, 2));
+          const totalTexts = Object.values(normalizedCollected).reduce((sum, arr) => sum + arr.length, 0);
+          fs.writeFileSync(
+            metaPath,
+            JSON.stringify(
+              {
+                submissionId,
+                host,
+                scope,
+                alias,
+                submittedAt,
+                pageUrl,
+                collectorScriptVersion,
+                rawTextCount: totalTexts,
+              },
+              null,
+              2
+            )
+          );
+
+          const outputFile = process.env.GITHUB_OUTPUT;
+          const lines = [
+            `submission_id=${submissionId}`,
+            `host=${host}`,
+            `scope=${scope}`,
+            `alias=${alias}`,
+            `submitted_at=${submittedAt}`,
+            `raw_path=${rawPath}`,
+            `cleaned_path=${cleanedPath}`,
+            `report_path=${reportPath}`,
+            `meta_path=${metaPath}`,
+            `raw_text_count=${totalTexts}`,
+          ];
+          fs.appendFileSync(outputFile, `${lines.join("\n")}\n`);
+          NODE
+
+      - name: Snapshot Packages Before Merge
+        run: |
+          rm -rf .tmp/collector-packages-before
+          mkdir -p .tmp/collector-packages-before
+          cp -R src/packages/. .tmp/collector-packages-before/
+
+      - name: Sanitize Collected Payload
+        run: |
+          node src/tools/collector-sanitize.mjs \
+            --input "${{ steps.prepare.outputs.raw_path }}" \
+            --output "${{ steps.prepare.outputs.cleaned_path }}" \
+            --report "${{ steps.prepare.outputs.report_path }}"
+
+      - name: Merge Collected Into Packages
+        run: |
+          node src/tools/overlaylex-i18n-flow.mjs merge-collected --input "${{ steps.prepare.outputs.cleaned_path }}"
+
+      - name: Detect Package Changes
+        id: detect
+        shell: bash
+        run: |
+          if git diff --quiet -- src/packages; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No package changes after sanitize + merge, skip PR."
+            exit 0
+          fi
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "Package changes detected, continue."
+
+      - name: Build PR Metadata
+        id: prmeta
+        if: ${{ steps.detect.outputs.has_changes == 'true' }}
+        shell: bash
+        env:
+          SUBMISSION_ID: ${{ steps.prepare.outputs.submission_id }}
+          HOST: ${{ steps.prepare.outputs.host }}
+          SCOPE: ${{ steps.prepare.outputs.scope }}
+          ALIAS: ${{ steps.prepare.outputs.alias }}
+          SUBMITTED_AT: ${{ steps.prepare.outputs.submitted_at }}
+          META_PATH: ${{ steps.prepare.outputs.meta_path }}
+          REPORT_PATH: ${{ steps.prepare.outputs.report_path }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const beforeDir = path.resolve(".tmp/collector-packages-before");
+          const afterDir = path.resolve("src/packages");
+          const reportPath = path.resolve(process.env.REPORT_PATH);
+          const metaPath = path.resolve(process.env.META_PATH);
+          const submissionId = String(process.env.SUBMISSION_ID || "").trim();
+          const host = String(process.env.HOST || "").trim();
+          const scope = String(process.env.SCOPE || "").trim();
+          const alias = String(process.env.ALIAS || "").trim();
+          const submittedAt = String(process.env.SUBMITTED_AT || "").trim();
+
+          function readJson(filePath) {
+            return JSON.parse(fs.readFileSync(filePath, "utf8"));
+          }
+
+          function listJsonFiles(dirPath) {
+            return fs
+              .readdirSync(dirPath)
+              .filter((name) => name.endsWith(".json"))
+              .sort((a, b) => a.localeCompare(b, "en"));
+          }
+
+          function getTranslationCount(filePath) {
+            if (!fs.existsSync(filePath)) return 0;
+            const data = readJson(filePath);
+            return data && data.translations && typeof data.translations === "object"
+              ? Object.keys(data.translations).length
+              : 0;
+          }
+
+          const changedFilesRaw = require("node:child_process")
+            .execSync("git diff --name-only -- src/packages", { encoding: "utf8" })
+            .trim();
+          const changedFiles = changedFilesRaw
+            ? changedFilesRaw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+            : [];
+
+          let addedTextCount = 0;
+          const changedPackages = [];
+          for (const relativePath of changedFiles) {
+            const fileName = path.basename(relativePath);
+            const beforePath = path.join(beforeDir, fileName);
+            const afterPath = path.join(afterDir, fileName);
+            const beforeCount = getTranslationCount(beforePath);
+            const afterCount = getTranslationCount(afterPath);
+            const added = Math.max(0, afterCount - beforeCount);
+            addedTextCount += added;
+            changedPackages.push({ fileName, beforeCount, afterCount, added });
+          }
+
+          const report = readJson(reportPath);
+          const meta = readJson(metaPath);
+          const byRuleEntries = Object.entries(report.byRule || {}).sort((a, b) => b[1] - a[1]);
+          const topRules = byRuleEntries.length
+            ? byRuleEntries.map(([rule, count]) => `- \`${rule}\`: ${count}`).join("\n")
+            : "- 无（本次未过滤）";
+          const changedPackageLines = changedPackages
+            .map((item) => `- \`${item.fileName}\`：${item.beforeCount} -> ${item.afterCount}（新增 ${item.added}）`)
+            .join("\n");
+          const examples = Object.entries(report.examples || {})
+            .filter(([, arr]) => Array.isArray(arr) && arr.length > 0)
+            .slice(0, 3)
+            .map(([rule, arr]) => `- \`${rule}\`: ${arr.slice(0, 3).map((s) => `\`${s}\``).join("、")}`)
+            .join("\n");
+
+          const bodyPath = path.resolve(".tmp/collector-pr-body.md");
+          const body = [
+            "本 PR 由采集脚本一键上传触发的 GitHub Actions 自动生成。",
+            "",
+            "## 提交信息",
+            `- submissionId：\`${submissionId}\``,
+            `- 提交时间（UTC）：${submittedAt || "unknown"}`,
+            `- 来源 host：\`${host}\``,
+            `- 上传范围：\`${scope || "current-host-incremental"}\``,
+            `- 协作者昵称：${alias || "（未提供）"}`,
+            `- 原始词条数量：${meta.rawTextCount ?? "unknown"}`,
+            `- 过滤后词条数量：${report.summary?.cleanedTextCount ?? "unknown"}`,
+            `- 过滤数量：${report.summary?.filteredTextCount ?? "unknown"}`,
+            `- 新增入包词条数量（按包前后条目数差值统计）：${addedTextCount}`,
+            "",
+            "## 过滤统计（按规则）",
+            topRules,
+            "",
+            "## 过滤样例（节选）",
+            examples || "- 无",
+            "",
+            "## 包变更摘要",
+            changedPackageLines || "- 无",
+            "",
+            "说明：CI 已执行 `collector-sanitize` + `merge-collected`，请人工复审是否仍有无效词条。",
+          ].join("\n");
+          fs.writeFileSync(bodyPath, `${body}\n`, "utf8");
+
+          const safeBranch = `bot/collector-submission-${submissionId}`.replace(/[^a-zA-Z0-9/_-]/g, "-");
+          const title = `chore(collector): 合并采集提交 ${submissionId}`;
+          const outputFile = process.env.GITHUB_OUTPUT;
+          fs.appendFileSync(outputFile, `branch=${safeBranch}\n`);
+          fs.appendFileSync(outputFile, `title=${title}\n`);
+          fs.appendFileSync(outputFile, `body_path=${bodyPath}\n`);
+          NODE
+
+      - name: Create Or Update Collector PR
+        if: ${{ steps.detect.outputs.has_changes == 'true' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(collector): merge submission ${{ steps.prepare.outputs.submission_id }}"
+          branch: ${{ steps.prmeta.outputs.branch }}
+          base: main
+          delete-branch: false
+          title: ${{ steps.prmeta.outputs.title }}
+          body-path: ${{ steps.prmeta.outputs.body_path }}
+          add-paths: |
+            src/packages
+
+      - name: Skip Message
+        if: ${{ steps.detect.outputs.has_changes != 'true' }}
+        run: echo "No effective package changes after processing; PR skipped."
+

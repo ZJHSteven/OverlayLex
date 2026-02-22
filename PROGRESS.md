@@ -2,9 +2,9 @@
 
 ## 当前结论（必须最新）
 - 现状：在现有发布链路稳定的基础上，开始实施“采集脚本 UI 重构 + 一键上传自动 PR”协作链路。
-- 已完成：采集脚本首批改造已落地（新增独立设置存储、主上传按钮入口、邀请码/昵称设置、状态分级提示、面板拖动/外观重构基础代码）。
-- 正在做：接入 Worker 上传接口与 GitHub Actions 采集 PR 自动化（改为无 R2 临时存储，Worker 直接 `repository_dispatch`）。
-- 下一步：完成 Worker/CI/过滤器联调，并补齐 README / PLANS / CHANGELOG 文档与部署说明。
+- 已完成：采集脚本 UI/上传入口改造；Worker 新增 `POST /collector/submissions`（邀请码校验 + 直接 `repository_dispatch`）；新增采集 PR 工作流与 `collector-sanitize` 过滤器；本地模拟上传返回 `202 accepted` 验证通过。
+- 正在做：补齐文档（README / PLANS / CHANGELOG）与部署步骤，并执行 Worker 实际部署/线上回归测试。
+- 下一步：完成 Worker 部署与线上接口验证，整理最小权限 GitHub Token 与 secret 配置命令。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。
