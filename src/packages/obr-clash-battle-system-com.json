@@ -5,15 +5,15 @@
     "host": "clash.battle-system.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.14",
+  "version": "0.1.15",
   "translations": {
     "- Adding Clickable Dice Values": "- 添加可点击的骰子数值",
     "- Adding Skills to the Block": "- 向角色卡添加技能",
     "- Adding stats to a token": "- 将数据添加到token",
     "- Changing Turns and Resetting the List": "- 更改当前回合并重置先攻列表",
-    "- Clash! JSON to Collection": "- Clash!格式JSON文件到收藏",
+    "- Clash! JSON to Collection": "- 将Clash!格式的JSON文件添加到收藏",
     "- Clear All Clash! Collection Data": "- 清除所有Clash！收藏数据",
-    "- Collection to Clash! JSON": "- 集合到冲突！ JSON",
+    "- Collection to Clash! JSON": "- 添加到Clash!格式的 JSON文件中",
     "- Editting Values": "- 编辑数值",
     "- Removing a token from the List": "- 从先攻表中删除token",
     "... and more": "...以及更多",

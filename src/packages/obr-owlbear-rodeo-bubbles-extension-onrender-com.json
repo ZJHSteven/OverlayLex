@@ -5,15 +5,15 @@
     "host": "owlbear-rodeo-bubbles-extension.onrender.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.11",
+  "version": "0.1.12",
   "translations": {
-    "& MAXIMUM": "",
+    "& MAXIMUM": "& 最大值",
     "+ Justification": "",
     "+ Name Tags": "",
     "+ Offset": "",
     "+ Show Health Bars": "",
     "Access": "",
-    "ARMOR": "",
+    "ARMOR": "护甲",
     "Armor Class": "护甲等级",
     "bottom": "",
     "Change Log": "更新日志",
