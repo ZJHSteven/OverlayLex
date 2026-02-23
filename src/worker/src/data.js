@@ -39,7 +39,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-clash-battle-system-com",
     "name": "Clash 插件中文包（clash.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.14",
+    "version": "0.1.15",
     "enabledByDefault": true,
     "description": "Clash 插件翻译包（自动采集生成）"
   },
@@ -63,7 +63,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-gmg-tabletop-almanac-com",
     "name": "OBR 自动翻译包 - gmg.tabletop-almanac.com",
     "kind": "translation",
-    "version": "0.1.8",
+    "version": "0.1.9",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - gmg.tabletop-almanac.com（自动同步）"
   },
@@ -111,7 +111,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-owlbear-rodeo-bubbles-extension-onrender-com",
     "name": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com",
     "kind": "translation",
-    "version": "0.1.11",
+    "version": "0.1.12",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com（自动同步）"
   },
@@ -127,7 +127,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-theatre-battle-system-com",
     "name": "OBR 自动翻译包 - theatre.battle-system.com",
     "kind": "translation",
-    "version": "0.1.8",
+    "version": "0.1.9",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - theatre.battle-system.com（自动同步）"
   },
@@ -135,7 +135,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-dummysheet-com",
     "name": "OBR 自动翻译包 - www.dummysheet.com",
     "kind": "translation",
-    "version": "0.1.8",
+    "version": "0.1.9",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - www.dummysheet.com（自动同步）"
   },
@@ -143,7 +143,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-owlbear-rodeo",
     "name": "OBR 主站与房间中文包（owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.2.14",
+    "version": "0.2.15",
     "enabledByDefault": true,
     "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
