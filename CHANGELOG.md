@@ -8,6 +8,11 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-02-24
+  - 更新 `src/userscript/overlaylex.collector.user.js`：采集器版本升级到 `0.2.3`（同步 `@version` 与 `SCRIPT_VERSION`），确保油猴可自动更新到最新上传链路。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：新增“上传前域名筛选”面板，支持按域名复选上传范围、快捷切换“仅 iframe 域名”、将未勾选域名加入本地忽略名单、清空忽略名单，降低误采到无关站点时的噪音与请求体体积。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：一键上传改为读取当前筛选结果执行上传（仍保留超大请求自动分批与 `GM_xmlhttpRequest` 优先上传逻辑）。
+  - 更新 `README.md` / `PROGRESS.md`：补充“域名筛选 + 忽略名单”的使用说明、项目状态与设计决策。
 - 2026-02-22
   - 更新 `src/userscript/overlaylex.collector.user.js`：重构采集器 UI（悬浮球样式升级、主上传按钮、设置区/高级操作折叠、状态分级提示），并新增面板拖动、外部点击关闭、球/面板位置持久化。
   - 更新 `src/userscript/overlaylex.collector.user.js`：新增“一键上传（本域增量）”能力，支持本地保存邀请码/协作者昵称，直接调用 Worker 上传接口触发采集 CI。

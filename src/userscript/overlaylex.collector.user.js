@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Collector
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.2
+// @version      0.2.3
 // @description  OverlayLex 采集脚本：实时收集页面英文词条并导出为翻译原文素材。
 // @author       OverlayLex
 // @match        *://*/*
@@ -43,7 +43,7 @@
   const COLLECTOR_UPLOAD_API_PATH = "/collector/submissions";
   const COLLECTOR_UPLOAD_SOFT_CHUNK_BYTES = 36 * 1024;
   const COLLECTOR_UPLOAD_HARD_CHUNK_BYTES = 46 * 1024;
-  const SCRIPT_VERSION = "0.2.2";
+  const SCRIPT_VERSION = "0.2.3";
   const CJK_REGEX = /[\u3400-\u9fff]/;
   const IGNORED_TEXT_PARENT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "TEMPLATE"]);
 
@@ -105,17 +105,19 @@
     return {
       version: 1,
       inviteCode: "",
-      alias: "",
-      lastSubmissionId: "",
-      ui: {
-        ballTop: 170,
-        ballRight: 16,
-        panelTop: 120,
-        panelRight: 16,
-        panelOpen: false,
-        advancedOpen: false,
-        settingsOpen: false,
-      },
+        alias: "",
+        lastSubmissionId: "",
+        ignoredUploadHosts: [],
+        ui: {
+          ballTop: 170,
+          ballRight: 16,
+          panelTop: 120,
+          panelRight: 16,
+          panelOpen: false,
+          uploadScopeOpen: false,
+          advancedOpen: false,
+          settingsOpen: false,
+        },
     };
   }
 
@@ -132,11 +134,20 @@
         ...(raw.ui && typeof raw.ui === "object" ? raw.ui : {}),
       },
     };
-    normalized.inviteCode = String(normalized.inviteCode || "");
-    normalized.alias = String(normalized.alias || "");
-    normalized.lastSubmissionId = String(normalized.lastSubmissionId || "");
-    return normalized;
-  }
+      normalized.inviteCode = String(normalized.inviteCode || "");
+      normalized.alias = String(normalized.alias || "");
+      normalized.lastSubmissionId = String(normalized.lastSubmissionId || "");
+      normalized.ignoredUploadHosts = Array.isArray(normalized.ignoredUploadHosts)
+        ? Array.from(
+            new Set(
+              normalized.ignoredUploadHosts
+                .map((host) => String(host || "").trim().toLowerCase())
+                .filter(Boolean)
+            )
+          ).sort((a, b) => a.localeCompare(b, "en"))
+        : [];
+      return normalized;
+    }
 
   function readSettings() {
     try {
@@ -186,15 +197,19 @@
       uploadButton: null,
       inviteInput: null,
       aliasInput: null,
-      settingsDetails: null,
-      advancedDetails: null,
-      currentHostLabel: null,
-      uploadHint: null,
-      statusLevel: "info",
-      statusLockUntil: 0,
-      isUploading: false,
-    },
-  };
+        settingsDetails: null,
+        advancedDetails: null,
+        uploadScopeDetails: null,
+        currentHostLabel: null,
+        uploadHint: null,
+        uploadScopeSummary: null,
+        uploadScopeList: null,
+        statusLevel: "info",
+        statusLockUntil: 0,
+        isUploading: false,
+        uploadScopeSelectionByHost: {},
+      },
+    };
 
   function ensureHostBucket(hostname) {
     if (!state.store.hosts[hostname]) {
@@ -715,11 +730,7 @@
     if (state.ui.currentHostLabel) {
       state.ui.currentHostLabel.textContent = host;
     }
-    if (state.ui.uploadHint) {
-      const relatedHosts = getCurrentPageRelatedHosts();
-      const relatedCollected = relatedHosts.reduce((sum, hostKey) => sum + collectHostTexts(hostKey, false).length, 0);
-      state.ui.uploadHint.textContent = `当前页面相关域名已采集英文词条：${relatedCollected} 条（${relatedHosts.length} 个域名；上传不依赖本地导出游标；超大请求会自动分批）`;
-    }
+    refreshUploadScopeUi();
     setStatusText(`当前域名：已采集 ${total}，iframe 域名 ${iframeHosts}。`, "info");
     refreshHostSelectorOptions();
   }
@@ -794,6 +805,150 @@
     }
     hosts.sort((a, b) => a.localeCompare(b, "en"));
     return hosts;
+  }
+
+  /**
+   * getIgnoredUploadHostSet:
+   * - 把“忽略域名名单”统一转成 Set，便于快速判断。
+   * - 该名单只影响“一键上传”默认勾选，不会删除采集数据。
+   */
+  function getIgnoredUploadHostSet() {
+    return new Set(Array.isArray(state.settings.ignoredUploadHosts) ? state.settings.ignoredUploadHosts : []);
+  }
+
+  /**
+   * getCurrentPageUploadScopeRows:
+   * - 汇总“本页相关域名”上传筛选面板所需的数据（host / 词条数 / 标签 / 默认勾选状态）。
+   * - 默认勾选规则：
+   *   1) 若用户当前会话手动点过复选框，则优先使用会话内手动选择；
+   *   2) 否则按忽略名单决定（忽略名单内默认不勾选）。
+   */
+  function getCurrentPageUploadScopeRows() {
+    const currentHost = window.location.hostname.toLowerCase();
+    const currentBucket = ensureHostBucket(currentHost);
+    const iframeHostSet = new Set(
+      Object.keys(currentBucket.iframeHosts || {})
+        .map((host) => String(host || "").trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const ignoredSet = getIgnoredUploadHostSet();
+    const relatedHosts = getCurrentPageRelatedHosts();
+    return relatedHosts.map((host) => {
+      const manualSelected = Object.prototype.hasOwnProperty.call(state.ui.uploadScopeSelectionByHost, host)
+        ? Boolean(state.ui.uploadScopeSelectionByHost[host])
+        : null;
+      const selected = manualSelected === null ? !ignoredSet.has(host) : manualSelected;
+      return {
+        host,
+        count: collectHostTexts(host, false).length,
+        isCurrentHost: host === currentHost,
+        isIframeHost: iframeHostSet.has(host),
+        isIgnoredByDefault: ignoredSet.has(host),
+        selected,
+      };
+    });
+  }
+
+  function setUploadScopeSelectionsByHosts(hosts, selected) {
+    const nextValue = Boolean(selected);
+    for (const host of hosts) {
+      if (!host) {
+        continue;
+      }
+      state.ui.uploadScopeSelectionByHost[host] = nextValue;
+    }
+  }
+
+  /**
+   * getSelectedUploadHostsFromScopeUi:
+   * - 读取当前“上传前域名筛选”里实际勾选的 host 列表。
+   * - 若 UI 尚未初始化（极少数时机），则按忽略名单回退默认选择。
+   */
+  function getSelectedUploadHostsFromScopeUi() {
+    const rows = getCurrentPageUploadScopeRows();
+    return rows.filter((row) => row.selected && row.count > 0).map((row) => row.host);
+  }
+
+  function refreshUploadScopeUi() {
+    const rows = getCurrentPageUploadScopeRows();
+    const selectedRows = rows.filter((row) => row.selected && row.count > 0);
+    const selectedHostCount = selectedRows.length;
+    const selectedTextCount = selectedRows.reduce((sum, row) => sum + row.count, 0);
+    const totalTextCount = rows.reduce((sum, row) => sum + row.count, 0);
+    const ignoredCount = getIgnoredUploadHostSet().size;
+
+    if (state.ui.uploadHint) {
+      state.ui.uploadHint.textContent =
+        `当前页面相关域名已采集英文词条：${totalTextCount} 条（${rows.length} 个域名）；当前勾选上传：${selectedTextCount} 条（${selectedHostCount} 个域名）；超大请求会自动分批。`;
+    }
+
+    if (state.ui.uploadScopeSummary) {
+      state.ui.uploadScopeSummary.textContent =
+        `已勾选 ${selectedHostCount}/${rows.length} 个域名，预计上传 ${selectedTextCount}/${totalTextCount} 条；忽略名单 ${ignoredCount} 个域名（仅影响默认勾选）。`;
+    }
+
+    if (!state.ui.uploadScopeList) {
+      return;
+    }
+
+    state.ui.uploadScopeList.innerHTML = "";
+    if (rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = `${UI_ID_PREFIX}-scope-empty`;
+      empty.textContent = "当前页面暂未采集到可上传域名。";
+      state.ui.uploadScopeList.appendChild(empty);
+      return;
+    }
+
+    for (const row of rows) {
+      const item = document.createElement("label");
+      item.className = `${UI_ID_PREFIX}-scope-item`;
+      item.title = row.host;
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = Boolean(row.selected);
+      checkbox.dataset.host = row.host;
+      checkbox.addEventListener("change", () => {
+        state.ui.uploadScopeSelectionByHost[row.host] = checkbox.checked;
+        refreshUploadScopeUi();
+      });
+
+      const hostText = document.createElement("span");
+      hostText.className = `${UI_ID_PREFIX}-scope-host`;
+      hostText.textContent = row.host;
+
+      const countText = document.createElement("span");
+      countText.className = `${UI_ID_PREFIX}-scope-count`;
+      countText.textContent = `${row.count} 条`;
+
+      const tags = document.createElement("span");
+      tags.className = `${UI_ID_PREFIX}-scope-tags`;
+      if (row.isCurrentHost) {
+        const tag = document.createElement("span");
+        tag.className = `${UI_ID_PREFIX}-scope-tag`;
+        tag.textContent = "当前页";
+        tags.appendChild(tag);
+      }
+      if (row.isIframeHost) {
+        const tag = document.createElement("span");
+        tag.className = `${UI_ID_PREFIX}-scope-tag`;
+        tag.textContent = "iframe";
+        tags.appendChild(tag);
+      }
+      if (row.isIgnoredByDefault) {
+        const tag = document.createElement("span");
+        tag.className = `${UI_ID_PREFIX}-scope-tag ${UI_ID_PREFIX}-scope-tag-muted`;
+        tag.textContent = "忽略默认";
+        tags.appendChild(tag);
+      }
+
+      item.appendChild(checkbox);
+      item.appendChild(hostText);
+      item.appendChild(countText);
+      item.appendChild(tags);
+      state.ui.uploadScopeList.appendChild(item);
+    }
   }
 
   function getPendingCountByHosts(hosts) {
@@ -1046,11 +1201,16 @@
 
     const currentHost = window.location.hostname.toLowerCase();
     const relatedHosts = getCurrentPageRelatedHosts();
+    const selectedScopeHosts = getSelectedUploadHostsFromScopeUi();
+    if (selectedScopeHosts.length === 0) {
+      setStatusText("未勾选任何可上传域名。请在“上传前域名筛选”里勾选至少一个域名。", "warn", 6000);
+      return;
+    }
     // 一键上传不依赖本地“已导出游标”，直接上传本页相关域名当前采集到的英文词条。
     // 原因：
     // 1) 本地成功不代表远端链路一定最终成功（例如 dispatch/CI/PR 环节失败）；
     // 2) 译文页面通常会变成中文，后续扫描天然不会再采到，云端 merge 也能做去重。
-    const { selectedByHost } = buildHostScopedExport(relatedHosts, false);
+    const { selectedByHost } = buildHostScopedExport(selectedScopeHosts, false);
     const uploadPayload = {};
     for (const [hostKey, list] of Object.entries(selectedByHost)) {
       if (Array.isArray(list) && list.length > 0) {
@@ -1060,7 +1220,7 @@
     const uploadHosts = Object.keys(uploadPayload).sort((a, b) => a.localeCompare(b, "en"));
     const totalSelectedCount = uploadHosts.reduce((sum, hostKey) => sum + uploadPayload[hostKey].length, 0);
     if (totalSelectedCount === 0) {
-      setStatusText("当前页面相关域名没有已采集英文词条，无需上传。", "warn", 5000);
+      setStatusText("当前勾选的上传域名没有已采集英文词条，无需上传。", "warn", 5000);
       return;
     }
     let uploadChunks = [];
@@ -1082,7 +1242,7 @@
 
     setUploadButtonBusy(true, "上传中...");
     setStatusText(
-      `正在上传本页相关域名采集结果：共 ${totalSelectedCount} 条（${uploadHosts.length} 个域名，自动分 ${uploadChunks.length} 批）...`,
+      `正在上传当前勾选域名采集结果：共 ${totalSelectedCount} 条（已勾选 ${selectedScopeHosts.length}/${relatedHosts.length} 个域名；实际上传 ${uploadHosts.length} 个域名，自动分 ${uploadChunks.length} 批）...`,
       "info",
       4000
     );
@@ -1218,6 +1378,90 @@
         border:1px solid #cfe0ff; background:#eff6ff; color:#1d4ed8; font-size:12px;
       }
       .${UI_ID_PREFIX}-hint { margin:8px 0; color:#475569; font-size:12px; }
+      .${UI_ID_PREFIX}-scope-panel {
+        margin:8px 0 10px;
+        border:1px solid #e5ecf4;
+        border-radius:10px;
+        background:#fbfdff;
+        overflow:hidden;
+      }
+      .${UI_ID_PREFIX}-scope-panel > summary {
+        list-style:none;
+        cursor:pointer;
+        padding:8px 10px;
+        font-size:12px;
+        font-weight:600;
+        color:#334155;
+        background:#f8fbff;
+      }
+      .${UI_ID_PREFIX}-scope-panel > summary::-webkit-details-marker { display:none; }
+      .${UI_ID_PREFIX}-scope-panel[open] > summary { border-bottom:1px solid #e5ecf4; }
+      .${UI_ID_PREFIX}-scope-panel-content { padding:8px 10px 10px; }
+      .${UI_ID_PREFIX}-scope-actions {
+        display:flex; gap:8px; margin-top:8px;
+      }
+      .${UI_ID_PREFIX}-scope-actions button {
+        flex:1; min-width:0; border:1px solid #d3dce6; background:#fff; border-radius:9px; padding:6px 8px; cursor:pointer;
+      }
+      .${UI_ID_PREFIX}-scope-actions button:hover { background:#f8fafc; }
+      .${UI_ID_PREFIX}-scope-list {
+        margin-top:8px;
+        max-height:180px;
+        overflow:auto;
+        border:1px solid #e5ecf4;
+        border-radius:10px;
+        background:#fff;
+        padding:6px;
+      }
+      .${UI_ID_PREFIX}-scope-empty {
+        color:#64748b;
+        font-size:12px;
+        padding:6px;
+      }
+      .${UI_ID_PREFIX}-scope-item {
+        display:grid;
+        grid-template-columns:auto minmax(0,1fr) auto;
+        align-items:center;
+        gap:6px 8px;
+        padding:6px;
+        border-radius:8px;
+      }
+      .${UI_ID_PREFIX}-scope-item:hover { background:#f8fafc; }
+      .${UI_ID_PREFIX}-scope-item input[type="checkbox"] { margin:0; }
+      .${UI_ID_PREFIX}-scope-host {
+        min-width:0;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+        color:#1f2937;
+        font-size:12px;
+      }
+      .${UI_ID_PREFIX}-scope-count {
+        color:#475569;
+        font-size:12px;
+        white-space:nowrap;
+      }
+      .${UI_ID_PREFIX}-scope-tags {
+        grid-column:2 / 4;
+        display:flex;
+        flex-wrap:wrap;
+        gap:4px;
+      }
+      .${UI_ID_PREFIX}-scope-tag {
+        display:inline-flex;
+        align-items:center;
+        border:1px solid #cbd5e1;
+        border-radius:999px;
+        padding:1px 6px;
+        font-size:11px;
+        color:#334155;
+        background:#f8fafc;
+      }
+      .${UI_ID_PREFIX}-scope-tag-muted {
+        color:#92400e;
+        border-color:#fcd34d;
+        background:#fffbeb;
+      }
       .${UI_ID_PREFIX}-primary {
         width:100%; border:1px solid #0d9d70; border-radius:12px; padding:10px 12px; cursor:pointer; color:#fff;
         background:linear-gradient(180deg,#18b37f 0%,#0d9d70 100%); box-shadow:0 8px 16px rgba(13,157,112,.2); font-weight:700;
@@ -1259,6 +1503,7 @@
       }
       @media (max-width: 480px) {
         .${UI_ID_PREFIX}-row, .${UI_ID_PREFIX}-btn-row { flex-direction: column; align-items: stretch; }
+        .${UI_ID_PREFIX}-scope-actions { flex-direction: column; }
       }
     `;
     document.head.appendChild(style);
@@ -1322,7 +1567,23 @@
             <span>默认上传范围</span>
             <strong>本页相关</strong>
           </div>
-          <div class="${UI_ID_PREFIX}-hint" id="${UI_ID_PREFIX}-upload-hint">当前页面相关域名已采集英文词条：0 条（上传不依赖本地导出游标；超大请求会自动分批）</div>
+          <div class="${UI_ID_PREFIX}-hint" id="${UI_ID_PREFIX}-upload-hint">当前页面相关域名已采集英文词条：0 条（当前勾选上传：0 条；超大请求会自动分批）</div>
+          <details class="${UI_ID_PREFIX}-scope-panel" id="${UI_ID_PREFIX}-upload-scope-details">
+            <summary>上传前域名筛选（可取消误采域名）</summary>
+            <div class="${UI_ID_PREFIX}-scope-panel-content">
+              <div class="${UI_ID_PREFIX}-mini" id="${UI_ID_PREFIX}-upload-scope-summary">已勾选 0/0 个域名，预计上传 0/0 条。</div>
+              <div class="${UI_ID_PREFIX}-scope-actions">
+                <button id="${UI_ID_PREFIX}-scope-select-all" type="button">全选本页相关域名</button>
+                <button id="${UI_ID_PREFIX}-scope-only-iframe" type="button">仅勾选 iframe 域名</button>
+              </div>
+              <div class="${UI_ID_PREFIX}-scope-actions">
+                <button id="${UI_ID_PREFIX}-scope-save-ignore" type="button">将未勾选加入忽略名单</button>
+                <button id="${UI_ID_PREFIX}-scope-clear-ignore" type="button">清空忽略名单</button>
+              </div>
+              <div class="${UI_ID_PREFIX}-scope-list" id="${UI_ID_PREFIX}-upload-scope-list"></div>
+              <div class="${UI_ID_PREFIX}-mini">提示：忽略名单只影响默认勾选，不会删除任何采集数据。</div>
+            </div>
+          </details>
           <button class="${UI_ID_PREFIX}-primary" id="${UI_ID_PREFIX}-upload-current-increment" type="button">
             <span data-role="upload-label">一键上传（本页相关）</span>
             <span class="${UI_ID_PREFIX}-primary-sub">CI 自动生成采集 PR，你只需等待审核</span>
@@ -1385,8 +1646,11 @@
     state.ui.aliasInput = panel.querySelector(`#${UI_ID_PREFIX}-alias-input`);
     state.ui.settingsDetails = panel.querySelector(`#${UI_ID_PREFIX}-settings-details`);
     state.ui.advancedDetails = panel.querySelector(`#${UI_ID_PREFIX}-advanced-details`);
+    state.ui.uploadScopeDetails = panel.querySelector(`#${UI_ID_PREFIX}-upload-scope-details`);
     state.ui.currentHostLabel = panel.querySelector(`#${UI_ID_PREFIX}-current-host`);
     state.ui.uploadHint = panel.querySelector(`#${UI_ID_PREFIX}-upload-hint`);
+    state.ui.uploadScopeSummary = panel.querySelector(`#${UI_ID_PREFIX}-upload-scope-summary`);
+    state.ui.uploadScopeList = panel.querySelector(`#${UI_ID_PREFIX}-upload-scope-list`);
     if (state.ui.inviteInput) {
       state.ui.inviteInput.value = state.settings.inviteCode || "";
     }
@@ -1398,6 +1662,9 @@
     }
     if (state.ui.advancedDetails) {
       state.ui.advancedDetails.open = Boolean(persistedUi.advancedOpen);
+    }
+    if (state.ui.uploadScopeDetails) {
+      state.ui.uploadScopeDetails.open = Boolean(persistedUi.uploadScopeOpen);
     }
     refreshHostSelectorOptions(window.location.hostname.toLowerCase());
 
@@ -1462,6 +1729,7 @@
           panelTop: Math.round(panelAnchorTop),
           panelRight: Math.round(panelAnchorRight),
           panelOpen: isPanelOpen,
+          uploadScopeOpen: Boolean(state.ui.uploadScopeDetails?.open),
           advancedOpen: Boolean(state.ui.advancedDetails?.open),
           settingsOpen: Boolean(state.ui.settingsDetails?.open),
         },
@@ -1589,8 +1857,66 @@
       }
       state.ui.inviteInput.type = state.ui.inviteInput.type === "password" ? "text" : "password";
     });
+    panel.querySelector(`#${UI_ID_PREFIX}-scope-select-all`)?.addEventListener("click", () => {
+      const rows = getCurrentPageUploadScopeRows();
+      setUploadScopeSelectionsByHosts(
+        rows.filter((row) => row.count > 0).map((row) => row.host),
+        true
+      );
+      refreshUploadScopeUi();
+      setStatusText("已勾选当前页面相关域名（有词条的域名）。", "success", 3000);
+    });
+    panel.querySelector(`#${UI_ID_PREFIX}-scope-only-iframe`)?.addEventListener("click", () => {
+      const rows = getCurrentPageUploadScopeRows();
+      const iframeHosts = rows.filter((row) => row.isIframeHost && row.count > 0).map((row) => row.host);
+      if (iframeHosts.length === 0) {
+        setStatusText("当前页面没有可勾选的 iframe 域名词条。", "warn", 3500);
+        return;
+      }
+      setUploadScopeSelectionsByHosts(rows.map((row) => row.host), false);
+      setUploadScopeSelectionsByHosts(iframeHosts, true);
+      refreshUploadScopeUi();
+      setStatusText(`已切换为“仅 iframe 域名”上传范围（${iframeHosts.length} 个域名）。`, "success", 3500);
+    });
+    panel.querySelector(`#${UI_ID_PREFIX}-scope-save-ignore`)?.addEventListener("click", () => {
+      const rows = getCurrentPageUploadScopeRows();
+      const uncheckedHosts = rows.filter((row) => !row.selected).map((row) => row.host);
+      if (uncheckedHosts.length === 0) {
+        setStatusText("当前没有未勾选域名，无需写入忽略名单。", "warn", 3500);
+        return;
+      }
+      const nextIgnoredSet = getIgnoredUploadHostSet();
+      for (const host of uncheckedHosts) {
+        nextIgnoredSet.add(host);
+        delete state.ui.uploadScopeSelectionByHost[host];
+      }
+      updateCollectorSettings({
+        ignoredUploadHosts: Array.from(nextIgnoredSet).sort((a, b) => a.localeCompare(b, "en")),
+      });
+      refreshUploadScopeUi();
+      setStatusText(`已将 ${uncheckedHosts.length} 个未勾选域名加入忽略名单（仅影响默认勾选）。`, "success", 5000);
+    });
+    panel.querySelector(`#${UI_ID_PREFIX}-scope-clear-ignore`)?.addEventListener("click", () => {
+      const ignoredCount = getIgnoredUploadHostSet().size;
+      if (ignoredCount === 0) {
+        setStatusText("忽略名单为空，无需清空。", "warn", 3000);
+        return;
+      }
+      const confirmed = window.confirm(`确认清空忽略名单吗？当前共有 ${ignoredCount} 个域名。`);
+      if (!confirmed) {
+        return;
+      }
+      updateCollectorSettings({ ignoredUploadHosts: [] });
+      // 清空本页相关域名的会话内勾选覆盖，恢复到“非忽略即默认勾选”的规则。
+      for (const row of getCurrentPageUploadScopeRows()) {
+        delete state.ui.uploadScopeSelectionByHost[row.host];
+      }
+      refreshUploadScopeUi();
+      setStatusText("已清空忽略名单。", "success", 3500);
+    });
     state.ui.settingsDetails?.addEventListener("toggle", persistUiState);
     state.ui.advancedDetails?.addEventListener("toggle", persistUiState);
+    state.ui.uploadScopeDetails?.addEventListener("toggle", persistUiState);
 
     ball.addEventListener("click", (event) => {
       if (Date.now() < suppressOpenUntil) {
@@ -1807,11 +2133,7 @@
     if (state.ui.currentHostLabel) {
       state.ui.currentHostLabel.textContent = window.location.hostname.toLowerCase();
     }
-    if (state.ui.uploadHint) {
-      const relatedHosts = getCurrentPageRelatedHosts();
-      const relatedCollected = relatedHosts.reduce((sum, hostKey) => sum + collectHostTexts(hostKey, false).length, 0);
-      state.ui.uploadHint.textContent = `当前页面相关域名已采集英文词条：${relatedCollected} 条（${relatedHosts.length} 个域名；上传不依赖本地导出游标；超大请求会自动分批）`;
-    }
+    refreshUploadScopeUi();
     refreshStatusText();
     setUploadButtonBusy(false);
   }
