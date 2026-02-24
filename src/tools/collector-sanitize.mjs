@@ -131,6 +131,17 @@ function classifyNoiseText(text, whitelistSet) {
     return "hex-like";
   }
 
+  // OverlayLex 翻译脚本包列表中的版本说明（例如：v0.2.16 · obr-www-owlbear-rodeo）
+  // 这类文本属于脚本内部 UI 元数据，不应进入翻译包。
+  if (/^v\d+\.\d+\.\d+\s*[·•]\s*obr-[a-z0-9-]+$/i.test(normalized)) {
+    return "overlaylex-package-meta";
+  }
+
+  // OverlayLex 内部 UI 的高置信固定文案（本地采集已尽量排除，这里作为 CI 兜底）
+  if (/^OverlayLex(?:\s+(?:控制台|采集器|提示|连接异常))?$/.test(normalized)) {
+    return "overlaylex-ui";
+  }
+
   // 极长无空格技术串（疑似 token / 压缩串 / 机器 ID）
   if (!/\s/.test(normalized) && normalized.length >= 40) {
     return "long-token-like";

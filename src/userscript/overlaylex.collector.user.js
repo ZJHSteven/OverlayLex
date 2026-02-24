@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Collector
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.3
+// @version      0.2.4
 // @description  OverlayLex 采集脚本：实时收集页面英文词条并导出为翻译原文素材。
 // @author       OverlayLex
 // @match        *://*/*
@@ -43,7 +43,7 @@
   const COLLECTOR_UPLOAD_API_PATH = "/collector/submissions";
   const COLLECTOR_UPLOAD_SOFT_CHUNK_BYTES = 36 * 1024;
   const COLLECTOR_UPLOAD_HARD_CHUNK_BYTES = 46 * 1024;
-  const SCRIPT_VERSION = "0.2.3";
+  const SCRIPT_VERSION = "0.2.4";
   const CJK_REGEX = /[\u3400-\u9fff]/;
   const IGNORED_TEXT_PARENT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "TEMPLATE"]);
 
@@ -634,15 +634,31 @@
     return false;
   }
 
+  /**
+   * isNodeInsideCollectorUI:
+   * - 名字沿用旧函数名，但当前语义已扩展为“是否位于 OverlayLex 内部 UI（采集器 + 主翻译脚本）”。
+   * - 原因：采集器与主翻译脚本常同时开启；若只排除采集器自身 UI，会把翻译脚本控制台文本误采进词条。
+   */
   function isNodeInsideCollectorUI(node) {
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
     if (!element) {
       return false;
     }
-    if (typeof element.id === "string" && element.id.startsWith(UI_ID_PREFIX)) {
+    if (typeof element.id === "string" && element.id.startsWith("overlaylex-")) {
       return true;
     }
-    return Boolean(element.closest?.(`[id^="${UI_ID_PREFIX}"]`));
+    if (Array.isArray(element.classList) || element.classList?.length) {
+      for (const className of Array.from(element.classList || [])) {
+        if (String(className || "").startsWith("overlaylex-")) {
+          return true;
+        }
+      }
+    }
+    return Boolean(
+      element.closest?.(
+        `[id^="overlaylex-"], [class^="overlaylex-"], [class*=" overlaylex-"]`
+      )
+    );
   }
 
   function collectHostTexts(host, incremental) {

@@ -105,6 +105,7 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
    - 上传前可在“上传前域名筛选”中取消勾选误采域名（例如误采到 GitHub/其他站点）
    - 可将“未勾选域名”写入忽略名单（本地保存），后续默认不勾选；忽略名单只影响一键上传默认勾选，不删除采集数据
    - 支持快捷切换“仅勾选 iframe 域名”，便于插件场景快速排除顶层站点噪音
+   - 采集器会在本地尽量排除 OverlayLex 自身 UI（主翻译脚本控制台 / 采集器面板）文本；CI 侧过滤器也会对少量漏网的 OverlayLex 包版本元信息做兜底过滤
    - 若请求体过大，脚本会自动按字节分批上传（避免命中 Worker / GitHub dispatch 上限）
    - 一键上传不依赖本地“已导出游标”；是否重复入库由云端 `merge-collected` 合并去重处理
    - 若该域名尚无本地包，CI 会复用 `merge-collected` 逻辑自动创建新包（与本地手工流程一致）

@@ -9,6 +9,10 @@
 
 ## 变更日志
 - 2026-02-24
+  - 更新 `src/userscript/overlaylex.collector.user.js`：采集器版本升级到 `0.2.4`（同步 `@version` 与 `SCRIPT_VERSION`），用于触发油猴自动更新本次过滤/摘要修复。
+  - 更新 `src/userscript/overlaylex.collector.user.js`：本地采集阶段扩展“OverlayLex 内部 UI DOM 排除”范围（采集器 + 主翻译脚本控制台），避免把 `vX.Y.Z · obr-*` 等脚本自身元信息误采进词条。
+  - 更新 `src/tools/collector-sanitize.mjs`：新增 OverlayLex 包版本元信息与固定 UI 文案的高置信过滤规则，作为旧版采集脚本/漏网场景的 CI 兜底。
+  - 更新 `.github/workflows/collector-submission-pr.yml`：PR 摘要改为展示“来源 host（主） + 本次上传 host 列表（全部）”，避免多域名上传时摘要误导。
   - 更新 `src/userscript/overlaylex.collector.user.js`：采集器版本升级到 `0.2.3`（同步 `@version` 与 `SCRIPT_VERSION`），确保油猴可自动更新到最新上传链路。
   - 更新 `src/userscript/overlaylex.collector.user.js`：新增“上传前域名筛选”面板，支持按域名复选上传范围、快捷切换“仅 iframe 域名”、将未勾选域名加入本地忽略名单、清空忽略名单，降低误采到无关站点时的噪音与请求体体积。
   - 更新 `src/userscript/overlaylex.collector.user.js`：一键上传改为读取当前筛选结果执行上传（仍保留超大请求自动分批与 `GM_xmlhttpRequest` 优先上传逻辑）。

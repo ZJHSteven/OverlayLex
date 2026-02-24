@@ -127,7 +127,7 @@ jobs:
           }
 
           const normalizedCollected = ensureCollectedShape(collected);
-          const hostKeys = Object.keys(normalizedCollected);
+          const hostKeys = Object.keys(normalizedCollected).sort((a, b) => a.localeCompare(b, "en"));
           host = host || inputHost || hostKeys[0];
           if (!hostKeys.includes(host)) {
             throw new Error(`host 不在 payload 中：${host}`);
@@ -154,12 +154,14 @@ jobs:
           fs.writeFileSync(
             metaPath,
             JSON.stringify(
-              {
-                submissionId,
-                host,
-                scope,
-                alias,
-                submittedAt,
+                {
+                  submissionId,
+                  host,
+                  uploadHosts: hostKeys,
+                  uploadHostCount: hostKeys.length,
+                  scope,
+                  alias,
+                  submittedAt,
                 pageUrl,
                 collectorScriptVersion,
                 rawTextCount: totalTexts,
@@ -172,8 +174,9 @@ jobs:
           const outputFile = process.env.GITHUB_OUTPUT;
           const lines = [
             `submission_id=${submissionId}`,
-            `host=${host}`,
-            `scope=${scope}`,
+              `host=${host}`,
+              `host_count=${hostKeys.length}`,
+              `scope=${scope}`,
             `alias=${alias}`,
             `submitted_at=${submittedAt}`,
             `raw_path=${rawPath}`,
@@ -280,9 +283,15 @@ jobs:
             changedPackages.push({ fileName, beforeCount, afterCount, added });
           }
 
-          const report = readJson(reportPath);
-          const meta = readJson(metaPath);
-          const byRuleEntries = Object.entries(report.byRule || {}).sort((a, b) => b[1] - a[1]);
+            const report = readJson(reportPath);
+            const meta = readJson(metaPath);
+            const uploadHosts = Array.isArray(meta.uploadHosts)
+              ? meta.uploadHosts.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
+              : (host ? [host] : []);
+            const uploadHostLines = uploadHosts.length
+              ? uploadHosts.map((hostName) => `  - \`${hostName}\``).join("\n")
+              : "  - 无";
+            const byRuleEntries = Object.entries(report.byRule || {}).sort((a, b) => b[1] - a[1]);
           const topRules = byRuleEntries.length
             ? byRuleEntries.map(([rule, count]) => `- \`${rule}\`: ${count}`).join("\n")
             : "- 无（本次未过滤）";
@@ -299,18 +308,22 @@ jobs:
           const body = [
             "本 PR 由采集脚本一键上传触发的 GitHub Actions 自动生成。",
             "",
-            "## 提交信息",
-            `- submissionId：\`${submissionId}\``,
-            `- 提交时间（UTC）：${submittedAt || "unknown"}`,
-            `- 来源 host：\`${host}\``,
-            `- 上传范围：\`${scope || "current-host-incremental"}\``,
-            `- 协作者昵称：${alias || "（未提供）"}`,
-            `- 原始词条数量：${meta.rawTextCount ?? "unknown"}`,
-            `- 过滤后词条数量：${report.summary?.cleanedTextCount ?? "unknown"}`,
-            `- 过滤数量：${report.summary?.filteredTextCount ?? "unknown"}`,
-            `- 新增入包词条数量（按包前后条目数差值统计）：${addedTextCount}`,
-            "",
-            "## 过滤统计（按规则）",
+              "## 提交信息",
+              `- submissionId：\`${submissionId}\``,
+              `- 提交时间（UTC）：${submittedAt || "unknown"}`,
+              `- 来源 host（主）：\`${host}\``,
+              `- 上传 host 数量：${uploadHosts.length}`,
+              `- 上传范围：\`${scope || "current-host-incremental"}\``,
+              `- 协作者昵称：${alias || "（未提供）"}`,
+              `- 原始词条数量：${meta.rawTextCount ?? "unknown"}`,
+              `- 过滤后词条数量：${report.summary?.cleanedTextCount ?? "unknown"}`,
+              `- 过滤数量：${report.summary?.filteredTextCount ?? "unknown"}`,
+              `- 新增入包词条数量（按包前后条目数差值统计）：${addedTextCount}`,
+              "",
+              "## 上传 host 列表（本次请求）",
+              uploadHostLines,
+              "",
+              "## 过滤统计（按规则）",
             topRules,
             "",
             "## 过滤样例（节选）",
