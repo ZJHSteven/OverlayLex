@@ -7,9 +7,26 @@
   },
   "version": "0.1.0",
   "translations": {
+    "12h": "",
+    "24h": "",
     "Add": "",
+    "Change date on text input?": "",
+    "GitHub": "",
+    "History Size": "",
     "Hours": "",
+    "If there are any bugs, feel free to": "",
+    "Integrate with \"Calendar!\"?": "",
     "Minutes": "",
-    "OwlClock🦉": ""
+    "on GitHub. Contributions are welcome!": "",
+    "open an issue": "",
+    "OwlClock🦉": "",
+    "OwlClock🦉 Information": "",
+    "OwlClock🦉 Settings": "",
+    "Save": "",
+    "There is an integration with the \"Calendar!\" extension! You can enable it in \"OwlClock\" settings. It will change the date when time passes midnight.": "",
+    "This extension provides a simple way to keep track of in-game time during the day.": "",
+    "This option enables date change also on text input. It will assume that if you enter time before current time, you must mean the next day. A hint will appear when applying the time will advance the date. Example: entering 8:00 when current time is 23:00 will trigger date change.": "",
+    "Time Format": "",
+    "You can edit the time directly by editing it in the text field, or by using the \"Add\" field and \"Hours\"/\"Minutes\" buttons. The time will be saved in room data. Only GM can edit the time. You can switch between 24-hour and 12-hour time format in the settings.": ""
   }
 }

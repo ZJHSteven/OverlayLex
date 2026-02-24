@@ -7,6 +7,10 @@
   },
   "version": "0.1.0",
   "translations": {
+    "Add Track": "",
+    "Clear All Tracks": "",
+    "Export csv": "",
+    "Import csv": "",
     "Search": "",
     "Tracks": ""
   }
