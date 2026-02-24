@@ -1,0 +1,41 @@
+{
+  "id": "obr-owl-trackers-onrender-com",
+  "name": "OBR 自动翻译包 - owl-trackers.onrender.com",
+  "target": {
+    "host": "owl-trackers.onrender.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.1",
+  "translations": {
+    "AC": "",
+    "Add Tracker": "添加数据块",
+    "Bar": "数据条",
+    "bug-solid": "",
+    "Change Log": "更新日志",
+    "Checkbox": "复选框",
+    "Color Picker": "选择颜色",
+    "Counter": "计数器",
+    "Delete": "删除",
+    "Disable Inline Math": "",
+    "Drag to Reorder": "",
+    "Enable Segments": "启用片段",
+    "Hide From Map": "",
+    "HP": "",
+    "Instructions": "",
+    "Name": "",
+    "Number": "",
+    "Open a scene to configure extension settings.": "打开场景以配置扩展。",
+    "Owl Trackers": "Owl Trackers",
+    "Patreon": "",
+    "PP": "",
+    "Report Bug": "问题反馈",
+    "Set scene default trackers": "设置场景默认数据块",
+    "Set Scene Defaults": "",
+    "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": "",
+    "Toggle Edit Mode": "",
+    "Trackers above token": "在Token上方显示",
+    "Use reduced bar height": "使用更窄的数据条",
+    "Use scene trackers": "",
+    "Vertical Offset": "垂直偏移距"
+  }
+}

@@ -47,7 +47,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-dddice-com",
     "name": "OBR 自动翻译包 - dddice.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - dddice.com（自动同步）"
   },
@@ -58,6 +58,14 @@ export const PACKAGE_CATALOG = {
     "version": "0.1.1",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - dynamic-fog.owlbear.rodeo（自动同步）"
+  },
+  "obr-flip-battle-system-com": {
+    "id": "obr-flip-battle-system-com",
+    "name": "OBR 自动翻译包 - flip.battle-system.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - flip.battle-system.com（自动同步）"
   },
   "obr-gmg-tabletop-almanac-com": {
     "id": "obr-gmg-tabletop-almanac-com",
@@ -79,7 +87,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-movement-tracker-abarbre-com",
     "name": "OBR 自动翻译包 - movement-tracker.abarbre.com",
     "kind": "translation",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - movement-tracker.abarbre.com（自动同步）"
   },
@@ -99,6 +107,14 @@ export const PACKAGE_CATALOG = {
     "enabledByDefault": true,
     "description": "Outliner 插件翻译包（自动采集生成）"
   },
+  "obr-owl-trackers-onrender-com": {
+    "id": "obr-owl-trackers-onrender-com",
+    "name": "OBR 自动翻译包 - owl-trackers.onrender.com",
+    "kind": "translation",
+    "version": "0.1.1",
+    "enabledByDefault": true,
+    "description": "OBR 自动翻译包 - owl-trackers.onrender.com（自动同步）"
+  },
   "obr-owlbear-hp-tracker-pages-dev": {
     "id": "obr-owlbear-hp-tracker-pages-dev",
     "name": "HP Tracker 插件中文包（owlbear-hp-tracker.pages.dev）",
@@ -111,7 +127,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-owlbear-rodeo-bubbles-extension-onrender-com",
     "name": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com",
     "kind": "translation",
-    "version": "0.1.12",
+    "version": "0.1.13",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - owlbear-rodeo-bubbles-extension.onrender.com（自动同步）"
   },
@@ -143,7 +159,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-owlbear-rodeo",
     "name": "OBR 主站与房间中文包（owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.2.16",
+    "version": "0.2.17",
     "enabledByDefault": true,
     "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
@@ -151,7 +167,7 @@ export const PACKAGE_CATALOG = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.9",
+    "version": "0.2.10",
     "enabledByDefault": true,
     "description": "控制脚本允许在哪些域名继续执行"
   }
@@ -203,7 +219,7 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
     "id": "overlaylex-domain-allowlist",
     "name": "OverlayLex 域名准入包",
     "kind": "domain-allowlist",
-    "version": "0.2.9",
+    "version": "0.2.10",
     "rules": [
       {
         "type": "exact",
@@ -273,6 +289,12 @@ export const BUILTIN_PACKAGE_FALLBACKS = {
         "value": "music-player-adrf.onrender.com",
         "comment": "自动同步包域名",
         "source": "obr-music-player-adrf-onrender-com"
+      },
+      {
+        "type": "exact",
+        "value": "owl-trackers.onrender.com",
+        "comment": "自动同步包域名",
+        "source": "obr-owl-trackers-onrender-com"
       },
       {
         "type": "exact",

@@ -2,7 +2,7 @@
   "id": "overlaylex-domain-allowlist",
   "name": "OverlayLex 域名准入包",
   "kind": "domain-allowlist",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "rules": [
     {
       "type": "exact",
@@ -72,6 +72,12 @@
       "value": "music-player-adrf.onrender.com",
       "comment": "自动同步包域名",
       "source": "obr-music-player-adrf-onrender-com"
+    },
+    {
+      "type": "exact",
+      "value": "owl-trackers.onrender.com",
+      "comment": "自动同步包域名",
+      "source": "obr-owl-trackers-onrender-com"
     },
     {
       "type": "exact",
