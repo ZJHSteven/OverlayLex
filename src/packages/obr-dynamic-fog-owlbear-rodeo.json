@@ -5,11 +5,12 @@
     "host": "dynamic-fog.owlbear.rodeo",
     "pathPrefix": "/"
   },
-  "version": "0.1.1",
+  "version": "0.1.2",
   "translations": {
     "Angle": "角度",
     "Edge": "边缘",
     "ft": "英尺",
+    "Light": "光亮",
     "Range": "范围",
     "Remove": "移除",
     "Rotate": "旋转",

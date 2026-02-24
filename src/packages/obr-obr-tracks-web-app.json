@@ -1,0 +1,17 @@
+{
+  "id": "obr-obr-tracks-web-app",
+  "name": "OBR 自动翻译包 - obr-tracks.web.app",
+  "target": {
+    "host": "obr-tracks.web.app",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.1",
+  "translations": {
+    "Add Track": "添加音乐",
+    "Clear All Tracks": "清空音乐列表",
+    "Export csv": "导出CSV",
+    "Import csv": "导入CSV",
+    "Search": "搜索",
+    "Tracks": "音乐"
+  }
+}
