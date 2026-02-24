@@ -1,0 +1,21 @@
+{
+  "id": "obr-owl-trackers-onrender-com",
+  "name": "OBR 自动翻译包 - owl-trackers.onrender.com",
+  "target": {
+    "host": "owl-trackers.onrender.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "bug-solid": "",
+    "Enable Segments": "",
+    "HP": "",
+    "Open a scene to configure extension settings.": "",
+    "Owl Trackers": "",
+    "Report Bug": "",
+    "Set scene default trackers": "",
+    "Trackers above token": "",
+    "Use reduced bar height": "",
+    "Vertical Offset": ""
+  }
+}

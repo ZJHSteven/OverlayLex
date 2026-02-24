@@ -1,0 +1,24 @@
+{
+  "id": "obr-flip-battle-system-com",
+  "name": "OBR 自动翻译包 - flip.battle-system.com",
+  "target": {
+    "host": "flip.battle-system.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Attachment": "",
+    "Attachments with Parent": "",
+    "Character": "",
+    "Disable Player Bind": "",
+    "Drawing": "",
+    "Flip!": "",
+    "Get the news on updates on the Battle-System Patreon": "",
+    "Map": "",
+    "Mount": "",
+    "Note": "",
+    "Prop": "",
+    "Text": "",
+    "Z-Indexing Layers": ""
+  }
+}

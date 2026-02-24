@@ -1,0 +1,26 @@
+{
+  "id": "obr-journal-battle-system-com",
+  "name": "OBR 自动翻译包 - journal.battle-system.com",
+  "target": {
+    "host": "journal.battle-system.com",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Get the news on updates on the Battle-System Patreon": "",
+    "Page 1": "",
+    "Page 2": "",
+    "Page 3": "",
+    "Page 4": "",
+    "Page 5": "",
+    "Party": "",
+    "Private": "",
+    "Wow looks cool": "",
+    "X 1": "",
+    "X 2": "",
+    "X 3": "",
+    "X 4": "",
+    "X 5": "",
+    "Yeahhh": ""
+  }
+}

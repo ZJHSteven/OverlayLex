@@ -1,0 +1,19 @@
+{
+  "id": "obr-owlbear-emanation-pages-dev",
+  "name": "OBR 自动翻译包 - owlbear-emanation.pages.dev",
+  "target": {
+    "host": "owlbear-emanation.pages.dev",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Defaults": "",
+    "Delete All": "",
+    "Edit": "",
+    "New": "",
+    "No auras; click 'New' to add an aura.": "",
+    "Paste": "",
+    "Select items to add or edit auras": "",
+    "Settings": ""
+  }
+}

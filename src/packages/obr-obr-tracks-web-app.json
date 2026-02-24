@@ -1,0 +1,13 @@
+{
+  "id": "obr-obr-tracks-web-app",
+  "name": "OBR 自动翻译包 - obr-tracks.web.app",
+  "target": {
+    "host": "obr-tracks.web.app",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Search": "",
+    "Tracks": ""
+  }
+}
