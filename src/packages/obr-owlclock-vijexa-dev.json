@@ -1,0 +1,15 @@
+{
+  "id": "obr-owlclock-vijexa-dev",
+  "name": "OBR 自动翻译包 - owlclock.vijexa.dev",
+  "target": {
+    "host": "owlclock.vijexa.dev",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "Add": "",
+    "Hours": "",
+    "Minutes": "",
+    "OwlClock🦉": ""
+  }
+}

@@ -87,6 +87,7 @@
     "Whisper:": "低语:",
     "Who can see the message is based on WHERE the token is, what RANGE the token said the message at and WHO owns which tokens. As with the example below, Greensley cannot hear the whisper until he is 1 square away. (I have Whisper range set to 1 in this example.)": "哪些人可以看到发送这个消息的token的位置，token在什么范围内说话，以及哪些人拥有哪些令牌。与下面的例子一样，格林斯利没法听到低语除非他在一格的范围内。（在这个例子中，我将低语的范围设置为1。）",
     "Yell": "喊叫",
-    "Yell:": "喊道："
+    "Yell:": "喊道：",
+    "Zehlan-A": ""
   }
 }
