@@ -2,7 +2,7 @@
 
 ## 当前结论（必须最新）
 - 现状：采集脚本链路已稳定可用；当前正在执行“`5etool.csv` 术语表 -> ParaTranz 项目术语库”的一次性增量导入任务，目标是不覆盖已有术语、仅追加新增术语。
-- 已完成：已确认 ParaTranz 术语接口能力（`getTerms` / `createTerm` / `importTerms`）；已确认 `5etool.csv` 为 `GB18030` 编码、无表头、固定 5 列；已发现 CSV 内部存在重复术语（含同词不同译冲突），需要导入前去重与冲突报告；已新增 `src/tools/paratranz_terms_incremental_import.py`（支持 dry-run、冲突策略、远端分页拉取、差集 JSON 输出、分批导入与回读校验）。
+- 已完成：已确认 ParaTranz 术语接口能力（`getTerms` / `createTerm` / `importTerms`）；已确认 `5etool.csv` 为 `GB18030` 编码、无表头、固定 5 列；已发现 CSV 内部存在重复术语（含同词不同译冲突），需要导入前去重与冲突报告；已新增 `src/tools/paratranz_terms_incremental_import.py`（支持 dry-run、冲突策略、远端分页拉取、差集 JSON 输出、分批导入与回读校验）；已根据实测 ParaTranz 行为将脚本术语唯一键模式默认调整为 `lower`（大小写不敏感）以减少差集虚高。
 - 正在做：运行并验证该脚本（先 dry-run 看差集/冲突统计，再执行真实导入）。
 - 下一步：先 dry-run 输出冲突与差集统计，再执行真实导入并回读校验结果；完成后更新本文件记录导入数量与使用命令。
 

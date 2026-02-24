@@ -157,6 +157,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         help="CSV 内部同术语不同译法时的处理策略（默认：skip，更稳妥）",
     )
     parser.add_argument(
+        "--term-key-mode",
+        choices=["lower", "exact"],
+        default="lower",
+        help="术语唯一键模式（默认：lower，贴近 ParaTranz 实际去重行为；exact 为精确大小写）",
+    )
+    parser.add_argument(
         "--report-dir",
         default="",
         help="报告输出目录（默认自动生成到 .tmp/paratranz-terms-import/<时间戳>/）",
@@ -354,17 +360,29 @@ def parse_csv_rows(csv_path: Path, encoding: str) -> Tuple[List[CsvTermRow], Dic
     return rows, stats
 
 
-def term_unique_key(row: CsvTermRow) -> str:
+def normalize_term_key_text(term: str, term_key_mode: str) -> str:
+    """
+    按策略规范化术语 key 文本。
+
+    term_key_mode 说明：
+    - lower: 去首尾空白后转小写（更贴近本次实测 ParaTranz 行为）
+    - exact: 仅去首尾空白（保留大小写）
+    """
+
+    base = (term or "").strip()
+    if term_key_mode == "lower":
+        return base.lower()
+    return base
+
+
+def term_unique_key(row: CsvTermRow, term_key_mode: str) -> str:
     """
     生成“术语唯一键”。
 
-    这里默认只使用 term（而不是 term+pos），原因：
-    - ParaTranz 文档对 createTerm 的描述是“相同术语会失败”；
-    - 实际重复判定更可能以 term 为主；
-    - 这样更保守，能最大化避免重复导入报错。
+    这里仍然只使用 term（而不是 term+pos），原因见 `normalize_term_key_text` 附近说明。
     """
 
-    return row.term.strip()
+    return normalize_term_key_text(row.term, term_key_mode)
 
 
 def term_signature_for_conflict(row: CsvTermRow) -> Tuple[str, str, str, Tuple[str, ...]]:
@@ -381,6 +399,7 @@ def term_signature_for_conflict(row: CsvTermRow) -> Tuple[str, str, str, Tuple[s
 def dedupe_csv_rows(
     rows: Sequence[CsvTermRow],
     conflict_policy: str,
+    term_key_mode: str,
 ) -> Tuple[List[CsvTermRow], Dict[str, object], List[Dict[str, object]]]:
     """
     对 CSV 行做内部去重与冲突处理。
@@ -398,7 +417,7 @@ def dedupe_csv_rows(
 
     grouped: Dict[str, List[CsvTermRow]] = {}
     for row in rows:
-        grouped.setdefault(term_unique_key(row), []).append(row)
+        grouped.setdefault(term_unique_key(row, term_key_mode), []).append(row)
 
     deduped_rows: List[CsvTermRow] = []
     conflict_report: List[Dict[str, object]] = []
@@ -610,7 +629,7 @@ def fetch_remote_terms(
     return all_terms, stats
 
 
-def build_remote_term_key_set(remote_terms: Sequence[Dict[str, object]]) -> set:
+def build_remote_term_key_set(remote_terms: Sequence[Dict[str, object]], term_key_mode: str) -> set:
     """
     构建远端术语 key 集合，用于本地差集判断。
 
@@ -621,13 +640,14 @@ def build_remote_term_key_set(remote_terms: Sequence[Dict[str, object]]) -> set:
     for item in remote_terms:
         term = str(item.get("term", "") or "").strip()
         if term:
-            key_set.add(term)
+            key_set.add(normalize_term_key_text(term, term_key_mode))
     return key_set
 
 
 def build_incremental_terms(
     deduped_rows: Sequence[CsvTermRow],
     remote_term_keys: set,
+    term_key_mode: str,
 ) -> Tuple[List[CsvTermRow], Dict[str, object]]:
     """
     计算“仅新增”的术语列表。
@@ -641,7 +661,7 @@ def build_incremental_terms(
     already_exists_count = 0
 
     for row in deduped_rows:
-        if term_unique_key(row) in remote_term_keys:
+        if term_unique_key(row, term_key_mode) in remote_term_keys:
             already_exists_count += 1
             continue
         incremental_rows.append(row)
@@ -841,6 +861,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         log_info("CSV：", csv_path, f"(encoding={args.encoding})")
         log_info("模式：", "真实导入 (--execute)" if args.execute else "dry-run（仅生成报告）")
         log_info("冲突策略：", args.conflict_policy)
+        log_info("术语唯一键模式：", args.term_key_mode)
 
         # 第 1 步：读取并解析 CSV。
         csv_rows, csv_parse_stats = parse_csv_rows(csv_path, args.encoding)
@@ -848,7 +869,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         # 第 2 步：CSV 内部去重与冲突报告。
         deduped_rows, csv_dedupe_stats, conflict_report = dedupe_csv_rows(
-            csv_rows, conflict_policy=args.conflict_policy
+            csv_rows, conflict_policy=args.conflict_policy, term_key_mode=args.term_key_mode
         )
         log_info(
             "CSV 内部去重完成：",
@@ -870,7 +891,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             page_size=args.page_size,
             timeout=args.timeout,
         )
-        remote_term_keys = build_remote_term_key_set(remote_terms)
+        remote_term_keys = build_remote_term_key_set(remote_terms, term_key_mode=args.term_key_mode)
         log_info("远端术语拉取完成：", f"远端 key 数={len(remote_term_keys)}")
 
         # 输出远端快照（只保留必要字段，避免报告文件过大）。
@@ -887,7 +908,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         write_json_file(report_dir / "remote-terms-snapshot.json", remote_terms_snapshot)
 
         # 第 4 步：计算差集（只保留远端不存在的术语）。
-        incremental_rows, diff_stats = build_incremental_terms(deduped_rows, remote_term_keys)
+        incremental_rows, diff_stats = build_incremental_terms(
+            deduped_rows, remote_term_keys, term_key_mode=args.term_key_mode
+        )
         incremental_payload = [row.to_paratranz_payload() for row in incremental_rows]
         write_json_file(report_dir / "terms-incremental.json", incremental_payload)
 
@@ -903,6 +926,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "base_url": args.base_url.rstrip("/"),
             "execute": bool(args.execute),
             "conflict_policy": args.conflict_policy,
+            "term_key_mode": args.term_key_mode,
             "report_dir": str(report_dir),
             **csv_parse_stats,
             **csv_dedupe_stats,
@@ -965,4 +989,3 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
