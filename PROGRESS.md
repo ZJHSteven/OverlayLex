@@ -1,10 +1,10 @@
 # 项目状态快照
 
 ## 当前结论（必须最新）
-- 现状：在现有发布链路稳定的基础上，开始实施“采集脚本 UI 重构 + 一键上传自动 PR”协作链路。
-- 已完成：采集脚本 UI/上传入口改造；Worker 新增 `POST /collector/submissions`（邀请码校验 + 直接 `repository_dispatch`，无 R2 临时存储）；新增采集 PR 工作流与 `collector-sanitize` 过滤器；README/PLANS/CHANGELOG 已同步；Worker 已成功部署到 `overlaylex-api.zjhstudio.com` 并验证 `GET /health=200`、`POST /collector/submissions` 在未配 secrets 时返回 `SERVER_NOT_CONFIGURED`（符合预期）。
-- 正在做：等待配置 Worker secrets（邀请码 + GitHub dispatch token）后执行真实浏览器上传联调，确认自动 PR 创建成功。
-- 下一步：配置 secrets 并进行一次真实上传（建议用 `smoke.battle-system.com` 小样本词条），验证 CI 过滤报告、PR 描述和 `main-paratranz-sync` 后续衔接。
+- 现状：采集脚本已具备“本页相关域名（含 iframe 插件域名）一键上传 -> Worker -> GitHub Actions -> 自动 PR”的可用链路，正在收尾本地状态策略（去掉本地导出游标/采集缓存持久化）。
+- 已完成：采集脚本 UI/上传入口改造；Worker 新增 `POST /collector/submissions`（邀请码校验 + 直接 `repository_dispatch`，无 R2 临时存储）；新增采集 PR 工作流与 `collector-sanitize` 过滤器；Worker 已部署并完成真实上传联调（自动触发 Actions 并创建 PR）；一键上传默认范围已改为“本页相关域名”；超大请求已支持按字节自动分批上传；上传请求已加入 `GM_xmlhttpRequest` 优先通道以缓解插件页 `Failed to fetch`。
+- 正在做：废弃采集器本地 `exportedTexts` 增量游标与采集仓持久化，改为“当前会话采集 + 云端 merge 去重”的最终收尾与回归检查。
+- 下一步：验证新策略下的浏览器端实际体验（刷新页面重新采集、重复上传仍可被云端去重、失败后无需清本地缓存）并观察协作者反馈，再决定是否追加“域名筛选/忽略名单”。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。
@@ -20,6 +20,10 @@
 - 决策J：采集上传链路不做 R2 临时存储，改为 Worker 直接触发 GitHub `repository_dispatch`（原因：采集数据是短期中转数据，直接进 CI 生成 PR 更简单，运维成本更低）。
 - 决策K：一键上传默认范围从“仅顶层当前域名增量”改为“当前页面相关域名增量（包含 iframe 插件域名 bucket）”（原因：OBR 插件常以 iframe 注入，真实可翻译词条多数归属插件域名，不应在默认路径中漏传）。
 - 决策L：`repository_dispatch.client_payload` 顶层字段数控制在 10 个以内（原因：GitHub REST API 对 `client_payload` 顶层属性数量有限制，超限会返回 422）。
+- 决策M：采集脚本一键上传增加“按字节自动分批上传”（原因：Worker 请求体与 GitHub `repository_dispatch` 均存在大小上限，单次上传易在多域名/长文本场景触发超限；分批可在不引入 R2 临时存储的前提下完成大批量采集提交）。
+- 决策N：一键上传不再使用本地 `exportedTexts` 游标判定与成功后标记（原因：本地“提交成功”无法证明远端最终链路成功；上传幂等性应交给云端 `merge-collected` 去重，避免本地误判后再也传不上去）。
+- 决策O：上传请求增加 `GM_xmlhttpRequest` 优先通道、`fetch` 回退（原因：部分插件 iframe 页面可能受宿主 CSP/connect-src 影响出现 `Failed to fetch`，GM 请求在用户脚本环境下更稳定）。
+- 决策P：废弃采集器本地 `exportedTexts` 增量游标与采集仓持久化，改为“每次打开页面重新采集、上传不依赖本地已导出状态”（原因：本地状态无法证明远端 CI/PR 链路最终成功；重复文本由翻译脚本过滤 + 云端 `merge-collected` 去重兜底，整体更稳且更省心）。
 
 ## 常见坑 / 复现方法
 - 坑1：油猴脚本显示“启用/亮起”不等于翻译流程已生效；脚本可能在域名门禁阶段提前退出。

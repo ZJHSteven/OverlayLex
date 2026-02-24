@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Collector
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.1
+// @version      0.2.2
 // @description  OverlayLex 采集脚本：实时收集页面英文词条并导出为翻译原文素材。
 // @author       OverlayLex
 // @match        *://*/*
@@ -11,6 +11,8 @@
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_setClipboard
+// @grant        GM_xmlhttpRequest
+// @connect      overlaylex-api.zjhstudio.com
 // ==/UserScript==
 
 /**
@@ -19,7 +21,7 @@
  * 设计目标：
  * 1) 与主翻译脚本完全解耦，采集器可以单独启用/禁用。
  * 2) 全站运行，不做域名门禁，用于测试阶段“尽量不漏词”。
- * 3) 采集结果按域名分层，自动去重，支持增量导出。
+ * 3) 采集结果按域名分层，自动去重；采集仓默认仅保留在当前页面会话内存中。
  * 4) 顶层页面只显示一个悬浮球，避免 iframe 里出现多个面板。
  * 5) 记录 iframe 域名，帮助定位插件来源站点。
  */
@@ -39,7 +41,9 @@
   const COLLECTOR_UPLOAD_API_BASE = "https://overlaylex-api.zjhstudio.com";
   const COLLECTOR_UPLOAD_SCOPE = "current-host-incremental";
   const COLLECTOR_UPLOAD_API_PATH = "/collector/submissions";
-  const SCRIPT_VERSION = "0.2.0";
+  const COLLECTOR_UPLOAD_SOFT_CHUNK_BYTES = 36 * 1024;
+  const COLLECTOR_UPLOAD_HARD_CHUNK_BYTES = 46 * 1024;
+  const SCRIPT_VERSION = "0.2.2";
   const CJK_REGEX = /[\u3400-\u9fff]/;
   const IGNORED_TEXT_PARENT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "TEMPLATE"]);
 
@@ -59,7 +63,7 @@
   };
 
   // ------------------------------
-  // 数据存储层（优先 GM 存储，回退 localStorage）
+  // 采集数据存储层（当前版本改为“仅内存态”）
   // ------------------------------
   function createEmptyStore() {
     return {
@@ -80,42 +84,16 @@
   }
 
   function readStore() {
-    try {
-      if (typeof GM_getValue === "function") {
-        return normalizeStoreShape(GM_getValue(STORAGE_KEY, createEmptyStore()));
-      }
-    } catch (error) {
-      Logger.warn("读取 GM 存储失败，将回退 localStorage。", error);
-    }
-
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        return createEmptyStore();
-      }
-      return normalizeStoreShape(JSON.parse(raw));
-    } catch (error) {
-      Logger.warn("读取 localStorage 失败，使用空采集仓。", error);
-      return createEmptyStore();
-    }
+    // 说明：
+    // - 用户反馈“本地缓存 + 增量游标”容易导致误判（本地认为已上传，但远端链路未必最终成功）；
+    // - 因此采集仓改为仅内存态：每次页面重新打开就从空仓开始重新采集；
+    // - 云端 merge-collected 会对已存在 original 做去重，避免重复提交造成结构污染。
+    return createEmptyStore();
   }
 
   function writeStore(store) {
     store.updatedAt = new Date().toISOString();
-    try {
-      if (typeof GM_setValue === "function") {
-        GM_setValue(STORAGE_KEY, store);
-        return;
-      }
-    } catch (error) {
-      Logger.warn("写入 GM 存储失败，将回退 localStorage。", error);
-    }
-
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
-    } catch (error) {
-      Logger.warn("写入 localStorage 失败。", error);
-    }
+    // 当前版本不再持久化采集仓（仅内存态）。
   }
 
   /**
@@ -655,7 +633,8 @@
   function collectHostTexts(host, incremental) {
     const bucket = ensureHostBucket(host);
     const allTexts = Object.keys(bucket.texts);
-    const picked = incremental ? allTexts.filter((text) => !bucket.exportedTexts[text]) : allTexts;
+    // 增量游标已废弃：无论 incremental 参数如何，都返回当前会话已采集文本。
+    const picked = allTexts;
     picked.sort((a, b) => a.localeCompare(b, "en"));
     return picked;
   }
@@ -690,13 +669,10 @@
   }
 
   function markExportedByHost(selectedByHost) {
-    for (const [host, texts] of Object.entries(selectedByHost)) {
-      const bucket = ensureHostBucket(host);
-      for (const text of texts) {
-        bucket.exportedTexts[text] = true;
-      }
-    }
-    schedulePersistStore();
+    // 兼容保留：
+    // - 旧路径里“复制本域（当前会话）”按钮仍会调用该函数；
+    // - 当前版本已废弃本地导出游标，因此这里不再记录任何 exported 状态。
+    void selectedByHost;
   }
 
   function clearCurrentHostData() {
@@ -735,17 +711,16 @@
     const host = window.location.hostname.toLowerCase();
     const bucket = ensureHostBucket(host);
     const total = Object.keys(bucket.texts).length;
-    const pending = Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
     const iframeHosts = Object.keys(bucket.iframeHosts).length;
     if (state.ui.currentHostLabel) {
       state.ui.currentHostLabel.textContent = host;
     }
     if (state.ui.uploadHint) {
       const relatedHosts = getCurrentPageRelatedHosts();
-      const relatedPending = getPendingCountByHosts(relatedHosts);
-      state.ui.uploadHint.textContent = `当前页面相关域名未导出词条：${relatedPending} 条（${relatedHosts.length} 个域名，将作为一键上传默认范围）`;
+      const relatedCollected = relatedHosts.reduce((sum, hostKey) => sum + collectHostTexts(hostKey, false).length, 0);
+      state.ui.uploadHint.textContent = `当前页面相关域名已采集英文词条：${relatedCollected} 条（${relatedHosts.length} 个域名；上传不依赖本地导出游标；超大请求会自动分批）`;
     }
-    setStatusText(`当前域名：总计 ${total}，未导出 ${pending}，iframe 域名 ${iframeHosts}。`, "info");
+    setStatusText(`当前域名：已采集 ${total}，iframe 域名 ${iframeHosts}。`, "info");
     refreshHostSelectorOptions();
   }
 
@@ -798,8 +773,7 @@
 
   function getCurrentHostPendingCount() {
     const host = window.location.hostname.toLowerCase();
-    const bucket = ensureHostBucket(host);
-    return Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
+    return collectHostTexts(host, false).length;
   }
 
   function getCurrentPageRelatedHosts() {
@@ -825,8 +799,7 @@
   function getPendingCountByHosts(hosts) {
     let total = 0;
     for (const host of hosts) {
-      const bucket = ensureHostBucket(host);
-      total += Object.keys(bucket.texts).filter((text) => !bucket.exportedTexts[text]).length;
+      total += collectHostTexts(host, false).length;
     }
     return total;
   }
@@ -841,13 +814,220 @@
     if (!labelNode) {
       return;
     }
-    labelNode.textContent = label || "一键上传（本页相关增量）";
+    labelNode.textContent = label || "一键上传（本页相关）";
   }
 
   function readResponseJsonSafe(response) {
     return response
       .json()
       .catch(() => ({ ok: false, error: "INVALID_JSON_RESPONSE", message: `服务端返回了非 JSON（HTTP ${response.status}）。` }));
+  }
+
+  function parseJsonTextSafe(rawText) {
+    try {
+      return { ok: true, value: JSON.parse(String(rawText || "")) };
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }
+
+  /**
+   * postCollectorSubmission:
+   * - 上传请求统一出口（优先 GM_xmlhttpRequest，回退 fetch）。
+   * - 设计原因：
+   *   - 某些插件 iframe 页面带严格 CSP / connect-src，直接 `fetch` 可能报 `TypeError: Failed to fetch`；
+   *   - `GM_xmlhttpRequest` 通常能绕开宿主页面 CSP，跨域稳定性更高（取决于脚本管理器授权与 @connect）。
+   */
+  async function postCollectorSubmission(inviteCode, bodyObject) {
+    const url = `${COLLECTOR_UPLOAD_API_BASE}${COLLECTOR_UPLOAD_API_PATH}`;
+    const bodyText = JSON.stringify(bodyObject);
+
+    if (typeof GM_xmlhttpRequest === "function") {
+      try {
+        return await new Promise((resolve, reject) => {
+          GM_xmlhttpRequest({
+            method: "POST",
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "X-OverlayLex-Invite-Code": inviteCode,
+            },
+            data: bodyText,
+            onload: (resp) => {
+              const parsed = parseJsonTextSafe(resp.responseText || "");
+              resolve({
+                ok: resp.status >= 200 && resp.status < 300,
+                status: resp.status,
+                json: parsed.ok
+                  ? parsed.value
+                  : {
+                      ok: false,
+                      error: "INVALID_JSON_RESPONSE",
+                      message: `服务端返回了非 JSON（HTTP ${resp.status}）。`,
+                    },
+              });
+            },
+            onerror: (err) => {
+              reject(new Error(`GM_xmlhttpRequest 网络错误：${String(err?.error || err?.message || "unknown")}`));
+            },
+            ontimeout: () => {
+              reject(new Error("GM_xmlhttpRequest 请求超时。"));
+            },
+          });
+        });
+      } catch (error) {
+        Logger.warn("GM_xmlhttpRequest 上传失败，将回退 fetch。", error);
+      }
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-OverlayLex-Invite-Code": inviteCode,
+      },
+      body: bodyText,
+    });
+    const responseJson = await readResponseJsonSafe(response);
+    return {
+      ok: response.ok,
+      status: response.status,
+      json: responseJson,
+    };
+  }
+
+  function formatUploadRuntimeError(error) {
+    const message = String(error?.message || error || "");
+    if (/Failed to fetch/i.test(message)) {
+      return "网络请求失败（Failed to fetch）。常见原因：网络异常、插件页 CSP/connect-src 拦截、脚本管理器未授予跨域权限、目标域名被代理/拦截。请更新到最新版采集脚本（含 GM 上传回退）并检查脚本授权。";
+    }
+    return message || "未知错误";
+  }
+
+  function measureUtf8Bytes(text) {
+    const safeText = String(text ?? "");
+    try {
+      if (typeof TextEncoder === "function") {
+        return new TextEncoder().encode(safeText).length;
+      }
+    } catch (error) {
+      // 忽略，回退到 Blob 方案。
+    }
+    try {
+      return new Blob([safeText]).size;
+    } catch (error) {
+      return safeText.length * 2;
+    }
+  }
+
+  function buildCollectorUploadRequestBody({ currentHost, primaryHost, uploadHosts, payload, alias }) {
+    return {
+      version: 1,
+      scope: COLLECTOR_UPLOAD_SCOPE,
+      host: primaryHost,
+      payload,
+      meta: {
+        pageHost: currentHost,
+        uploadHosts,
+        pageUrl: String(window.location.href || ""),
+        userAgent: String(navigator.userAgent || ""),
+        collectorScriptVersion: SCRIPT_VERSION,
+        alias: String(alias || "").trim(),
+      },
+    };
+  }
+
+  /**
+   * createCollectorUploadChunks:
+   * - 目标：把“本页相关域名增量”按请求体字节大小自动拆分为多次上传。
+   * - 原因：
+   *   1) Worker 有请求体上限；
+   *   2) GitHub repository_dispatch 也有 payload 大小限制；
+   *   3) 仅调大后端阈值不能从根本上解决大批量采集上传。
+   */
+  function createCollectorUploadChunks({ currentHost, filteredPayload, alias }) {
+    const flattenedRows = [];
+    for (const host of Object.keys(filteredPayload).sort((a, b) => a.localeCompare(b, "en"))) {
+      const list = Array.isArray(filteredPayload[host]) ? filteredPayload[host] : [];
+      for (const text of list) {
+        flattenedRows.push({ host, text });
+      }
+    }
+    if (flattenedRows.length === 0) {
+      return [];
+    }
+
+    const chunks = [];
+    let currentPayload = {};
+
+    function clonePayload(payload) {
+      const cloned = {};
+      for (const [host, list] of Object.entries(payload)) {
+        cloned[host] = [...list];
+      }
+      return cloned;
+    }
+
+    function buildChunkFromPayload(payload) {
+      const uploadHosts = Object.keys(payload).sort((a, b) => a.localeCompare(b, "en"));
+      const primaryHost = uploadHosts.includes(currentHost) ? currentHost : uploadHosts[0];
+      const body = buildCollectorUploadRequestBody({
+        currentHost,
+        primaryHost,
+        uploadHosts,
+        payload,
+        alias,
+      });
+      const bytes = measureUtf8Bytes(JSON.stringify(body));
+      const textCount = uploadHosts.reduce((sum, host) => sum + (payload[host]?.length || 0), 0);
+      return {
+        body,
+        bytes,
+        textCount,
+        uploadHosts,
+        payload,
+      };
+    }
+
+    function flushCurrentPayload() {
+      const hostCount = Object.keys(currentPayload).length;
+      if (hostCount === 0) {
+        return;
+      }
+      const payloadClone = clonePayload(currentPayload);
+      const chunk = buildChunkFromPayload(payloadClone);
+      chunks.push(chunk);
+      currentPayload = {};
+    }
+
+    for (const row of flattenedRows) {
+      if (!currentPayload[row.host]) {
+        currentPayload[row.host] = [];
+      }
+      currentPayload[row.host].push(row.text);
+      let tentativeChunk = buildChunkFromPayload(currentPayload);
+
+      // 超过软阈值且当前 chunk 至少已有 2 条词条时，拆分成新批次，降低后续命中硬上限概率。
+      if (tentativeChunk.bytes > COLLECTOR_UPLOAD_SOFT_CHUNK_BYTES && tentativeChunk.textCount > 1) {
+        currentPayload[row.host].pop();
+        if (currentPayload[row.host].length === 0) {
+          delete currentPayload[row.host];
+        }
+        flushCurrentPayload();
+
+        currentPayload[row.host] = [row.text];
+        tentativeChunk = buildChunkFromPayload(currentPayload);
+      }
+
+      if (tentativeChunk.bytes > COLLECTOR_UPLOAD_HARD_CHUNK_BYTES) {
+        throw new Error(
+          `存在单条或极少量词条导致单次请求仍过大（约 ${tentativeChunk.bytes} bytes）。请在高级操作中先复制并人工清理超长词条。`
+        );
+      }
+    }
+
+    flushCurrentPayload();
+    return chunks;
   }
 
   async function submitCurrentHostIncremental() {
@@ -866,67 +1046,103 @@
 
     const currentHost = window.location.hostname.toLowerCase();
     const relatedHosts = getCurrentPageRelatedHosts();
-    const { selectedByHost } = buildHostScopedExport(relatedHosts, true);
-    const filteredPayload = {};
+    // 一键上传不依赖本地“已导出游标”，直接上传本页相关域名当前采集到的英文词条。
+    // 原因：
+    // 1) 本地成功不代表远端链路一定最终成功（例如 dispatch/CI/PR 环节失败）；
+    // 2) 译文页面通常会变成中文，后续扫描天然不会再采到，云端 merge 也能做去重。
+    const { selectedByHost } = buildHostScopedExport(relatedHosts, false);
+    const uploadPayload = {};
     for (const [hostKey, list] of Object.entries(selectedByHost)) {
       if (Array.isArray(list) && list.length > 0) {
-        filteredPayload[hostKey] = list;
+        uploadPayload[hostKey] = list;
       }
     }
-    const uploadHosts = Object.keys(filteredPayload).sort((a, b) => a.localeCompare(b, "en"));
-    const totalSelectedCount = uploadHosts.reduce((sum, hostKey) => sum + filteredPayload[hostKey].length, 0);
+    const uploadHosts = Object.keys(uploadPayload).sort((a, b) => a.localeCompare(b, "en"));
+    const totalSelectedCount = uploadHosts.reduce((sum, hostKey) => sum + uploadPayload[hostKey].length, 0);
     if (totalSelectedCount === 0) {
-      setStatusText("当前页面相关域名没有未导出的增量词条，无需上传。", "warn", 5000);
+      setStatusText("当前页面相关域名没有已采集英文词条，无需上传。", "warn", 5000);
       return;
     }
-    const primaryHost = uploadHosts.includes(currentHost) ? currentHost : uploadHosts[0];
-
-    const body = {
-      version: 1,
-      scope: COLLECTOR_UPLOAD_SCOPE,
-      host: primaryHost,
-      payload: filteredPayload,
-      meta: {
-        pageHost: currentHost,
-        uploadHosts,
-        pageUrl: String(window.location.href || ""),
-        userAgent: String(navigator.userAgent || ""),
-        collectorScriptVersion: SCRIPT_VERSION,
+    let uploadChunks = [];
+    try {
+      uploadChunks = createCollectorUploadChunks({
+        currentHost,
+        filteredPayload: uploadPayload,
         alias: String(state.settings.alias || "").trim(),
-      },
-    };
+      });
+    } catch (error) {
+      Logger.warn("上传分批构建失败。", error);
+      setStatusText(`上传前分批失败：${String(error?.message || error)}`, "error", 10000);
+      return;
+    }
+    if (uploadChunks.length === 0) {
+      setStatusText("没有可上传的有效词条分批。", "warn", 5000);
+      return;
+    }
 
     setUploadButtonBusy(true, "上传中...");
-    setStatusText(`正在上传本页相关域名增量：共 ${totalSelectedCount} 条（${uploadHosts.length} 个域名）...`, "info", 4000);
+    setStatusText(
+      `正在上传本页相关域名采集结果：共 ${totalSelectedCount} 条（${uploadHosts.length} 个域名，自动分 ${uploadChunks.length} 批）...`,
+      "info",
+      4000
+    );
 
     try {
-      const response = await fetch(`${COLLECTOR_UPLOAD_API_BASE}${COLLECTOR_UPLOAD_API_PATH}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-OverlayLex-Invite-Code": inviteCode,
-        },
-        body: JSON.stringify(body),
-      });
-      const responseJson = await readResponseJsonSafe(response);
-      if (!response.ok || !responseJson?.ok) {
-        setStatusText(`上传失败：${String(responseJson?.message || `HTTP ${response.status}`)}`, "error", 10000);
-        return;
+      const submissionIds = [];
+      let uploadedTextCount = 0;
+      let uploadedChunkCount = 0;
+      const uploadedHosts = new Set();
+
+      for (let index = 0; index < uploadChunks.length; index += 1) {
+        const chunk = uploadChunks[index];
+        setUploadButtonBusy(true, `上传中 ${index + 1}/${uploadChunks.length}`);
+        setStatusText(
+          `正在上传第 ${index + 1}/${uploadChunks.length} 批：${chunk.textCount} 条（${chunk.uploadHosts.length} 个域名，约 ${chunk.bytes} bytes）...`,
+          "info",
+          4000
+        );
+
+        const uploadResult = await postCollectorSubmission(inviteCode, chunk.body);
+        const responseJson = uploadResult.json;
+        if (!uploadResult.ok || !responseJson?.ok) {
+          const detailMessage = String(responseJson?.message || `HTTP ${uploadResult.status}`);
+          if (uploadedChunkCount > 0) {
+            setStatusText(
+              `部分上传成功（${uploadedChunkCount}/${uploadChunks.length} 批，${uploadedTextCount} 条）后失败：${detailMessage}`,
+              "error",
+              12000
+            );
+          } else {
+            setStatusText(`上传失败：${detailMessage}`, "error", 10000);
+          }
+          return;
+        }
+
+        uploadedChunkCount += 1;
+        uploadedTextCount += chunk.textCount;
+        for (const host of chunk.uploadHosts) {
+          uploadedHosts.add(host);
+        }
+        if (responseJson.submissionId) {
+          submissionIds.push(String(responseJson.submissionId));
+        }
       }
 
-      markExportedByHost(filteredPayload);
-      updateCollectorSettings({ lastSubmissionId: String(responseJson.submissionId || "") });
+      const lastSubmissionId = submissionIds[submissionIds.length - 1] || "";
+      if (lastSubmissionId) {
+        updateCollectorSettings({ lastSubmissionId });
+      }
       setStatusText(
-        `上传成功：${totalSelectedCount} 条（${uploadHosts.length} 个域名）；提交编号 ${String(
-          responseJson.submissionId || "unknown"
+        `上传成功：${uploadedTextCount} 条（${uploadedHosts.size} 个域名，${uploadChunks.length} 批）；提交编号 ${submissionIds.join(
+          "、"
         )}；已进入 CI 审核队列。`,
         "success",
-        10000
+        12000
       );
       refreshStatusText();
     } catch (error) {
       Logger.error("一键上传失败。", error);
-      setStatusText(`上传失败：${String(error?.message || error)}`, "error", 10000);
+      setStatusText(`上传失败：${formatUploadRuntimeError(error)}`, "error", 10000);
     } finally {
       setUploadButtonBusy(false);
     }
@@ -1104,11 +1320,11 @@
         <div class="${UI_ID_PREFIX}-card">
           <div class="${UI_ID_PREFIX}-host-pill">
             <span>默认上传范围</span>
-            <strong>本域增量</strong>
+            <strong>本页相关</strong>
           </div>
-          <div class="${UI_ID_PREFIX}-hint" id="${UI_ID_PREFIX}-upload-hint">当前页面相关域名未导出词条：0 条（将作为一键上传默认范围）</div>
+          <div class="${UI_ID_PREFIX}-hint" id="${UI_ID_PREFIX}-upload-hint">当前页面相关域名已采集英文词条：0 条（上传不依赖本地导出游标；超大请求会自动分批）</div>
           <button class="${UI_ID_PREFIX}-primary" id="${UI_ID_PREFIX}-upload-current-increment" type="button">
-            <span data-role="upload-label">一键上传（本页相关增量）</span>
+            <span data-role="upload-label">一键上传（本页相关）</span>
             <span class="${UI_ID_PREFIX}-primary-sub">CI 自动生成采集 PR，你只需等待审核</span>
           </button>
         </div>
@@ -1134,7 +1350,7 @@
           <summary>高级操作（复制 / 清理 / 调试）</summary>
           <div class="${UI_ID_PREFIX}-details-content">
             <div class="${UI_ID_PREFIX}-row">
-              <button id="${UI_ID_PREFIX}-copy-increment" type="button">复制本域增量</button>
+              <button id="${UI_ID_PREFIX}-copy-increment" type="button">复制本域（当前会话）</button>
               <button id="${UI_ID_PREFIX}-copy-full" type="button">复制本域全量</button>
             </div>
             <div class="${UI_ID_PREFIX}-row">
@@ -1146,7 +1362,7 @@
             </div>
             <div class="${UI_ID_PREFIX}-row">
               <button id="${UI_ID_PREFIX}-copy-iframe-hosts" type="button">复制本域 iframe 域名</button>
-              <button id="${UI_ID_PREFIX}-reset-exported" type="button">重置本域增量游标</button>
+              <button id="${UI_ID_PREFIX}-reset-exported" type="button" disabled title="增量游标已废弃（当前版本不再本地持久化）">增量游标已废弃</button>
             </div>
             <div class="${UI_ID_PREFIX}-row">
               <button id="${UI_ID_PREFIX}-clear-current-host" type="button">清空当前域数据</button>
@@ -1501,7 +1717,7 @@
         return;
       }
       markExportedByHost(selectedByHost);
-      setStatusText(`复制本域增量 JSON 成功：${selectedByHost[host]?.length || 0} 条。`, "success", 4000);
+      setStatusText(`复制本域（当前会话）JSON 成功：${selectedByHost[host]?.length || 0} 条。`, "success", 4000);
       refreshStatusText();
     });
 
@@ -1559,12 +1775,7 @@
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-reset-exported`)?.addEventListener("click", () => {
-      const host = window.location.hostname.toLowerCase();
-      const bucket = ensureHostBucket(host);
-      bucket.exportedTexts = {};
-      schedulePersistStore();
-      setStatusText("已重置本域增量游标。", "success", 3500);
-      refreshStatusText();
+      setStatusText("增量游标已废弃：当前版本不再记录本地已导出状态。", "warn", 5000);
     });
 
     panel.querySelector(`#${UI_ID_PREFIX}-clear-current-host`)?.addEventListener("click", () => {
@@ -1598,7 +1809,8 @@
     }
     if (state.ui.uploadHint) {
       const relatedHosts = getCurrentPageRelatedHosts();
-      state.ui.uploadHint.textContent = `当前页面相关域名未导出词条：${getPendingCountByHosts(relatedHosts)} 条（${relatedHosts.length} 个域名，将作为一键上传默认范围）`;
+      const relatedCollected = relatedHosts.reduce((sum, hostKey) => sum + collectHostTexts(hostKey, false).length, 0);
+      state.ui.uploadHint.textContent = `当前页面相关域名已采集英文词条：${relatedCollected} 条（${relatedHosts.length} 个域名；上传不依赖本地导出游标；超大请求会自动分批）`;
     }
     refreshStatusText();
     setUploadButtonBusy(false);
