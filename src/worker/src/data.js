@@ -39,7 +39,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-clash-battle-system-com",
     "name": "Clash 插件中文包（clash.battle-system.com）",
     "kind": "translation",
-    "version": "0.1.15",
+    "version": "0.1.16",
     "enabledByDefault": true,
     "description": "Clash 插件翻译包（自动采集生成）"
   },
@@ -47,7 +47,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-dddice-com",
     "name": "OBR 自动翻译包 - dddice.com",
     "kind": "translation",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - dddice.com（自动同步）"
   },
@@ -79,7 +79,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-movement-tracker-abarbre-com",
     "name": "OBR 自动翻译包 - movement-tracker.abarbre.com",
     "kind": "translation",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "enabledByDefault": true,
     "description": "OBR 自动翻译包 - movement-tracker.abarbre.com（自动同步）"
   },
@@ -143,7 +143,7 @@ export const PACKAGE_CATALOG = {
     "id": "obr-www-owlbear-rodeo",
     "name": "OBR 主站与房间中文包（owlbear.rodeo）",
     "kind": "translation",
-    "version": "0.2.15",
+    "version": "0.2.16",
     "enabledByDefault": true,
     "description": "OBR 主站与房间统一翻译包（已合并 room-core）"
   },
