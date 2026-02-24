@@ -5,7 +5,7 @@
     "host": "clash.battle-system.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.16",
+  "version": "0.1.17",
   "translations": {
     "- Adding Clickable Dice Values": "- 添加快捷掷骰表达式",
     "- Adding Skills to the Block": "- 为数据卡添加技能",
@@ -90,7 +90,7 @@
     "Show Names on Token": "显示Token名称",
     "Stat Block": "数据卡",
     "Temp Health": "临时生命值",
-    "Temporary Health": "",
+    "Temporary Health": "临时生命值",
     "This changes the color of a unit from White to Yellow to Red depending on how much HP they have left. 100% => 50% => 25%.": "血条颜色会根据单位剩余的生命值而改变，100%时为白色，50%及以下为黄色，25%及以下为红色。",
     "This disables showing HP bars on each token in Initiative for you and your players.": "所有Token将不再显示血条。",
     "This disables the auto-focus when current turn changes.": "回合变更时将不再自动聚焦镜头。",
@@ -114,7 +114,7 @@
     "Turn Label": "当前回合标记",
     "Unfavorite all items that are Imported": "不要自动收藏所有导入项目",
     "Unfavorite during Upload": "上传时将不会自动收藏",
-    "Unit Elevation": "",
+    "Unit Elevation": "离地高度",
     "View Help Docs": "查看帮助文档",
     "View Settings": "查看设置",
     "View/Edit this Unit's Stats": "查看/编辑该单位的数据",

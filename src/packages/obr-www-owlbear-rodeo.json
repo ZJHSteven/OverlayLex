@@ -8,7 +8,7 @@
     ],
     "pathPrefix": "/"
   },
-  "version": "0.2.17",
+  "version": "0.2.18",
   "translations": {
     "40K": "",
     "5ft": "",
@@ -467,7 +467,7 @@
     "Set Default View": "设置默认视图",
     "Set the default view when the room is opened": "设置房间打开时的默认视图",
     "Settings": "设置",
-    "Setup Vision": "设置愿景",
+    "Setup Vision": "设置视觉",
     "Shadow Dark Character Sheet": "《暗影魔域》角色卡",
     "Shapechanger": "形状改变器",
     "Shift + C": "",

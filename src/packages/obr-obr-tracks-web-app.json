@@ -5,13 +5,13 @@
     "host": "obr-tracks.web.app",
     "pathPrefix": "/"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "translations": {
-    "Add Track": "",
-    "Clear All Tracks": "",
-    "Export csv": "",
-    "Import csv": "",
-    "Search": "",
-    "Tracks": ""
+    "Add Track": "添加音乐",
+    "Clear All Tracks": "清空音乐列表",
+    "Export csv": "导出CSV",
+    "Import csv": "导入CSV",
+    "Search": "搜索",
+    "Tracks": "音乐"
   }
 }

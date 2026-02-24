@@ -2,7 +2,7 @@
   "id": "overlaylex-domain-allowlist",
   "name": "OverlayLex 域名准入包",
   "kind": "domain-allowlist",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "rules": [
     {
       "type": "exact",
@@ -75,6 +75,12 @@
     },
     {
       "type": "exact",
+      "value": "obr-tracks.web.app",
+      "comment": "自动同步包域名",
+      "source": "obr-obr-tracks-web-app"
+    },
+    {
+      "type": "exact",
       "value": "owl-trackers.onrender.com",
       "comment": "自动同步包域名",
       "source": "obr-owl-trackers-onrender-com"
@@ -84,6 +90,12 @@
       "value": "owlbear-rodeo-bubbles-extension.onrender.com",
       "comment": "自动同步包域名",
       "source": "obr-owlbear-rodeo-bubbles-extension-onrender-com"
+    },
+    {
+      "type": "exact",
+      "value": "owlclock.vijexa.dev",
+      "comment": "自动同步包域名",
+      "source": "obr-owlclock-vijexa-dev"
     },
     {
       "type": "exact",
