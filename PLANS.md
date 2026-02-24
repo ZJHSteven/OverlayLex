@@ -73,7 +73,15 @@
 
 ## 当前执行状态（2026-02-24）
 - [x] Step 1: 确认 ParaTranz 术语相关接口（`getTerms` / `createTerm` / `importTerms`）与 CSV 基本结构
-- [ ] Step 2: 实现 CSV 术语增量导入脚本
-- [ ] Step 3: Dry-run 生成差集与冲突报告
-- [ ] Step 4: 执行真实导入并回读校验
-- [ ] Step 5: 更新 `PROGRESS.md` 并完成提交
+- [x] Step 2: 实现 CSV 术语增量导入脚本（`src/tools/paratranz_terms_incremental_import.py`）
+- [x] Step 3: Dry-run 生成差集与冲突报告（确认项目 `17950` 可访问）
+- [x] Step 4: 执行真实导入并回读校验（44 批全部成功）
+- [x] Step 5: 更新 `PROGRESS.md` 并完成提交
+
+## 执行结果摘要（2026-02-24）
+- 导入对象：`5etool.csv`（`GB18030`，无表头，5 列）
+- 实际项目：ParaTranz `projectId=17950`
+- 首轮导入执行结果：44 批成功，提交 43222 条候选；回读发现 ParaTranz 实际按更严格（近似大小写不敏感）规则去重，远端总量从 42 增至 38249（净增 38207）
+- 脚本修正：新增 `--term-key-mode`（默认 `lower`），使本地差集统计与 ParaTranz 实际行为更一致
+- 复核结果：修正后 dry-run 仅剩 3 条候选（其中包含 1 条明显异常拼接行 + 2 条特殊字符术语）；再次尝试导入后服务端接受请求但远端总量未变化（推测被服务端去重/过滤）
+- 冲突处理策略：本次使用 `--conflict-policy skip`，跳过 761 个冲突键（同术语不同内容），避免误覆盖或错误选译
