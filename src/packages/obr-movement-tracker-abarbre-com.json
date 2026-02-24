@@ -5,11 +5,11 @@
     "host": "movement-tracker.abarbre.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "translations": {
     "Enable/Disable": "启用/禁用",
     "Made by: Andreas Barbre": "制作人：Andreas Barbre",
     "Movement Tracker": "移动追踪器",
-    "Reset all GM entites": "重置所有GM实体"
+    "Reset all GM entites": "归零所有GM角色移动"
   }
 }
