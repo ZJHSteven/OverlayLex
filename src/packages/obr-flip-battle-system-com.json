@@ -10,14 +10,17 @@
     "Attachment": "",
     "Attachments with Parent": "",
     "Character": "",
+    "Controls which layers the auto Z-Indexing is active on.": "",
     "Disable Player Bind": "",
     "Drawing": "",
     "Flip!": "",
     "Get the news on updates on the Battle-System Patreon": "",
+    "Makes it so attachments stay with the parent token when Flipping between tokens.": "",
     "Map": "",
     "Mount": "",
     "Note": "",
     "Prop": "",
+    "Removes the button for players that allows binding tokens together.": "",
     "Text": "",
     "Z-Indexing Layers": ""
   }
