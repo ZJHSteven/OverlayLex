@@ -1,0 +1,37 @@
+{
+  "id": "obr-ranges-owlbear-rodeo",
+  "name": "OBR 自动翻译包 - ranges.owlbear.rodeo",
+  "target": {
+    "host": "ranges.owlbear.rodeo",
+    "pathPrefix": "/"
+  },
+  "version": "0.1.0",
+  "translations": {
+    "15ft": "",
+    "300ft": "",
+    "30ft": "",
+    "5ft": "",
+    "60ft": "",
+    "Add Ring": "",
+    "Base": "",
+    "Close": "",
+    "Dagger": "",
+    "Delete": "",
+    "Deuteranopia": "",
+    "Dragons": "",
+    "Far": "",
+    "ft": "",
+    "Melee": "",
+    "Name": "",
+    "New Range": "",
+    "Protanopia": "",
+    "Range 1": "",
+    "Shape": "",
+    "Show Label": "",
+    "Show Size": "",
+    "Steel": "",
+    "Tritanopia": "",
+    "Very Close": "",
+    "Very Far": ""
+  }
+}
