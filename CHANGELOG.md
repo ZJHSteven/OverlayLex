@@ -8,6 +8,11 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-02-25
+  - 更新 `.github/workflows/release-publish.yml`：修复 `release-publish` 可能将旧 `release` 分支 Worker 运行时代码重新部署到线上的问题；部署前改为同步 `origin/main` 的 Worker runtime（保留 release 流程生成的 `src/worker/src/data.js`）。
+  - 更新 `.github/workflows/release-publish.yml`：新增 `POST /collector/submissions` 烟雾检查，防止采集上传接口被回滚成 GET-only。
+  - 更新 `.github/workflows/release-publish.yml`：发布成功后自动将 `main` 的非包文件回写到 `release`（提交消息含 `[skip release]`），降低 release 长期落后造成的工具链/Worker 代码回滚风险。
+  - 更新 `PROGRESS.md`：记录本次 release->Worker 回滚问题与新的防线策略，并清理误入的尾部 `undefined` 垃圾行。
 - 2026-02-24
   - 更新 `src/userscript/overlaylex.collector.user.js`：采集器版本升级到 `0.2.4`（同步 `@version` 与 `SCRIPT_VERSION`），用于触发油猴自动更新本次过滤/摘要修复。
   - 更新 `src/userscript/overlaylex.collector.user.js`：本地采集阶段扩展“OverlayLex 内部 UI DOM 排除”范围（采集器 + 主翻译脚本控制台），避免把 `vX.Y.Z · obr-*` 等脚本自身元信息误采进词条。
