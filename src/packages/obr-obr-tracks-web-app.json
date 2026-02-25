@@ -8,10 +8,21 @@
   "version": "0.1.1",
   "translations": {
     "Add Track": "添加音乐",
+    "Are you sure?": "",
+    "Cancel": "",
     "Clear All Tracks": "清空音乐列表",
+    "Confirm": "",
     "Export csv": "导出CSV",
     "Import csv": "导入CSV",
+    "Invalid url": "",
+    "New Track": "",
+    "Save": "",
     "Search": "搜索",
-    "Tracks": "音乐"
+    "Tags": "",
+    "This will clear your entire track library.": "",
+    "Title": "",
+    "Title can not be blank": "",
+    "Tracks": "音乐",
+    "Url": ""
   }
 }

@@ -8,8 +8,14 @@
   "version": "0.1.3",
   "translations": {
     "Enable/Disable": "启用/禁用",
+    "ft": "",
     "Made by: Andreas Barbre": "制作人：Andreas Barbre",
     "Movement Tracker": "移动追踪器",
-    "Reset all GM entites": "归零所有GM角色移动"
+    "Reset all GM entites": "归零所有GM角色移动",
+    "Reset Movement": "",
+    "Speed": "",
+    "Undo Movements": "",
+    "Using spell": "",
+    "Zehlan-B": ""
   }
 }

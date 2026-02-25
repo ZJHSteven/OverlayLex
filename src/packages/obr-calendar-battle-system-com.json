@@ -15,6 +15,7 @@
     "+4 H": "+4 H",
     "+5 M": "+5 M",
     "○ Shift:": "○ 偏移：",
+    "04:05AM": "",
     "04:35AM": "",
     "Afternoon": "午后",
     "Calendar": "日历",
@@ -44,6 +45,8 @@
     "Days:": "天数：",
     "DonJon Calendar Importer:": "DonJon Calendar导入器：",
     "Evening": "傍晚",
+    "First Quarter": "",
+    "Full Moon": "",
     "Generate": "生成",
     "Get the news on updates on the Battle-System Patreon": "在Battle-System Patreon中查看更新日志",
     "Import": "导入",
@@ -85,9 +88,13 @@
     "Select Previous Day": "选择上一日",
     "SpLvl:": "",
     "Testers": "示例",
+    "Third Quarter": "",
     "View next Month": "查看下一月份",
     "View previous Month": "查看上一月份",
+    "Waning Crescent": "",
+    "Waning Gibbous": "",
     "Waxing Crescent": "蛾眉月",
+    "Waxing Gibbous": "",
     "Year Begins on WeekDay:": "今年开始于周几："
   }
 }
