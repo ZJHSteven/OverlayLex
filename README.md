@@ -7,7 +7,7 @@ OverlayLex 是一个面向 Owlbear Rodeo 的用户脚本翻译 demo。
 
 ## 线上 API（已部署）
 
-- Worker 地址：`https://overlaylex-demo-api.zhangjiahe0830.workers.dev`
+- Worker 地址：`https://overlaylex-api.zjhstudio.com`
 - R2 桶：`overlaylex-packages-bfdcb419`
 
 ## 目录结构
@@ -92,17 +92,59 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 5. 顶层页面注入“译”悬浮球；iframe 页面不重复注入主控制台，但仍可执行翻译。
 6. 采集逻辑全部放在 `overlaylex.collector.user.js`，与主翻译脚本彻底分离。
 
-## 运行期采集工作流（推荐）
+## 运行期采集工作流（协作者推荐：一键上传）
+
+### 协作者流程（无需本地 Node / Git）
 
 1. 启用 `overlaylex.collector.user.js` 后，在目标页面正常操作（点击菜单、悬浮提示、打开插件 iframe）。  
-2. 打开绿色“采”悬浮球，在采集面板里使用：
-   - `复制本域增量`：仅复制当前域名下“未导出过”的新词条。
+2. 点击绿色“采”悬浮球，首次使用先在“上传设置”中填写：
+   - 邀请码（必填）
+   - 协作者昵称（可选）
+3. 点击主按钮 `一键上传（本页相关）`。  
+   - 默认上传范围是“当前页面相关域名已采集英文词条”（顶层 host + 当前页面观察到的 iframe host）
+   - 上传前可在“上传前域名筛选”中取消勾选误采域名（例如误采到 GitHub/其他站点）
+   - 可将“未勾选域名”写入忽略名单（本地保存），后续默认不勾选；忽略名单只影响一键上传默认勾选，不删除采集数据
+   - 支持快捷切换“仅勾选 iframe 域名”，便于插件场景快速排除顶层站点噪音
+   - 采集器会在本地尽量排除 OverlayLex 自身 UI（主翻译脚本控制台 / 采集器面板）文本；CI 侧过滤器也会对少量漏网的 OverlayLex 包版本元信息做兜底过滤
+   - 若请求体过大，脚本会自动按字节分批上传（避免命中 Worker / GitHub dispatch 上限）
+   - 一键上传不依赖本地“已导出游标”；是否重复入库由云端 `merge-collected` 合并去重处理
+   - 若该域名尚无本地包，CI 会复用 `merge-collected` 逻辑自动创建新包（与本地手工流程一致）
+4. Worker 会校验邀请码并触发 GitHub Actions，自动执行：
+   - 基础垃圾词条过滤（页码/容量/hash/url 等高置信噪音）
+   - `merge-collected` 合并到 `src/packages/*.json`
+   - 自动创建/更新一个采集 PR（提交到 `main` 的候选分支）
+5. 维护者审核该 PR（清理漏网无用词条、确认目标包正确）并合并到 `main`。  
+6. 合并后现有 `main-paratranz-sync` 会自动把新增英文词条推送到 ParaTranz；后续走正常翻译/回拉/发版流程。
+
+### 本地手工流程（高级 / 离线备选）
+
+1. 启用 `overlaylex.collector.user.js` 后，在目标页面正常操作（点击菜单、悬浮提示、打开插件 iframe）。  
+2. 打开绿色“采”悬浮球，在“高级操作”里使用：
+   - `复制本域（当前会话）`：仅复制当前域名在当前页面会话里采集到的英文词条（不再依赖本地“已导出”游标）。
    - `复制本域全量`：复制当前域名下所有已采集词条。
    - `复制 iframe 域名`：复制当前页面观察到的 iframe 域名列表。
 3. 复制结果粘贴到临时文件 `tmp/collector.selected.json`，并手动删除你不想入库的域名或词条。  
 4. 执行本地合并命令，把临时采集 JSON 合并进正式包。  
 5. 通过 ParaTranz 协作翻译并回拉。  
 6. 合并到 `release` 后自动发包，页面点击“检查更新”即可获取新版本。
+
+说明（采集器本地状态）：
+- 采集数据仓默认仅保存在当前页面会话内存中（刷新/重开页面后重新开始采集）。
+- 上传设置（邀请码、协作者昵称、UI 位置）仍会本地保存，避免重复配置。
+
+### 采集上传链路（维护者配置）
+
+- Worker 接口：`POST /collector/submissions`
+- 触发工作流：`.github/workflows/collector-submission-pr.yml`
+- Worker 必需 secrets：
+  - `COLLECTOR_INVITE_CODE`
+  - `GITHUB_DISPATCH_TOKEN`
+  - `GITHUB_REPO_OWNER`
+  - `GITHUB_REPO_NAME`
+- GitHub Token 最小权限建议（用于 Worker 调用 `repository_dispatch`）：
+  - Fine-grained PAT（仓库级）
+  - `Actions: Read and write`
+  - 仓库访问仅授权当前仓库
 
 ## i18n 流程脚本（OverlayLex <-> ParaTranz）
 
@@ -112,8 +154,14 @@ apiBaseUrl: "https://overlaylex-demo.example.workers.dev"
 # 1) 把采集 JSON 合并到本地包（新增词条译文默认空字符串）
 node src/tools/overlaylex-i18n-flow.mjs merge-collected --input tmp/collector.selected.json
 
-# 2) 导出为 ParaTranz 文件格式（每包一个 JSON 数组文件）
-node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
+# 2) 先把“要上传到 ParaTranz 的包”放入暂存区（你自己决定上传范围）
+git add src/packages/obr-theatre-battle-system-com.json src/packages/obr-smoke-battle-system-com.json
+
+# 2.1) 按暂存区一键：自动 commit + 推送到 ParaTranz（推荐）
+# 说明：不再依赖 --changed-only/--base-ref；只处理你暂存的翻译包。
+# 先决条件：先设置 PARATRANZ_TOKEN（例如 PowerShell：$env:PARATRANZ_TOKEN="你的Token"）
+# 自动 commit message 示例：chore(i18n): submit en theatre,smoke
+node src/tools/overlaylex-i18n-flow.mjs push-paratranz --staged-only --commit-staged --project-id 17950
 
 # 3) 一步拉取 ParaTranz 并回写到本地包（推荐，直接可复制）
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --project-id 17950
@@ -126,9 +174,15 @@ node src/tools/overlaylex-i18n-flow.mjs from-paratranz --project-id 17950
 node src/tools/overlaylex-i18n-flow.mjs pull-paratranz --project-id 17950 --out-dir .tmp/paratranz
 node src/tools/overlaylex-i18n-flow.mjs from-paratranz --input-dir .tmp/paratranz
 
-# 4) 校验 main 分支本地译文改动策略（CI 同款）
+# 4) 可选：仅导出 ParaTranz 数组文件到本地目录（用于人工检查中间产物，不上传）
+node src/tools/overlaylex-i18n-flow.mjs to-paratranz --out-dir .tmp/paratranz
+
+# 5) 校验 main 分支本地译文改动策略（CI 同款）
 node src/tools/overlaylex-i18n-flow.mjs check-local-translation-policy --base-ref origin/main
 ```
+
+进阶说明（仅 CI/自动化常用）：
+- `push-paratranz --changed-only --base-ref <ref>`：按提交历史计算变更包；适合流水线，不适合“本地未提交就想精准上传”的交互场景。
 
 ### 采集临时文件格式
 
@@ -223,12 +277,15 @@ node src/tools/release-from-staged.mjs prepare-from-staged
 4. 自动同步 `src/worker/src/data.js` 里的 `PACKAGE_CATALOG` 版本与包目录。
 5. 校验“本次待发布包版本号必须高于线上版本”。
 6. 自动执行：`main commit -> push main -> cherry-pick 到 release -> push release`。
+7. 若 `cherry-pick` 仅在 `src/packages/*.json` 发生冲突：自动采用 `main` 提交版本（`--theirs`）并 `cherry-pick --continue`；若出现非包文件冲突则停止并提示人工处理。
 
 说明：
 - 该流程不再依赖“云端自动 bump 版本”；版本统一在本地发布脚本阶段完成，避免 `main/release` 版本漂移。
 - 发布上传是“整文件覆盖”，但文件集合只取本次 Git 改动包，不会全量重传全部包。
 - 发布包选择权在你手里：脚本只会把“你暂存的翻译包”加入发布目录（`PACKAGE_CATALOG`），不会按译文内容自动替你筛选。
 - 工作区可以不干净：脚本不会强制你清空其他改动；提交时只会包含“你原始暂存的包 + 自动维护的 `overlaylex-domain-allowlist.json` + `src/worker/src/data.js`”。
+- 默认自动 `stash`：在 `main push` 后、切换到 `release` 前，脚本会自动暂存当前未暂存/未跟踪改动，并在发布流程结束后自动恢复，减少“切分支失败（本地有开发中改动）”中断；如需关闭可传 `--no-auto-stash`。
+- 若脚本提示“检测到 cherry-pick 仍在进行”，说明遇到了非包文件冲突并保留了现场；请按提示手动解决后执行 `git cherry-pick --continue`（或 `--abort`）。
 
 ## CI Secrets 配置
 

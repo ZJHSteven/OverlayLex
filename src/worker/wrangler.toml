@@ -2,6 +2,9 @@ name = "overlaylex-demo-api"
 main = "src/index.js"
 compatibility_date = "2026-02-06"
 workers_dev = true
+routes = [
+  { pattern = "overlaylex-api.zjhstudio.com", custom_domain = true }
+]
 
 [[r2_buckets]]
 binding = "PACKAGES_BUCKET"

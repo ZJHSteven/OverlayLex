@@ -10,7 +10,7 @@
  *    - 自动同步 Worker 的 PACKAGE_CATALOG 版本与目录项
  * 3) 一条命令完成 main -> release：
  *    - 在 main 提交
- *    - cherry-pick 到 release
+ *    - 按文件把 main 提交快照同步到 release
  *    - push release 触发发布 CI
  *
  * 命令：
@@ -35,6 +35,7 @@ const DOMAIN_ALLOWLIST_PATH = path.resolve(PACKAGES_DIR, "overlaylex-domain-allo
 const DEFAULT_API_URL = "https://overlaylex-demo-api.zhangjiahe0830.workers.dev";
 const AUTO_RULE_COMMENT = "自动同步包域名";
 const ALLOWED_AUTO_STAGE_FILES = new Set(["src/worker/src/data.js"]);
+const AUTO_STASH_MESSAGE_PREFIX = "release-flow:auto-stash";
 
 function logInfo(message, extra = "") {
   if (extra) {
@@ -74,6 +75,8 @@ function printHelp() {
   --base-ref <ref>       CI 校验基线（verify-release 必填）
   --api-url <url>        线上 API 地址（默认 ${DEFAULT_API_URL}）
   --yes                  跳过两次交互确认（仅建议在自动化场景使用）
+  --auto-stash           发布阶段切分支前自动 stash 当前工作区并在结束后恢复（默认开启）
+  --no-auto-stash        关闭自动 stash（遇到脏工作区切分支冲突时需手工处理）
 `);
 }
 
@@ -97,6 +100,36 @@ function parseArgs(argv) {
     i += 1;
   }
   return { command, options };
+}
+
+/**
+ * 解析“布尔开关”参数，兼容下列写法：
+ * - --flag
+ * - --flag true/false
+ * - --no-flag
+ * 若传入值非法，则回退 defaultValue，避免参数拼写错误直接中断发布流程。
+ */
+function parseBooleanOption(rawValue, defaultValue) {
+  if (rawValue === undefined) {
+    return defaultValue;
+  }
+  if (rawValue === true) {
+    return true;
+  }
+  if (rawValue === false) {
+    return false;
+  }
+  const text = String(rawValue || "").trim().toLowerCase();
+  if (!text) {
+    return defaultValue;
+  }
+  if (["1", "true", "yes", "y", "on"].includes(text)) {
+    return true;
+  }
+  if (["0", "false", "no", "n", "off"].includes(text)) {
+    return false;
+  }
+  return defaultValue;
 }
 
 function runGit(args, { allowFailure = false, stdio = "pipe" } = {}) {
@@ -339,6 +372,118 @@ function getUntrackedFiles() {
 
 function getCurrentBranch() {
   return runGitText(["rev-parse", "--abbrev-ref", "HEAD"]);
+}
+
+/**
+ * 读取 refs/stash 的提交哈希（若不存在则返回空串）。
+ * 用提交哈希而非 stash@{0} 可以避免“流程中用户又手动 stash”导致索引漂移。
+ */
+function getStashHeadHash() {
+  const result = tryRunGitText(["rev-parse", "-q", "--verify", "refs/stash"]);
+  if (!result.ok) {
+    return "";
+  }
+  return result.output;
+}
+
+/**
+ * 通过 stash 提交哈希反查当前 reflog 引用（如 stash@{0}）。
+ * 说明：
+ * - `git stash drop` 不接受裸哈希，只接受 reflog 引用；
+ * - 这里按哈希匹配，避免 “stash@{0}” 因新建 stash 漂移到别的条目。
+ */
+function findStashRefByHash(targetHash) {
+  const normalizedTarget = String(targetHash || "").trim().toLowerCase();
+  if (!normalizedTarget) {
+    return "";
+  }
+  const output = runGitText(["stash", "list", "--format=%gd %H"]);
+  if (!output) {
+    return "";
+  }
+  const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const matched = line.match(/^(stash@\{\d+\})\s+([0-9a-f]{40})$/i);
+    if (!matched) {
+      continue;
+    }
+    const ref = matched[1];
+    const hash = matched[2].toLowerCase();
+    if (hash === normalizedTarget) {
+      return ref;
+    }
+  }
+  return "";
+}
+
+function hasLocalWorktreeChanges() {
+  const unstaged = getUnstagedFiles();
+  if (unstaged.length > 0) {
+    return true;
+  }
+  const untracked = getUntrackedFiles();
+  return untracked.length > 0;
+}
+
+/**
+ * 自动暂存当前工作区（未暂存 + 未跟踪文件）。
+ * 设计目标：
+ * - 仅用于“切到 release 前”做隔离，避免发布流程误伤当前开发中的未提交改动；
+ * - 若工作区本来干净，直接返回 null，不做多余动作。
+ */
+function createAutoStashSnapshot() {
+  if (!hasLocalWorktreeChanges()) {
+    return null;
+  }
+
+  const beforeHash = getStashHeadHash();
+  const message = `${AUTO_STASH_MESSAGE_PREFIX}:${new Date().toISOString()}`;
+  runGit(["stash", "push", "--include-untracked", "-m", message], { stdio: "inherit" });
+  const afterHash = getStashHeadHash();
+  if (!afterHash || afterHash === beforeHash) {
+    return null;
+  }
+
+  logInfo("已自动暂存当前工作区改动：", `${afterHash.slice(0, 8)} (${message})`);
+  return {
+    hash: afterHash,
+    message,
+  };
+}
+
+/**
+ * 尝试恢复自动暂存的改动。
+ * 恢复策略：
+ * 1) 先 apply 指定 hash，确保恢复目标稳定；
+ * 2) apply 成功后再 drop；
+ * 3) apply 失败时保留 stash，不做 drop，避免数据丢失。
+ */
+function restoreAutoStashSnapshot(stashSnapshot) {
+  if (!stashSnapshot?.hash) {
+    return;
+  }
+
+  logInfo("正在自动恢复发布前暂存的工作区改动。");
+  const applyResult = runGit(["stash", "apply", stashSnapshot.hash], { allowFailure: true, stdio: "inherit" });
+  if (applyResult.error || applyResult.status !== 0) {
+    logWarn("自动恢复失败，已保留 stash。请手动执行：");
+    logWarn(`  git stash apply ${stashSnapshot.hash}`);
+    return;
+  }
+
+  const stashRef = findStashRefByHash(stashSnapshot.hash);
+  if (!stashRef) {
+    logWarn("改动已恢复，但未找到对应 stash 引用，未自动清理。");
+    return;
+  }
+
+  const dropResult = runGit(["stash", "drop", stashRef], { allowFailure: true, stdio: "inherit" });
+  if (dropResult.error || dropResult.status !== 0) {
+    logWarn("改动已恢复，但自动清理 stash 失败；可稍后手动 drop。");
+    return;
+  }
+
+  logInfo("自动恢复完成。");
 }
 
 function ensureCleanForPrepare(stagedFiles) {
@@ -690,7 +835,7 @@ function syncWorkerCatalogWithPackages(allRecords, releasedTranslationIds) {
   };
 }
 
-function bumpVersionsForStagedPackages(stagedRecords) {
+function bumpVersionsForStagedPackages(stagedRecords, remoteVersionMap = null) {
   const bumps = [];
   for (const record of stagedRecords) {
     // 域名准入包由“同步逻辑”统一管理版本，避免同一轮改动重复 bump。
@@ -699,11 +844,27 @@ function bumpVersionsForStagedPackages(stagedRecords) {
     }
 
     const currentVersion = String(record.data.version || "").trim();
-    const nextVersion = bumpPatch(currentVersion);
-    if (!nextVersion) {
-      throw new Error(`包 version 不是 semver（x.y.z）：${record.relativePath} -> ${currentVersion}`);
+    const remoteVersion = remoteVersionMap ? String(remoteVersionMap.get(record.id) || "").trim() : "";
+    let bumpBaseVersion = currentVersion;
+    if (remoteVersion) {
+      const remoteVsLocal = compareSemver(remoteVersion, currentVersion);
+      if (remoteVsLocal === null) {
+        throw new Error(
+          `线上或本地版本不是 semver（x.y.z）：${record.id} local=${currentVersion} remote=${remoteVersion}`
+        );
+      }
+      // 若 main 本地版本落后于线上，自动以“线上版本”为基线继续 +1，
+      // 避免出现“脚本自动 bump 后仍 <= 线上”的失败体验。
+      if (remoteVsLocal > 0) {
+        bumpBaseVersion = remoteVersion;
+      }
     }
-    if (nextVersion === currentVersion) {
+
+    const nextVersion = bumpPatch(bumpBaseVersion);
+    if (!nextVersion) {
+      throw new Error(`包 version 不是 semver（x.y.z）：${record.relativePath} -> ${bumpBaseVersion}`);
+    }
+    if (nextVersion === currentVersion && !remoteVersion) {
       continue;
     }
 
@@ -718,6 +879,7 @@ function bumpVersionsForStagedPackages(stagedRecords) {
       relativePath: record.relativePath,
       from: currentVersion,
       to: nextVersion,
+      remote: remoteVersion || "",
     });
   }
   return bumps;
@@ -811,11 +973,7 @@ function assertWorkerCatalogConsistency(allRecords, releasedTranslationIds) {
   }
 }
 
-async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl) {
-  if (changedFiles.length === 0) {
-    return;
-  }
-
+async function fetchRemoteVersionMap(apiUrl) {
   const manifestUrl = `${String(apiUrl || DEFAULT_API_URL).replace(/\/+$/, "")}/manifest`;
   const response = await fetch(manifestUrl);
   if (!response.ok) {
@@ -836,6 +994,15 @@ async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl
   if (manifest?.domainPackage?.id && manifest?.domainPackage?.version) {
     remoteVersionMap.set(String(manifest.domainPackage.id), String(manifest.domainPackage.version));
   }
+  return remoteVersionMap;
+}
+
+async function assertChangedPackageVersionGreaterThanRemote(changedFiles, apiUrl, injectedRemoteVersionMap = null) {
+  if (changedFiles.length === 0) {
+    return;
+  }
+
+  const remoteVersionMap = injectedRemoteVersionMap || (await fetchRemoteVersionMap(apiUrl));
 
   const errors = [];
   for (const relativePath of changedFiles) {
@@ -882,6 +1049,35 @@ function ensureReleaseBranchAndSwitch() {
   runGit(["switch", "-c", "release"], { stdio: "inherit" });
 }
 
+/**
+ * 将 main 的发布提交按“文件快照”同步到当前分支（release）。
+ * 这样可以避开 cherry-pick 的跨文件冲突，并且确保 main 是唯一真值源。
+ */
+function syncCommitFilesToCurrentBranch(commitHash, relativeFiles) {
+  const uniqueFiles = [...new Set(relativeFiles.filter(Boolean))];
+  if (uniqueFiles.length === 0) {
+    return { hasChanges: false, stagedFiles: [] };
+  }
+
+  // release 只允许包文件与发布元数据文件，阻断任何无关文件进入发布分支。
+  const invalidFiles = uniqueFiles.filter((item) => !isPackagePath(item) && !ALLOWED_AUTO_STAGE_FILES.has(item));
+  if (invalidFiles.length > 0) {
+    throw new Error(`release 同步文件非法（仅允许包文件与发布元数据）：${invalidFiles.join(", ")}`);
+  }
+
+  logInfo("release 文件同步（来自 main 提交快照）：");
+  for (const file of uniqueFiles) {
+    console.log(`  - ${file}`);
+  }
+
+  runGit(["checkout", commitHash, "--", ...uniqueFiles], { stdio: "inherit" });
+  runGit(["add", "--", ...uniqueFiles], { stdio: "inherit" });
+
+  const stagedSet = new Set(getStagedFiles());
+  const stagedFiles = uniqueFiles.filter((item) => stagedSet.has(item));
+  return { hasChanges: stagedFiles.length > 0, stagedFiles };
+}
+
 function buildReleaseCommitMessage(changedPackageIds) {
   const shortNames = changedPackageIds
     .map((id) => {
@@ -902,6 +1098,7 @@ function buildReleaseCommitMessage(changedPackageIds) {
 
 async function commandPrepareFromStaged(options) {
   const autoYes = Boolean(options.yes);
+  const autoStashEnabled = options["no-auto-stash"] ? false : parseBooleanOption(options["auto-stash"], true);
   const currentBranch = getCurrentBranch();
   if (currentBranch !== "main") {
     throw new Error(`请在 main 分支执行该命令，当前分支：${currentBranch}`);
@@ -922,7 +1119,8 @@ async function commandPrepareFromStaged(options) {
     return;
   }
 
-  const bumpedPackages = bumpVersionsForStagedPackages(stagedRecords);
+  const remoteVersionMap = await fetchRemoteVersionMap(DEFAULT_API_URL);
+  const bumpedPackages = bumpVersionsForStagedPackages(stagedRecords, remoteVersionMap);
   const releasedTranslationIds = getReleasedTranslationIdsFromWorkerCatalog();
   for (const record of stagedRecords) {
     if (record.kind === "translation") {
@@ -949,14 +1147,15 @@ async function commandPrepareFromStaged(options) {
   const latestAllRecords = readAllPublishablePackages();
   assertAllowlistCoverage(latestAllRecords, releasedTranslationIds);
   assertWorkerCatalogConsistency(latestAllRecords, releasedTranslationIds);
-  await assertChangedPackageVersionGreaterThanRemote(finalStaged.packageFiles, DEFAULT_API_URL);
+  await assertChangedPackageVersionGreaterThanRemote(finalStaged.packageFiles, DEFAULT_API_URL, remoteVersionMap);
 
   logInfo("自动处理结果：");
   if (bumpedPackages.length === 0) {
     logInfo("  - 本轮无翻译包版本递增（可能只改了域名包）。");
   } else {
     for (const item of bumpedPackages) {
-      logInfo("  - 版本递增：", `${item.id} ${item.from} -> ${item.to}`);
+      const remoteHint = item.remote ? `（remote=${item.remote}）` : "";
+      logInfo("  - 版本递增：", `${item.id} ${item.from} -> ${item.to}${remoteHint}`);
     }
   }
   if (allowlistResult.changed) {
@@ -977,7 +1176,7 @@ async function commandPrepareFromStaged(options) {
 
   const confirmedRound2 = autoYes
     ? true
-    : await promptYes("第二次确认：将执行 commit + push main + cherry-pick 到 release + push release。");
+    : await promptYes("第二次确认：将执行 commit + push main + 按文件同步到 release + push release。");
   if (!confirmedRound2) {
     logWarn("你取消了发布推送流程（改动仍保留在本地与暂存区）。");
     return;
@@ -985,14 +1184,25 @@ async function commandPrepareFromStaged(options) {
 
   const publishIds = finalStaged.packageRecords.map((item) => item.id);
   const commitMessage = buildReleaseCommitMessage(publishIds);
+  const releaseSyncFiles = [...new Set([...finalStaged.packageFiles, ...finalStaged.metadataFiles])];
   runGit(["commit", "-m", commitMessage], { stdio: "inherit" });
   const commitHash = runGitText(["rev-parse", "HEAD"]);
 
   runGit(["push", "origin", "main"], { stdio: "inherit" });
 
+  let autoStashSnapshot = null;
+  if (autoStashEnabled) {
+    autoStashSnapshot = createAutoStashSnapshot();
+  }
+
   try {
     ensureReleaseBranchAndSwitch();
-    runGit(["cherry-pick", commitHash], { stdio: "inherit" });
+    const syncResult = syncCommitFilesToCurrentBranch(commitHash, releaseSyncFiles);
+    if (syncResult.hasChanges) {
+      runGit(["commit", "-m", commitMessage], { stdio: "inherit" });
+    } else {
+      logWarn("release 目标文件无变化，跳过 release 提交。");
+    }
 
     const remoteRelease = tryRunGitText(["show-ref", "--verify", "--quiet", "refs/remotes/origin/release"]);
     if (remoteRelease.ok) {
@@ -1001,10 +1211,22 @@ async function commandPrepareFromStaged(options) {
       runGit(["push", "-u", "origin", "release"], { stdio: "inherit" });
     }
   } finally {
-    runGit(["switch", "main"], { stdio: "inherit" });
+    const switchResult = runGit(["switch", "main"], { allowFailure: true, stdio: "inherit" });
+    if (switchResult.error || switchResult.status !== 0) {
+      logWarn("自动切回 main 失败，请手动执行 git switch main。");
+      if (autoStashSnapshot) {
+        logWarn("当前分支未切回 main，自动 stash 暂不恢复，避免污染 release 分支现场。");
+        logWarn(`可切回 main 后手动恢复：git stash apply ${autoStashSnapshot.hash}`);
+      }
+      return;
+    }
+
+    if (autoStashSnapshot) {
+      restoreAutoStashSnapshot(autoStashSnapshot);
+    }
   }
 
-  logInfo("发布链路完成：main 已提交并推送，release 已 cherry-pick 并推送。");
+  logInfo("发布链路完成：main 已提交并推送，release 已按文件同步并推送。");
 }
 
 async function commandVerifyRelease(options) {

@@ -4,7 +4,7 @@
  *
  * 设计目标：
  * 1) 把“采集 -> 本地包 -> Paratranz -> 回拉 -> 发版版本号”串成一条可重复执行的命令链。
- * 2) 所有命令都以“文件可审计、输出可解释”为优先，不在脚本中做 git add/commit。
+ * 2) 所有命令都以“文件可审计、输出可解释”为优先；默认不改 Git，按需可用参数开启自动 commit。
  * 3) 默认采用安全策略：仅增量新增，不自动删词条，不自动判定“英文改写”。
  *
  * 支持命令：
@@ -112,6 +112,9 @@ function printHelp() {
   --project-id <id>       Paratranz 项目 ID（pull/from/sync 可用，可覆盖配置）
   --base-ref <ref>        git 比较基线（push-paratranz / bump-release-version）
   --changed-only          仅处理变更包（push-paratranz）
+  --staged-only           仅处理暂存区中的翻译包（push-paratranz）
+  --commit-staged         推送前自动执行 git commit（仅 push-paratranz + --staged-only）
+  --commit-message <msg>  自定义自动提交信息（push-paratranz + --commit-staged）
   --write                 将版本递增写回文件（bump-release-version）
   --prune                 合并时删除临时文件未出现词条（默认关闭）
   --base-ref <ref>        git 比较基线（check-local-translation-policy）
@@ -225,6 +228,10 @@ function normalizeJsonFileName(filePath) {
   return path.basename(filePath).toLowerCase().endsWith(".json");
 }
 
+function isPackagePath(relativePath) {
+  return String(relativePath || "").startsWith("src/packages/") && normalizeJsonFileName(relativePath);
+}
+
 function getJsonFilesInDirectory(dirPath) {
   if (!fs.existsSync(dirPath)) {
     return [];
@@ -335,6 +342,43 @@ function runGitCommand(command) {
   return output.trim();
 }
 
+function runGitByArgs(args, { allowFailure = false, stdio = "pipe" } = {}) {
+  const result = spawnSync("git", args, {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    stdio,
+    // 禁用 shell，避免 Windows 下 commit message 被二次拆分。
+    shell: false,
+    env: process.env,
+  });
+  if (allowFailure) {
+    return result;
+  }
+  if (result.error) {
+    throw new Error(`git ${args.join(" ")} 执行失败：${result.error.message}`);
+  }
+  if (typeof result.status === "number" && result.status !== 0) {
+    throw new Error(`git ${args.join(" ")} 失败（exit=${String(result.status)}）：${String(result.stderr || "").trim()}`);
+  }
+  return result;
+}
+
+function runGitTextByArgs(args) {
+  const result = runGitByArgs(args);
+  return String(result.stdout || "").trim();
+}
+
+function getStagedFiles() {
+  const output = runGitTextByArgs(["diff", "--cached", "--name-only"]);
+  if (!output) {
+    return [];
+  }
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function tryRunGitCommand(command) {
   try {
     const output = runGitCommand(command);
@@ -413,6 +457,89 @@ function loadTranslationPackageRecords(packagesDir) {
     });
   }
   return records;
+}
+
+function getStagedTranslationPackageRecords(packagesDir) {
+  const stagedFiles = getStagedFiles();
+  if (stagedFiles.length === 0) {
+    throw new Error("push-paratranz --staged-only 需要暂存区有文件；请先 git add 你要同步的 src/packages/*.json。");
+  }
+
+  const invalidFiles = stagedFiles.filter((filePath) => !isPackagePath(filePath));
+  if (invalidFiles.length > 0) {
+    throw new Error(`push-paratranz --staged-only 只允许暂存 src/packages/*.json，发现非法文件：${invalidFiles.join(", ")}`);
+  }
+
+  const allRecords = loadTranslationPackageRecords(packagesDir);
+  const recordMap = new Map(allRecords.map((record) => [record.relativePath, record]));
+  const selected = [];
+  const deletedFiles = [];
+  const unsupportedFiles = [];
+
+  for (const relativePath of stagedFiles) {
+    const absolutePath = path.resolve(REPO_ROOT, relativePath);
+    if (!fs.existsSync(absolutePath)) {
+      deletedFiles.push(relativePath);
+      continue;
+    }
+
+    const matchedRecord = recordMap.get(relativePath);
+    if (!matchedRecord) {
+      unsupportedFiles.push(relativePath);
+      continue;
+    }
+    selected.push(matchedRecord);
+  }
+
+  if (deletedFiles.length > 0) {
+    throw new Error(`push-paratranz 暂不支持删除文件同步，请先恢复这些暂存删除：${deletedFiles.join(", ")}`);
+  }
+  if (unsupportedFiles.length > 0) {
+    throw new Error(
+      `以下暂存文件不是可推送的翻译包（例如域名包或结构不匹配）：${unsupportedFiles.join(", ")}`
+    );
+  }
+
+  return {
+    stagedFiles,
+    stagedRecords: selected,
+  };
+}
+
+function buildI18nPushCommitMessage(packageIds) {
+  const shortNames = packageIds
+    .map((id) => {
+      const normalized = String(id || "").trim();
+      if (!normalized) {
+        return "";
+      }
+      if (!normalized.startsWith("obr-")) {
+        return normalized;
+      }
+      const tail = normalized.slice(4);
+      const token = tail.split("-")[0];
+      return token || tail;
+    })
+    .filter(Boolean);
+
+  const uniqueShortNames = [...new Set(shortNames)];
+  if (uniqueShortNames.length === 0) {
+    return "chore(i18n): submit en packages";
+  }
+  const preview = uniqueShortNames.slice(0, 6);
+  const suffix = uniqueShortNames.length > 6 ? ",..." : "";
+  return `chore(i18n): submit en ${preview.join(",")}${suffix}`;
+}
+
+function commitStagedFilesForI18nSync(stagedFiles, packageIds, customMessage = "") {
+  const message = String(customMessage || "").trim() || buildI18nPushCommitMessage(packageIds);
+  runGitByArgs(["commit", "-m", message], { stdio: "inherit" });
+  const shortHash = runGitTextByArgs(["rev-parse", "--short", "HEAD"]);
+  return {
+    message,
+    shortHash,
+    fileCount: stagedFiles.length,
+  };
 }
 
 function createParatranzRowsFromPackage(packageData) {
@@ -901,6 +1028,9 @@ async function commandPushParatranz(config, options) {
   const baseUrl = String(config.paratranz.apiBaseUrl || "https://paratranz.cn/api").replace(/\/+$/, "");
   const packagesDir = resolvePathFromRepo(config.packagesDir);
   const changedOnly = Boolean(options["changed-only"]);
+  const stagedOnly = Boolean(options["staged-only"]);
+  const commitStaged = Boolean(options["commit-staged"]);
+  const commitMessage = String(options["commit-message"] || "").trim();
   const baseRef = String(options["base-ref"] || "").trim();
   const pathPrefix = normalizeParatranzPathPrefix(config.paratranz.filePathPrefix);
 
@@ -910,11 +1040,33 @@ async function commandPushParatranz(config, options) {
   if (!token) {
     throw new Error(`push-paratranz 缺少 Token，请设置环境变量 ${tokenEnvName}。`);
   }
+  if (changedOnly && stagedOnly) {
+    throw new Error("push-paratranz 参数冲突：--changed-only 与 --staged-only 不能同时使用。");
+  }
+  if (commitStaged && !stagedOnly) {
+    throw new Error("push-paratranz --commit-staged 仅可与 --staged-only 同时使用。");
+  }
+  if (!commitStaged && commitMessage) {
+    throw new Error("push-paratranz --commit-message 仅在 --commit-staged 模式下生效。");
+  }
 
   const allRecords = loadTranslationPackageRecords(packagesDir);
   let targetRecords = allRecords;
 
-  if (changedOnly) {
+  if (stagedOnly) {
+    const stagedResult = getStagedTranslationPackageRecords(packagesDir);
+    targetRecords = stagedResult.stagedRecords;
+    logInfo("push-paratranz --staged-only：已锁定以下暂存翻译包：");
+    for (const record of targetRecords) {
+      logInfo("  -", `${record.relativePath} (${record.data.id || record.fileName})`);
+    }
+
+    if (commitStaged) {
+      const packageIds = targetRecords.map((record) => String(record.data?.id || "").trim()).filter(Boolean);
+      const commitResult = commitStagedFilesForI18nSync(stagedResult.stagedFiles, packageIds, commitMessage);
+      logInfo("已完成本地提交：", `${commitResult.shortHash} | ${commitResult.message}`);
+    }
+  } else if (changedOnly) {
     if (!baseRef) {
       throw new Error("push-paratranz 使用 --changed-only 时必须提供 --base-ref。");
     }

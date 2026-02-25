@@ -1,14 +1,15 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.11
+// @version      0.2.16
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
 // @updateURL    https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.user.js
 // @downloadURL  https://raw.githubusercontent.com/ZJHSteven/OverlayLex/main/src/userscript/overlaylex.user.js
 // @run-at       document-end
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
 // ==/UserScript==
 
 /**
@@ -29,25 +30,69 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.11";
+  const SCRIPT_VERSION = "0.2.16";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
     USER_SWITCHES: "overlaylex:user-switches:v2",
     UI_STATE: "overlaylex:ui-state:v3",
     DOMAIN_PACKAGE_CACHE: "overlaylex:domain-package-cache:v1",
+    DOMAIN_PACKAGE_SHARED_CACHE: "overlaylex:domain-package-cache:shared:v1",
   };
   const CONFIG = {
     /**
-     * 这里会在部署后替换成真实 worker URL。
-     * 你可以先手动改成你自己的 workers.dev 地址。
+     * 默认后端地址（优先使用自有域名，提高部分地区可达性）。
+     * 如需切换测试环境，可手动替换为其它 Worker 域名。
      */
-    apiBaseUrl: "https://overlaylex-demo-api.zhangjiahe0830.workers.dev",
+    apiBaseUrl: "https://overlaylex-api.zjhstudio.com",
     manifestPath: "/manifest",
     packagePathPrefix: "/packages/",
     domainPackagePath: "/domain-package.json",
     observerDebounceMs: 80,
   };
+  /**
+   * 本地内置域名 seeds（首层毫秒级门禁）。
+   *
+   * 设计目的：
+   * 1) 保证“首次访问”不依赖网络也能做快速放行/退出判断。
+   * 2) 只让疑似 OBR 生态页面进入后续网络流程，减少无关站点开销。
+   * 3) 该 seeds 仅用于“快速放行”，真正准入仍由云端 domain-allowlist 决定。
+   *
+   * 维护说明：
+   * - 这里与 `src/packages/overlaylex-domain-seeds.json` 保持同源规则。
+   * - 若后续新增 OBR 生态顶级域名，请同步两处。
+   */
+  const LOCAL_DOMAIN_SEEDS = {
+    id: "overlaylex-domain-seeds",
+    kind: "domain-seeds",
+    version: "0.1.0",
+    rules: [
+      {
+        type: "exact",
+        value: "owlbear.rodeo",
+      },
+      {
+        type: "exact",
+        value: "www.owlbear.rodeo",
+      },
+      {
+        type: "suffix",
+        value: ".owlbear.rodeo",
+      },
+      {
+        type: "suffix",
+        value: ".owlbear.app",
+      },
+    ],
+  };
+  /**
+   * 运行期提示层常量（用于网络失败可视化提醒）。
+   * 说明：
+   * - 仅在顶层窗口渲染，不在 iframe 内重复弹提示。
+   * - 样式与容器按需注入，避免无意义 DOM 常驻。
+   */
+  const RUNTIME_NOTICE_STYLE_ID = "overlaylex-runtime-notice-style";
+  const RUNTIME_NOTICE_CONTAINER_ID = "overlaylex-runtime-notice-container";
   /**
    * UI 可调参数（教学向）
    *
@@ -86,6 +131,147 @@
     },
   };
 
+  /**
+   * 按需注入“运行期提示”样式。
+   * 输入：
+   * - 无
+   * 输出：
+   * - 无
+   * 核心逻辑：
+   * - 样式只注入一次，避免重复 DOM 污染。
+   * - 不依赖主面板是否已创建，可用于启动早期错误提示。
+   */
+  function ensureRuntimeNoticeStyle() {
+    if (!isTopWindow || !document.head) {
+      return;
+    }
+    if (document.getElementById(RUNTIME_NOTICE_STYLE_ID)) {
+      return;
+    }
+    const style = document.createElement("style");
+    style.id = RUNTIME_NOTICE_STYLE_ID;
+    style.textContent = `
+      #${RUNTIME_NOTICE_CONTAINER_ID} {
+        position: fixed;
+        top: 14px;
+        right: 14px;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .overlaylex-runtime-notice {
+        min-width: 260px;
+        max-width: 380px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        color: #f8fafc;
+        font-size: 12px;
+        line-height: 1.45;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.35);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        animation: overlaylexRuntimeNoticeIn 180ms ease-out;
+      }
+      .overlaylex-runtime-notice[data-level="warn"] {
+        background: linear-gradient(135deg, rgba(180, 83, 9, 0.9), rgba(146, 64, 14, 0.92));
+      }
+      .overlaylex-runtime-notice[data-level="error"] {
+        background: linear-gradient(135deg, rgba(153, 27, 27, 0.9), rgba(127, 29, 29, 0.92));
+      }
+      .overlaylex-runtime-notice-title {
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .overlaylex-runtime-notice-text {
+        opacity: 0.98;
+      }
+      @keyframes overlaylexRuntimeNoticeIn {
+        from {
+          transform: translateY(-6px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /**
+   * 获取或创建运行期提示容器。
+   * 输入：
+   * - 无
+   * 输出：
+   * - HTMLDivElement | null
+   */
+  function ensureRuntimeNoticeContainer() {
+    if (!isTopWindow || !document.body) {
+      return null;
+    }
+    let container = document.getElementById(RUNTIME_NOTICE_CONTAINER_ID);
+    if (container instanceof HTMLDivElement) {
+      return container;
+    }
+    container = document.createElement("div");
+    container.id = RUNTIME_NOTICE_CONTAINER_ID;
+    document.body.appendChild(container);
+    return container;
+  }
+
+  /**
+   * 显示运行期提示（小气泡）。
+   * 输入：
+   * - message: 提示正文
+   * - options.level: "warn" | "error"
+   * - options.durationMs: 自动消失时间（毫秒）
+   * 输出：
+   * - 无
+   * 说明：
+   * - 若 DOM 注入失败，回退到 `alert`，保证至少有一种可见错误反馈。
+   */
+  function showRuntimeNotice(message, options = {}) {
+    if (!isTopWindow || !message) {
+      return;
+    }
+    const level = options.level === "error" ? "error" : "warn";
+    const durationMsRaw = Number(options.durationMs);
+    const durationMs = Number.isFinite(durationMsRaw) && durationMsRaw > 0 ? durationMsRaw : 5200;
+    try {
+      ensureRuntimeNoticeStyle();
+      const container = ensureRuntimeNoticeContainer();
+      if (!container) {
+        window.alert(`[OverlayLex] ${message}`);
+        return;
+      }
+      const item = document.createElement("div");
+      item.className = "overlaylex-runtime-notice";
+      item.dataset.level = level;
+      const title = document.createElement("div");
+      title.className = "overlaylex-runtime-notice-title";
+      title.textContent = level === "error" ? "OverlayLex 连接异常" : "OverlayLex 提示";
+      const text = document.createElement("div");
+      text.className = "overlaylex-runtime-notice-text";
+      text.textContent = message;
+      item.appendChild(title);
+      item.appendChild(text);
+      container.appendChild(item);
+      window.setTimeout(() => {
+        item.remove();
+      }, durationMs);
+    } catch (error) {
+      Logger.warn("显示运行期提示失败，回退 alert。", error);
+      try {
+        window.alert(`[OverlayLex] ${message}`);
+      } catch (alertError) {
+        Logger.warn("alert 提示也失败。", alertError);
+      }
+    }
+  }
+
   function safeJsonParse(raw, fallbackValue) {
     try {
       return JSON.parse(raw);
@@ -116,12 +302,87 @@
     }
   }
 
+  /**
+   * 从脚本管理器共享存储读取值（跨域共享）。
+   * 输入：
+   * - key: 存储键
+   * - fallbackValue: 失败时回退值
+   * 输出：
+   * - 读取到的值或回退值
+   *
+   * 说明：
+   * - 这里使用 GM_getValue（同步 API），在 Tampermonkey/Violentmonkey 中可跨域复用。
+   * - 若当前环境只暴露异步 API（返回 Promise），这里会安全回退到 fallback，
+   *   不会把 Promise 当作真实缓存对象污染运行时状态。
+   */
+  function safeSharedStorageGet(key, fallbackValue) {
+    try {
+      if (typeof GM_getValue !== "function") {
+        return fallbackValue;
+      }
+      const value = GM_getValue(key, fallbackValue);
+      if (value && typeof value === "object" && typeof value.then === "function") {
+        Logger.warn(`GM_getValue 返回 Promise，当前流程回退到本地存储: ${key}`);
+        return fallbackValue;
+      }
+      return typeof value === "undefined" ? fallbackValue : value;
+    } catch (error) {
+      Logger.warn(`读取共享存储失败: ${key}`, error);
+      return fallbackValue;
+    }
+  }
+
+  /**
+   * 写入脚本管理器共享存储（跨域共享）。
+   * 输入：
+   * - key: 存储键
+   * - value: 要写入的值
+   * 输出：
+   * - 无
+   */
+  function safeSharedStorageSet(key, value) {
+    try {
+      if (typeof GM_setValue === "function") {
+        GM_setValue(key, value);
+      }
+    } catch (error) {
+      Logger.warn(`写入共享存储失败: ${key}`, error);
+    }
+  }
+
+  /**
+   * 初始化域名包缓存（共享缓存优先，本地缓存次之）。
+   * 输入：
+   * - 无
+   * 输出：
+   * - 域名包对象或 null
+   *
+   * 同步策略：
+   * 1) 若共享缓存存在：以共享缓存为准，并回填到当前域 localStorage（便于本域快速读取）。
+   * 2) 若共享缓存不存在但本地有缓存：把本地缓存迁移到共享缓存，打通跨域可见性。
+   */
+  function getInitialDomainPackageCache() {
+    const sharedCache = safeSharedStorageGet(STORAGE_KEYS.DOMAIN_PACKAGE_SHARED_CACHE, null);
+    if (sharedCache && typeof sharedCache === "object") {
+      safeLocalStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, sharedCache);
+      return sharedCache;
+    }
+
+    const localCache = safeLocalStorageGet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, null);
+    if (localCache && typeof localCache === "object") {
+      safeSharedStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_SHARED_CACHE, localCache);
+      return localCache;
+    }
+
+    return null;
+  }
+
   // ------------------------------
   // 运行时状态
   // ------------------------------
   const state = {
     manifest: null,
-    domainPackage: safeLocalStorageGet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, null),
+    domainPackage: getInitialDomainPackageCache(),
     packageCache: safeLocalStorageGet(STORAGE_KEYS.PACKAGE_CACHE, {}),
     userSwitches: safeLocalStorageGet(STORAGE_KEYS.USER_SWITCHES, {}),
     translationMap: new Map(),
@@ -201,6 +462,7 @@
   function setCachedDomainPackage(domainPackage) {
     state.domainPackage = domainPackage;
     safeLocalStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_CACHE, domainPackage);
+    safeSharedStorageSet(STORAGE_KEYS.DOMAIN_PACKAGE_SHARED_CACHE, domainPackage);
   }
 
   function needsPackageUpdate(pkgMeta) {
@@ -391,27 +653,45 @@
     return rules.some((rule) => isHostMatchedByRule(hostname, rule));
   }
 
-  async function ensureCurrentHostAllowed() {
-    const hostname = window.location.hostname.toLowerCase();
+  /**
+   * 基于“本地 seeds”做首层快速门禁。
+   * 输入：
+   * - hostname: 当前页面域名（小写）
+   * 输出：
+   * - true：可能属于 OBR 生态，允许进入下一步
+   * - false：直接退出，避免无意义网络请求与 DOM 注入
+   */
+  function isHostAllowedByLocalSeeds(hostname) {
+    return isHostAllowedByDomainPackage(hostname, LOCAL_DOMAIN_SEEDS);
+  }
 
-    // 先用缓存快速判断，减少每次页面打开都阻塞网络。
-    if (state.domainPackage && isHostAllowedByDomainPackage(hostname, state.domainPackage)) {
-      return true;
+  /**
+   * 启动门禁判定（纯本地，无网络）。
+   * 输入：
+   * - hostname: 当前页面域名
+   * 输出：
+   * - allowed: 是否允许进入运行链路
+   * - from: "allowlist-cache" | "seed"
+   * - hasAllowlistCache: 是否存在 allowlist 本地缓存
+   *
+   * 设计约束（按当前协作约定）：
+   * 1) 判定“要不要运行”只看本地（缓存 allowlist 优先，seed 仅首装兜底）。
+   * 2) 任何云端更新都在插件运行起来后再进行，不阻塞首轮判定。
+   */
+  function resolveStartupGateByLocalRules(hostname) {
+    const hasAllowlistCache = Boolean(state.domainPackage);
+    if (hasAllowlistCache) {
+      return {
+        allowed: isHostAllowedByDomainPackage(hostname, state.domainPackage),
+        from: "allowlist-cache",
+        hasAllowlistCache: true,
+      };
     }
-
-    // 缓存命不中，再请求最新域名包。
-    try {
-      const remoteDomainPackage = await fetchDomainPackageByBestUrl();
-      setCachedDomainPackage(remoteDomainPackage);
-      return isHostAllowedByDomainPackage(hostname, remoteDomainPackage);
-    } catch (error) {
-      Logger.warn("域名包拉取失败，回退到缓存判断。", error);
-      // 网络失败时，如果缓存存在就按缓存兜底，否则 fail-close。
-      if (state.domainPackage) {
-        return isHostAllowedByDomainPackage(hostname, state.domainPackage);
-      }
-      return false;
-    }
+    return {
+      allowed: isHostAllowedByLocalSeeds(hostname),
+      from: "seed",
+      hasAllowlistCache: false,
+    };
   }
 
   // ------------------------------
@@ -467,6 +747,20 @@
     return true;
   }
 
+  /**
+   * 判断元素是否为“可翻译 value”的按钮类 input。
+   * 说明：
+   * - 仅允许 button/submit/reset 三类；
+   * - 明确排除 text/password 等输入框，避免把用户输入误当成固定 UI 文案覆盖。
+   */
+  function isTranslatableInputValueElement(element) {
+    if (!element || element.tagName !== "INPUT") {
+      return false;
+    }
+    const typeRaw = String(element.getAttribute?.("type") || element.type || "text").toLowerCase();
+    return typeRaw === "button" || typeRaw === "submit" || typeRaw === "reset";
+  }
+
   function applyTranslationToElementAttributes(element) {
     let changed = false;
     const attributesToTranslate = ["placeholder", "title"];
@@ -481,6 +775,23 @@
       }
       element.setAttribute(attrName, translated);
       changed = true;
+    }
+
+    // 额外处理按钮类 input 的 value 文案（例如 input[type=button] 的按钮文字）。
+    if (isTranslatableInputValueElement(element)) {
+      const originalValue = String(element.getAttribute?.("value") || element.value || "");
+      if (originalValue) {
+        const translatedValue = translateByMap(originalValue);
+        if (translatedValue && translatedValue !== originalValue) {
+          // 若原始 DOM 存在 value 属性，同步回属性，保证后续序列化/框架读取一致。
+          if (element.getAttribute("value") !== null) {
+            element.setAttribute("value", translatedValue);
+          }
+          // 同步回属性值属性（property），保证页面上即时显示为译文。
+          element.value = translatedValue;
+          changed = true;
+        }
+      }
     }
     return changed;
   }
@@ -604,7 +915,7 @@
           subtree: true,
           characterData: true,
           attributes: true,
-          attributeFilter: ["placeholder", "title"],
+          attributeFilter: ["placeholder", "title", "value"],
         });
         state.iframeObserverMap.set(iframeElement, frameObserver);
       } catch (error) {
@@ -691,7 +1002,7 @@
       subtree: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ["placeholder", "title"],
+      attributeFilter: ["placeholder", "title", "value"],
     });
     state.observer = observer;
   }
@@ -1472,6 +1783,10 @@
         setCachedDomainPackage(latestDomainPackage);
       } catch (error) {
         Logger.warn("检查更新时拉取域名包失败，保留本地缓存。", error);
+        showRuntimeNotice("手动更新时域名白名单拉取失败，已继续使用本地缓存。", {
+          level: "warn",
+          durationMs: 5800,
+        });
       }
 
       await reloadEnabledPackages({ showUpdatingIndicator: true });
@@ -1481,6 +1796,10 @@
     } catch (error) {
       Logger.error("手动检查更新失败", error);
       setStatus("检查更新失败，已保留本地缓存。");
+      showRuntimeNotice("手动更新失败：无法连接翻译后端，请检查网络或代理设置。", {
+        level: "error",
+        durationMs: 6800,
+      });
     }
   }
 
@@ -2011,6 +2330,10 @@
         setCachedDomainPackage(latestDomainPackage);
       } catch (error) {
         Logger.warn("后台刷新域名包失败，继续使用缓存。", error);
+        showRuntimeNotice("自动更新时域名白名单拉取失败，已继续使用本地缓存。", {
+          level: "warn",
+          durationMs: 5200,
+        });
       }
 
       await reloadEnabledPackages();
@@ -2020,6 +2343,10 @@
     } catch (error) {
       Logger.warn("后台更新 manifest 失败，继续使用本地缓存。", error);
       setStatus("后台更新失败，继续使用本地缓存。");
+      showRuntimeNotice("自动更新失败：暂时无法连接翻译后端，已保留本地缓存。", {
+        level: "warn",
+        durationMs: 5600,
+      });
     }
   }
 
@@ -2029,24 +2356,22 @@
       return;
     }
 
-    // 第一步：先拿到 manifest（缓存优先），用于定位域名包 URL。
-    await bootManifestFromCacheFirst();
-
-    // 第二步：域名门禁。未命中白名单则立刻结束，避免全站额外开销。
-    const allowed = await ensureCurrentHostAllowed();
-    if (!allowed) {
-      Logger.info(`当前域名不在 OverlayLex 域名包白名单内，已退出。hostname=${location.hostname}`);
+    // 第一步：纯本地门禁判定（缓存 allowlist 优先，seed 仅首装兜底）。
+    const currentHostname = window.location.hostname.toLowerCase();
+    const startupGate = resolveStartupGateByLocalRules(currentHostname);
+    if (!startupGate.allowed) {
       return;
     }
 
-    // 第三步：进入正常翻译链路。
+    // 第二步：先拿到 manifest（缓存优先），用于定位域名包 URL。
+    await bootManifestFromCacheFirst();
+    // 第三步：进入正常翻译链路（仅依据本地门禁结果）。
     await reloadEnabledPackages();
     createFloatingUi();
     setupMutationObserver();
     scheduleFullReapply();
     setStatus("OverlayLex 已启动。");
-
-    // 后台异步更新，不阻塞首屏。
+    // 第四步：后台异步更新，不阻塞首屏。
     backgroundRefreshManifestAndDomain();
   }
 
