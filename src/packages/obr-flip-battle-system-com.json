@@ -10,9 +10,9 @@
     "Attachment": "附件",
     "Attachments with Parent": "附件跟随主体",
     "Character": "角色",
-    "Controls which layers the auto Z-Indexing is active on.": "控制纵轴排序在哪些层级上激活。",
+    "Controls which layers the auto Z-Indexing is active on.": "控制纵轴排序在哪些图层上激活。",
     "Disable Player Bind": "禁用玩家绑定",
-    "Drawing": "绘制",
+    "Drawing": "绘图",
     "Flip!": "Flip!",
     "Get the news on updates on the Battle-System Patreon": "在Battle-System Patreon中查看更新日志",
     "Makes it so attachments stay with the parent token when Flipping between tokens.": "附件将跟随Token主体一起切换。",
@@ -22,6 +22,6 @@
     "Prop": "道具",
     "Removes the button for players that allows binding tokens together.": "从玩家界面移除绑定Token的按键。",
     "Text": "文本",
-    "Z-Indexing Layers": "纵轴排序层级"
+    "Z-Indexing Layers": "纵轴排序图层"
   }
 }
