@@ -5,11 +5,11 @@
     "host": "flip.battle-system.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.1",
+  "version": "0.1.2",
   "translations": {
     "Attachment": "附件",
     "Attachments with Parent": "附件跟随主体",
-    "Character": "角色",
+    "Character": "人物",
     "Controls which layers the auto Z-Indexing is active on.": "控制纵轴排序在哪些图层上激活。",
     "Disable Player Bind": "禁用玩家绑定",
     "Drawing": "绘图",

@@ -5,7 +5,7 @@
     "host": "owl-trackers.onrender.com",
     "pathPrefix": "/"
   },
-  "version": "0.1.2",
+  "version": "0.1.3",
   "translations": {
     "AC": "",
     "Add Tracker": "添加数据块",
@@ -32,7 +32,7 @@
     "Set scene default trackers": "设置场景默认数据块",
     "Set Scene Defaults": "场景默认设置",
     "To pick up a draggable item, press the space bar. While dragging, use the arrow keys to move the item. Press space again to drop the item in its new position, or press escape to cancel.": "要拾取可拖动的项目，请按空格键。拖动时，使用箭头键移动项目。再次按空格键将项目放到新位置，或按退出键取消。",
-    "Toggle Edit Mode": "开关编辑模式",
+    "Toggle Edit Mode": "开/关编辑模式",
     "Trackers above token": "在Token上方显示",
     "Use reduced bar height": "使用更窄的数据条",
     "Use scene trackers": "使用默认数据块",

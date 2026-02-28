@@ -5,12 +5,12 @@
     "host": "owlbear-emanation.pages.dev",
     "pathPrefix": "/"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "translations": {
     "Advanced Options": "高级选项",
     "Attachment": "附件",
     "Auras & Emanations version": "Auras & Emanations version",
-    "Character": "角色",
+    "Character": "人物",
     "Circle": "圆形",
     "Color": "颜色",
     "Copy to Clipboard": "复制到剪切板",
@@ -20,7 +20,7 @@
     "Delete All": "清空",
     "Drawing": "绘图",
     "Edit": "编辑",
-    "Enable advanced options in UI: extra layers, blend modes, and aura types.": "允许在UI中启用高级选项：额外的层级，混合模式，以及灵光样式。",
+    "Enable advanced options in UI: extra layers, blend modes, and aura types.": "允许在UI中启用高级选项：额外图层，混合模式，以及灵光样式。",
     "Enable context menu": "启用快捷菜单",
     "Enable context menu items to add or edit auras on tokens.": "允许通过快捷菜单为Token添加或编辑灵光。",
     "Fog": "迷雾",
