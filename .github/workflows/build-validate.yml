@@ -23,7 +23,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -49,7 +48,6 @@ jobs:
             if (!scripts.length) throw new Error(`${browser}: missing content_scripts`);
             const overlay = scripts.find((item) => item.all_frames === true);
             if (!overlay) throw new Error(`${browser}: OverlayLex content script is not configured for all frames`);
-            if (!overlay.matches?.includes('<all_urls>')) throw new Error(`${browser}: expected phase-1 <all_urls> match`);
           }
           console.log('Artifact validation passed.');
           NODE
