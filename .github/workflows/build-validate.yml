@@ -30,7 +30,7 @@ jobs:
       - name: Build all targets
         run: npm run build:all
 
-      - name: Validate artifacts
+      - name: Validate artifacts and permissions
         shell: bash
         run: |
           set -euo pipefail
@@ -48,8 +48,17 @@ jobs:
             if (!scripts.length) throw new Error(`${browser}: missing content_scripts`);
             const overlay = scripts.find((item) => item.all_frames === true);
             if (!overlay) throw new Error(`${browser}: OverlayLex content script is not configured for all frames`);
+            if (overlay.matches?.includes('<all_urls>')) throw new Error(`${browser}: store build must not request <all_urls>`);
+            if (!overlay.matches?.includes('*://owlbear.rodeo/*')) throw new Error(`${browser}: missing Owlbear host access`);
           }
-          console.log('Artifact validation passed.');
+
+          const firefox = JSON.parse(fs.readFileSync('.output/firefox-mv3/manifest.json', 'utf8'));
+          const gecko = firefox.browser_specific_settings?.gecko;
+          if (gecko?.id !== 'overlaylex@zjhstudio.com') throw new Error('firefox: stable extension id missing');
+          if (!gecko?.data_collection_permissions?.required?.includes('browsingActivity')) {
+            throw new Error('firefox: browsingActivity disclosure missing');
+          }
+          console.log('Artifact and permission validation passed.');
           NODE
 
       - name: Package extensions
@@ -63,6 +72,7 @@ jobs:
         with:
           name: overlaylex-builds
           if-no-files-found: error
+          include-hidden-files: true
           path: |
             dist/userscript/*.js
             .output/*.zip
