@@ -85,3 +85,44 @@
 - 脚本修正：新增 `--term-key-mode`（默认 `lower`），使本地差集统计与 ParaTranz 实际行为更一致
 - 复核结果：修正后 dry-run 仅剩 3 条候选（其中包含 1 条明显异常拼接行 + 2 条特殊字符术语）；再次尝试导入后服务端接受请求但远端总量未变化（推测被服务端去重/过滤）
 - 冲突处理策略：本次使用 `--conflict-policy skip`，跳过 761 个冲突键（同术语不同内容），避免误覆盖或错误选译
+
+---
+
+## 任务：统一 UserScript + 多浏览器 WebExtension 构建链（2026-08-25）
+
+1. 建立共享源码层
+- 目标：把翻译核心、网络加载、DOM 观察、UI 与缓存逻辑从单体 UserScript 中逐步抽出，避免 UserScript 与浏览器扩展维护两份实现。
+- 预期：共享核心只维护一份，运行时差异通过 adapter 解决。
+
+2. 引入双构建器
+- WebExtension：使用 WXT（底层 Vite）统一构建 Chrome / Edge / Firefox。
+- UserScript：使用 `vite-plugin-monkey` 构建 Tampermonkey / ScriptCat / Violentmonkey / Greasemonkey 可安装脚本。
+- 预期：根目录统一 package scripts，一次命令可生成所有发布产物。
+
+3. 兼容当前 OverlayLex 行为
+- 目标：保留快速域名门禁、iframe 支持、远端 manifest/package、R2/Worker 后端与故障提示。
+- 预期：迁移后现有 UserScript 功能不回退。
+
+4. 加入自动构建验证与发布准备
+- 目标：CI 验证 UserScript、Chrome、Edge、Firefox 四类产物；为后续商店自动提交预留配置。
+- 预期：每次核心改动都能提前发现多端构建错误。
+
+5. 发布账户与商店准备
+- 目标：检查 Mozilla Add-ons 与 Microsoft Edge Add-ons 开发者注册流程，尽可能完成到无需人工身份验证的最后一步。
+- 预期：明确哪些步骤可自动完成、哪些必须由账户本人交互。
+
+## 当前执行状态（2026-08-25）
+- [x] Step 1: 建立 ExecPlan 并创建独立功能分支 `feat/unified-browser-builds`
+- [ ] Step 2: 共享源码复用已完成；WebExtension `browser.storage` adapter 留作第二阶段（当前扩展版可构建运行，但 GM 共享存储会回退到按域 localStorage）
+- [x] Step 3: 接入 WXT 与 `vite-plugin-monkey`
+- [x] Step 4: 生成并远端验证 UserScript / Chrome / Edge / Firefox 多端构建与 ZIP 产物
+- [ ] Step 5: CI / PROGRESS / 构建与商店文档已更新；CHANGELOG / README 收尾中
+- [x] Step 6: 已核验 Firefox AMO 与 Edge Partner Center 当前注册/提交流程；可自动完成部分已完成，首次账户身份认证必须由账户本人交互
+
+## 本轮验证记录（2026-08-25）
+- 首轮 CI 发现 `vite-plugin-monkey@8.1.0` 与 Vite 7 peer dependency 冲突；改用同时满足 WXT 与 vite-plugin-monkey 的 Vite 8.2.2 后依赖安装通过。
+- 第二轮 CI 完成 UserScript、Chrome MV3、Edge MV3、Firefox MV3 构建与三端 ZIP 打包。
+- 商店版权限从测试期 `<all_urls>` 收紧为由 `overlaylex-domain-allowlist.json` 自动生成的 host 列表；CI 阻止权限意外回退到 `<all_urls>`。
+- Firefox 构建设置稳定 extension id，并按远端翻译包请求的真实数据行为声明 `browsingActivity`。
+- 手工检查真实 UserScript 产物发现 Vite 拼接产生 `"use strict"(function...)` 的运行时 TypeError；已加入显式 IIFE statement boundary 修复，并在 CI 增加回归检查。
+- 原 `release-publish.yml` 的 `steps:` 被错误嵌套在 `env:` 下，导致 workflow 无法解析；已仅修正 YAML 层级，保留原 release 行为。

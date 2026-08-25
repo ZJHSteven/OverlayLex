@@ -8,6 +8,17 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-08-25
+  - 新增根目录 Node/Vite 构建工程：使用 `vite-plugin-monkey` 生成 Tampermonkey / ScriptCat 等 UserScript，使用 WXT（Vite）统一生成 Chrome / Edge / Firefox Manifest V3 WebExtension。
+  - 新增 `entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`：第一阶段让 UserScript 与三端 WebExtension 直接复用同一个 `src/userscript/overlaylex.user.js` 运行时，避免维护两份翻译核心。
+  - 新增 `wxt.config.ts`：WebExtension host 权限从 `src/packages/overlaylex-domain-allowlist.json` 自动生成，不再申请 `<all_urls>`；保留 `all_frames` 以支持 Owlbear 第三方 iframe 扩展。
+  - Firefox 构建新增稳定 extension id `overlaylex@zjhstudio.com`，并按当前远端翻译包请求行为如实声明 `browsingActivity` 数据类型。
+  - 新增 `.github/workflows/build-validate.yml`：远端实际构建 UserScript、Chrome、Edge、Firefox，验证 manifest 权限、iframe 注入配置、Firefox 数据声明，并打包三端 ZIP。
+  - 修复依赖矩阵：`vite-plugin-monkey@8.1.0` 要求 Vite 8，最终使用 Vite `8.2.2` + WXT `0.21.4` + vite-plugin-monkey `8.1.0`，不使用 `--force` 绕过 peer dependency。
+  - 修复 UserScript Vite 产物的 IIFE 边界问题：真实产物曾出现 `"use strict"(function...)`，语法检查可通过但运行立即 TypeError；新增 `scripts/postprocess-userscript.mjs` 对最终产物进行精确断言与修补，并在 CI 加入回归检查。
+  - 修复 `.github/workflows/release-publish.yml` 既有 YAML 结构错误：`steps:` 原先错误嵌套于 `env:`，现仅修正层级并保留原 release 发布逻辑。
+  - 新增 `docs/browser-builds.md` 与 `docs/store-submission.md`：记录多端构建命令、权限策略、Firefox AMO 数据声明、Edge/Firefox 审核说明及尚需人工完成的商店材料。
+  - 更新 `PLANS.md` / `PROGRESS.md`：记录本轮 ExecPlan、实际 CI 验证结果、发布账户人工认证阻塞点和下一阶段 `browser.storage` adapter / 自有域 UserScript 分发计划。
 - 2026-02-25
   - 更新 `.github/workflows/release-publish.yml`：修复 `release-publish` 可能将旧 `release` 分支 Worker 运行时代码重新部署到线上的问题；部署前改为同步 `origin/main` 的 Worker runtime（保留 release 流程生成的 `src/worker/src/data.js`）。
   - 更新 `.github/workflows/release-publish.yml`：新增 `POST /collector/submissions` 烟雾检查，防止采集上传接口被回滚成 GET-only。

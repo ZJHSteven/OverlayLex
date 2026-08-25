@@ -1,0 +1,28 @@
+{
+  "name": "overlaylex",
+  "version": "0.2.16",
+  "private": true,
+  "type": "module",
+  "description": "OverlayLex runtime translation layer for Owlbear Rodeo and its extensions.",
+  "scripts": {
+    "dev:userscript": "vite --config vite.userscript.config.js",
+    "build:userscript": "vite build --config vite.userscript.config.js && node scripts/postprocess-userscript.mjs",
+    "dev:chrome": "wxt -b chrome",
+    "dev:edge": "wxt -b edge",
+    "dev:firefox": "wxt -b firefox",
+    "build:chrome": "wxt build -b chrome",
+    "build:edge": "wxt build -b edge",
+    "build:firefox": "wxt build -b firefox",
+    "zip:chrome": "wxt zip -b chrome",
+    "zip:edge": "wxt zip -b edge",
+    "zip:firefox": "wxt zip -b firefox",
+    "build:extensions": "npm run build:chrome && npm run build:edge && npm run build:firefox",
+    "build:all": "npm run build:userscript && npm run build:extensions",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "vite": "8.2.2",
+    "vite-plugin-monkey": "8.1.0",
+    "wxt": "0.21.4"
+  }
+}

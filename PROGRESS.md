@@ -1,10 +1,11 @@
 # 项目状态快照
 
 ## 当前结论（必须最新）
-- 现状：`5etool.csv` -> ParaTranz 术语库（项目 `17950`）的增量导入任务已完成；采用“本地差集 + 批量导入”方式避免覆盖已有术语。当前远端术语总量已从 42 增至 38249（净增 38207）。
-- 已完成：已确认 ParaTranz 术语接口能力（`getTerms` / `createTerm` / `importTerms`）；已确认 `5etool.csv` 为 `GB18030` 编码、无表头、固定 5 列；已实现 `src/tools/paratranz_terms_incremental_import.py`（支持 dry-run、冲突策略、远端分页拉取、差集 JSON 输出、分批导入与回读校验）；已完成真实导入（44 批全部成功提交）；已根据实测 ParaTranz 行为将脚本术语唯一键模式默认调整为 `lower`（大小写不敏感）以减少差集虚高；已复核剩余候选仅 3 条（再次尝试导入后远端总量无变化，推测为服务端去重/过滤）。
-- 正在做：无（本次术语增量导入任务已完成）。
-- 下一步：如需进一步提高覆盖率，可人工审查 `csv-conflicts.json` 中 761 个冲突键并按领域语境选译后分批补录；同时检查剩余 3 条异常/特殊字符术语是否需要手工录入或清洗 CSV 源数据。
+- 现状：OverlayLex 已完成第一阶段“单源码、多产物”改造：同一个 `src/userscript/overlaylex.user.js` 可通过 `vite-plugin-monkey` 生成 UserScript，并通过 WXT（Vite）生成 Chrome / Edge / Firefox Manifest V3 扩展。远端 GitHub Actions 已实际完成四类构建与三端 ZIP 打包。
+- 已完成：新增根目录 `package.json`、`vite.userscript.config.js`、`wxt.config.ts`、`entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`；WXT 商店版 host 权限由 `src/packages/overlaylex-domain-allowlist.json` 自动生成，不申请 `<all_urls>`；Firefox 构建设置稳定 extension id `overlaylex@zjhstudio.com` 并按 AMO 当前规则声明 `browsingActivity`；新增 `build-validate` CI，检查四类产物、iframe 注入、host 权限和 Firefox 数据声明；补充 `docs/browser-builds.md` 与 `docs/store-submission.md`；修复原 `release-publish.yml` 中 `steps:` 错误嵌入 `env:` 导致 workflow 无法解析的问题。
+- 验证结果：远端 CI 使用 Node.js 22 + Vite 8.2.2 + WXT 0.21.4 + vite-plugin-monkey 8.1.0 完整构建成功；UserScript 约 65.6 kB；Chrome/Edge 扩展 ZIP 约 14.5 kB，Firefox ZIP 约 14.6 kB，并生成 Firefox reviewer sources ZIP。权限收紧后的 manifest 验证同样通过。
+- 正在做：浏览器商店上线准备。工程产物已具备提交基础，但 Firefox AMO 与 Microsoft Edge Partner Center 的开发者账户注册需要账户本人完成登录/邮箱验证/协议确认，当前聊天没有可代替本人身份认证的授权入口。
+- 下一步：① 在本机空白浏览器 profile 对 Chrome/Edge/Firefox 成品做真实运行回归；② 将 WebExtension storage 从当前 legacy runtime 的 localStorage 回退迁移为 `browser.storage` adapter；③ 将 UserScript 的 `@updateURL/@downloadURL` 从 GitHub Raw 迁至自有域/CDN；④ 准备商店图标、截图和公开隐私政策 URL；⑤ 本人完成 AMO/Partner Center 首次注册后提交审核。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。
@@ -28,6 +29,9 @@
 - 决策R：对于 OverlayLex 自身 UI 文本污染，采用“本地采集阶段排除 + CI 过滤器高置信兜底”双层防线（原因：本地排除可减少上传体积和噪音；CI 兜底可处理旧版脚本或极少数漏网情况）。
 - 决策S：ParaTranz 术语增量导入脚本默认使用 `term_key_mode=lower`（原因：实测服务端术语去重行为近似大小写不敏感；若本地按精确大小写做差集会显著高估可导入数量，造成重复上传与统计误差）。
 - 决策T：`release-publish` 部署 Worker 前先同步 `main` 的 Worker 运行时代码，并在发布成功后把 `main` 的非包文件回写到 `release`（保留 `src/packages/**` 与 `src/worker/src/data.js`）（原因：`release` 分支长期滞后会导致 CI 用旧 Worker 逻辑覆盖线上接口；但发布产物与包目录元数据仍应以 release 本次结果为准）。
+- 决策U：浏览器扩展与 UserScript 不维护两份翻译核心，第一阶段都直接复用现有 `overlaylex.user.js`；待多端构建稳定后再抽 `core + adapter`（原因：先消除发布门槛而不同时引入大规模运行时重写风险）。
+- 决策V：WebExtension 商店版权限由现有 domain allowlist 自动生成，不使用 `<all_urls>`（原因：最小权限更符合 Chrome/Edge/Firefox 商店审核，也避免普通用户看到“读取所有网站”这一高风险提示）。
+- 决策W：Firefox 当前如实声明 `browsingActivity`（原因：远端翻译包请求能够间接暴露正在使用的受支持插件/域名；在这种架构下声明 `none` 不准确，可能导致 AMO 审核问题）。
 
 ## 常见坑 / 复现方法
 - 坑1：油猴脚本显示“启用/亮起”不等于翻译流程已生效；脚本可能在域名门禁阶段提前退出。
@@ -40,3 +44,5 @@
 - 坑7：ParaTranz 术语接口批量导入可能对“大小写变体”执行服务端去重/过滤；若本地差集按精确大小写判重，会出现“批次导入成功但远端总量增量明显小于候选数量”的现象。
 - 坑8：外部 CSV 可能包含异常拼接行（本次 `5etool.csv` 剩余 1 条长串异常项即此类情况）；即使接口返回成功，服务端也可能静默过滤，需通过回读总量与残留差集再次校验。
 - 坑9：`release-publish` 会自动执行 `wrangler deploy` 部署 Worker；若 `release` 分支中的 `src/worker/src/index.js` 落后于 `main`，可能把线上采集上传接口回滚成旧版（例如重新变成 GET-only）。
+- 坑10：WXT/`vite-plugin-monkey` 的 Vite peer dependency 必须取交集；本次 `vite-plugin-monkey@8.1.0` 要求 Vite 8，而 WXT 0.21.4 同时兼容 Vite 8，因此使用 Vite 8.2.2。不要用 `--force` 绕过 peer dependency。
+- 坑11：GitHub Actions 的 `actions/upload-artifact` 默认会跳过点目录；WXT 产物在 `.output/`，上传步骤必须设置 `include-hidden-files: true`，否则 CI 显示成功但实际 artifact 里可能只有 UserScript。
