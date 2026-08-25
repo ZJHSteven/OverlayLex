@@ -1,5 +1,9 @@
 .vscode/
 html/
+node_modules/
+.wxt/
+.output/
+dist/
 src/worker/node_modules/
 src/worker/.wrangler/
 .tmp/
