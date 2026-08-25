@@ -40,6 +40,13 @@ jobs:
           test -f .output/edge-mv3/manifest.json
           test -f .output/firefox-mv3/manifest.json
 
+          node --check dist/userscript/overlaylex.user.js
+          if grep -Fq '"use strict"(function overlayLexBootstrap' dist/userscript/overlaylex.user.js; then
+            echo 'UserScript wrapper swallowed the legacy IIFE statement boundary.'
+            exit 1
+          fi
+          grep -Fq ';(function overlayLexBootstrap' dist/userscript/overlaylex.user.js
+
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           for (const browser of ['chrome', 'edge', 'firefox']) {
