@@ -85,3 +85,36 @@
 - 脚本修正：新增 `--term-key-mode`（默认 `lower`），使本地差集统计与 ParaTranz 实际行为更一致
 - 复核结果：修正后 dry-run 仅剩 3 条候选（其中包含 1 条明显异常拼接行 + 2 条特殊字符术语）；再次尝试导入后服务端接受请求但远端总量未变化（推测被服务端去重/过滤）
 - 冲突处理策略：本次使用 `--conflict-policy skip`，跳过 761 个冲突键（同术语不同内容），避免误覆盖或错误选译
+
+---
+
+## 任务：统一 UserScript + 多浏览器 WebExtension 构建链（2026-08-25）
+
+1. 建立共享源码层
+- 目标：把翻译核心、网络加载、DOM 观察、UI 与缓存逻辑从单体 UserScript 中逐步抽出，避免 UserScript 与浏览器扩展维护两份实现。
+- 预期：共享核心只维护一份，运行时差异通过 adapter 解决。
+
+2. 引入双构建器
+- WebExtension：使用 WXT（底层 Vite）统一构建 Chrome / Edge / Firefox。
+- UserScript：使用 `vite-plugin-monkey` 构建 Tampermonkey / ScriptCat / Violentmonkey / Greasemonkey 可安装脚本。
+- 预期：根目录统一 package scripts，一次命令可生成所有发布产物。
+
+3. 兼容当前 OverlayLex 行为
+- 目标：保留快速域名门禁、iframe 支持、远端 manifest/package、R2/Worker 后端与故障提示。
+- 预期：迁移后现有 UserScript 功能不回退。
+
+4. 加入自动构建验证与发布准备
+- 目标：CI 验证 UserScript、Chrome、Edge、Firefox 四类产物；为后续商店自动提交预留配置。
+- 预期：每次核心改动都能提前发现多端构建错误。
+
+5. 发布账户与商店准备
+- 目标：检查 Mozilla Add-ons 与 Microsoft Edge Add-ons 开发者注册流程，尽可能完成到无需人工身份验证的最后一步。
+- 预期：明确哪些步骤可自动完成、哪些必须由账户本人交互。
+
+## 当前执行状态（2026-08-25）
+- [x] Step 1: 建立 ExecPlan 并创建独立功能分支 `feat/unified-browser-builds`
+- [ ] Step 2: 完成共享源码与 storage adapter 第一版
+- [ ] Step 3: 接入 WXT 与 `vite-plugin-monkey`
+- [ ] Step 4: 生成并验证多端构建产物
+- [ ] Step 5: 更新 CI / README / PROGRESS / CHANGELOG
+- [ ] Step 6: 完成商店账户注册可自动化部分并记录人工阻塞点
