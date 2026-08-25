@@ -6,7 +6,7 @@
   "description": "OverlayLex runtime translation layer for Owlbear Rodeo and its extensions.",
   "scripts": {
     "dev:userscript": "vite --config vite.userscript.config.js",
-    "build:userscript": "vite build --config vite.userscript.config.js",
+    "build:userscript": "vite build --config vite.userscript.config.js && node scripts/postprocess-userscript.mjs",
     "dev:chrome": "wxt -b chrome",
     "dev:edge": "wxt -b edge",
     "dev:firefox": "wxt -b firefox",
