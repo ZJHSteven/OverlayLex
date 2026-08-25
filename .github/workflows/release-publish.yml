@@ -30,10 +30,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "--- userscript ---"
-          find dist/userscript -maxdepth 2 -type f -print
-          echo "--- WXT output ---"
-          find .output -maxdepth 3 -type f -print
           test -f dist/userscript/overlaylex.user.js
           test -f dist/userscript/overlaylex.meta.js
           test -f .output/chrome-mv3/manifest.json
@@ -48,7 +44,9 @@ jobs:
             if (!scripts.length) throw new Error(`${browser}: missing content_scripts`);
             const overlay = scripts.find((item) => item.all_frames === true);
             if (!overlay) throw new Error(`${browser}: no all_frames content script`);
-            console.log(browser, JSON.stringify({manifest_version: manifest.manifest_version, content_scripts: scripts}));
+            if (overlay.matches?.includes('<all_urls>')) throw new Error(`${browser}: store build still requests <all_urls>`);
+            if (!overlay.matches?.includes('*://owlbear.rodeo/*')) throw new Error(`${browser}: missing Owlbear host access`);
+            console.log(browser, JSON.stringify({manifest_version: manifest.manifest_version, matches: overlay.matches, gecko: manifest.browser_specific_settings?.gecko ?? null}));
           }
           NODE
 
@@ -63,7 +61,9 @@ jobs:
         with:
           name: overlaylex-unified-build-test
           if-no-files-found: error
+          include-hidden-files: true
           path: |
+            package-lock.json
             dist/userscript/*.js
             .output/*.zip
             .output/*/manifest.json
