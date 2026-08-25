@@ -3,67 +3,240 @@ name: release-publish
 on:
   push:
     branches:
-      - feat/unified-browser-builds
+      - release
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+      PARATRANZ_TOKEN: ${{ secrets.PARATRANZ_TOKEN }}
+      PARATRANZ_PROJECT_ID: ${{ secrets.PARATRANZ_PROJECT_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Validate Secrets
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN is missing."
+            exit 1
+          fi
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "CLOUDFLARE_ACCOUNT_ID is missing."
+            exit 1
+          fi
+          if [ -z "${R2_BUCKET_NAME}" ]; then
+            echo "R2_BUCKET_NAME is missing."
+            exit 1
+          fi
+          if [ -z "${PARATRANZ_TOKEN}" ]; then
+            echo "PARATRANZ_TOKEN is missing."
+            exit 1
+          fi
+          if [ -z "${PARATRANZ_PROJECT_ID}" ]; then
+            echo "PARATRANZ_PROJECT_ID is missing."
+            exit 1
+          fi
 
-      - name: Build all targets
-        run: npm run build:all
-
-      - name: Validate artifacts
+      - name: Resolve Base Ref
+        id: base
         shell: bash
         run: |
-          set -euo pipefail
-          test -f dist/userscript/overlaylex.user.js
-          test -f dist/userscript/overlaylex.meta.js
-          test -f .output/chrome-mv3/manifest.json
-          test -f .output/edge-mv3/manifest.json
-          test -f .output/firefox-mv3/manifest.json
+          BASE_REF="${{ github.event.before }}"
+          if [ "$BASE_REF" = "0000000000000000000000000000000000000000" ] || [ -z "$BASE_REF" ]; then
+            BASE_REF="$(git rev-parse HEAD~1 2>/dev/null || true)"
+          fi
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+          echo "resolved base ref: $BASE_REF"
 
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          for (const browser of ['chrome', 'edge', 'firefox']) {
-            const manifest = JSON.parse(fs.readFileSync(`.output/${browser}-mv3/manifest.json`, 'utf8'));
-            const scripts = manifest.content_scripts ?? [];
-            if (!scripts.length) throw new Error(`${browser}: missing content_scripts`);
-            const overlay = scripts.find((item) => item.all_frames === true);
-            if (!overlay) throw new Error(`${browser}: no all_frames content script`);
-            if (overlay.matches?.includes('<all_urls>')) throw new Error(`${browser}: store build still requests <all_urls>`);
-            if (!overlay.matches?.includes('*://owlbear.rodeo/*')) throw new Error(`${browser}: missing Owlbear host access`);
-            console.log(browser, JSON.stringify({manifest_version: manifest.manifest_version, matches: overlay.matches, gecko: manifest.browser_specific_settings?.gecko ?? null}));
+      - name: Collect Changed Package Files
+        id: changed_packages
+        shell: bash
+        run: |
+          mkdir -p .tmp
+          CHANGED_FILE=".tmp/release-changed-packages.txt"
+          : > "$CHANGED_FILE"
+
+          BASE_REF="${{ steps.base.outputs.base_ref }}"
+          if [ -z "$BASE_REF" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "changed_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
+            echo "No valid base ref, treat as no package changes."
+            exit 0
+          fi
+
+          mapfile -t CHANGED_FILES < <(git diff --name-only "$BASE_REF...HEAD" -- src/packages | grep -E '\.json$' || true)
+          if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "changed_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
+            echo "No changed package files under src/packages."
+            exit 0
+          fi
+
+          printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILE"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "changed_file=$CHANGED_FILE" >> "$GITHUB_OUTPUT"
+          echo "changed package files:"
+          cat "$CHANGED_FILE"
+
+      - name: Check Paratranz Drift
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        shell: bash
+        run: |
+          mapfile -t CHANGED_FILES < "${{ steps.changed_packages.outputs.changed_file }}"
+          if [ "${#CHANGED_FILES[@]}" -eq 0 ]; then
+            echo "No changed package files, skip drift check."
+            exit 0
+          fi
+
+          node src/tools/overlaylex-i18n-flow.mjs pull-paratranz \
+            --project-id "${PARATRANZ_PROJECT_ID}" \
+            --out-dir ".tmp/paratranz-release-check"
+          node src/tools/overlaylex-i18n-flow.mjs from-paratranz \
+            --input-dir ".tmp/paratranz-release-check"
+          if ! git diff --quiet -- "${CHANGED_FILES[@]}"; then
+            echo "Paratranz drift detected: local packages are behind remote translations."
+            echo "Please merge the latest translation sync PR before releasing changed packages."
+            git status --short -- "${CHANGED_FILES[@]}"
+            exit 1
+          fi
+
+      - name: Skip Drift Message
+        if: ${{ steps.changed_packages.outputs.has_changes != 'true' }}
+        run: echo "No changed package files, skip Paratranz drift check."
+
+      - name: Verify Release Metadata
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        run: |
+          node src/tools/release-from-staged.mjs verify-release \
+            --base-ref "${{ steps.base.outputs.base_ref }}" \
+            --api-url "https://overlaylex-demo-api.zhangjiahe0830.workers.dev"
+
+      - name: Skip Verify Message
+        if: ${{ steps.changed_packages.outputs.has_changes != 'true' }}
+        run: echo "No changed package files, skip release metadata verification."
+
+      - name: Install Worker Dependencies
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        working-directory: src/worker
+        run: npm ci
+
+      - name: Sync Packages To R2
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        run: |
+          node src/tools/sync-r2-packages.mjs \
+            --bucket-name "${R2_BUCKET_NAME}" \
+            --packages-dir src/packages \
+            --worker-dir src/worker \
+            --changed-only \
+            --base-ref "${{ steps.base.outputs.base_ref }}"
+
+      - name: Skip R2 Sync Message
+        if: ${{ steps.changed_packages.outputs.has_changes != 'true' }}
+        run: echo "No valid base ref, skip package sync."
+
+      - name: Sync Worker Runtime Code From Main (Preserve data.js)
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        shell: bash
+        run: |
+          # 说明：
+          # - release 分支是“发布快照分支”，可能落后于 main；
+          # - 直接在 release 上 `wrangler deploy` 会把旧 Worker 逻辑重新部署到线上；
+          # - 这里部署前强制从 main 覆盖 Worker 运行时代码（index.js / wrangler 配置 / package 配置），
+          #   但保留 release 流程刚生成/更新的 `src/worker/src/data.js`（它反映本次发布的包目录状态）。
+          git checkout origin/main -- \
+            src/worker/package.json \
+            src/worker/package-lock.json \
+            src/worker/wrangler.toml \
+            src/worker/src/index.js
+          echo "Worker runtime files synced from origin/main (data.js preserved from release workspace)."
+
+      - name: Deploy Worker
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        working-directory: src/worker
+        run: npm run deploy
+
+      - name: Smoke Check Manifest
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        shell: bash
+        run: |
+          API_URL="https://overlaylex-demo-api.zhangjiahe0830.workers.dev"
+          MANIFEST="$(curl -fsSL "${API_URL}/manifest")"
+          echo "${MANIFEST}" > manifest.json
+          node - <<'NODE'
+          const fs = require("fs");
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          if (!manifest || !Array.isArray(manifest.packages)) {
+            throw new Error("manifest format invalid");
           }
+          if (manifest.packages.some((item) => item.id === "obr-room-core")) {
+            throw new Error("manifest still contains obr-room-core");
+          }
+          const dataJs = fs.readFileSync("src/worker/src/data.js", "utf8");
+          const match = dataJs.match(/export const SCRIPT_VERSION = "([^"]+)";/);
+          if (!match) {
+            throw new Error("local script version not found");
+          }
+          const localVersion = match[1];
+          if (manifest.scriptVersion !== localVersion) {
+            throw new Error(`scriptVersion mismatch: remote=${manifest.scriptVersion} local=${localVersion}`);
+          }
+          console.log("manifest smoke check passed.");
           NODE
 
-      - name: Package extensions
+      - name: Smoke Check Collector Upload Endpoint Method
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        shell: bash
         run: |
-          npm run zip:chrome
-          npm run zip:edge
-          npm run zip:firefox
+          API_URL="https://overlaylex-demo-api.zhangjiahe0830.workers.dev/collector/submissions"
+          STATUS_CODE="$(curl -sS -o .tmp/collector-post-smoke.json -w "%{http_code}" \
+            -X POST "${API_URL}" \
+            -H "Content-Type: application/json" \
+            -H "X-OverlayLex-Invite-Code: smoke-check" \
+            --data '{"version":1,"scope":"current-host-incremental","host":"example.com","payload":{"example.com":["smoke"]},"meta":{"alias":"release-ci-smoke","pageUrl":"https://example.com/"}}')"
+          echo "collector POST smoke status=${STATUS_CODE}"
+          cat .tmp/collector-post-smoke.json
+          echo
+          if [ "${STATUS_CODE}" = "405" ]; then
+            echo "collector upload endpoint returned 405 (likely deployed old GET-only worker code)."
+            exit 1
+          fi
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: overlaylex-unified-build-test
-          if-no-files-found: error
-          include-hidden-files: true
-          path: |
-            package-lock.json
-            dist/userscript/*.js
-            .output/*.zip
-            .output/*/manifest.json
+      - name: Sync Release Non-Package Files From Main (Avoid Drift)
+        if: ${{ steps.changed_packages.outputs.has_changes == 'true' }}
+        shell: bash
+        run: |
+          # 目标：
+          # - 在 release 发包成功后，把 main 的“非包文件变更”同步回 release，
+          #   避免 release 长期落后导致下一次发包把旧工具/旧 Worker 逻辑重新带回来。
+          # - 保留本次 release 的发布结果：`src/packages/**` 与 `src/worker/src/data.js`。
+          git fetch origin main release
+
+          git checkout origin/main -- .
+          git checkout HEAD -- src/packages src/worker/src/data.js
+
+          if git diff --quiet -- .; then
+            echo "release non-package files already in sync with main; skip sync commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "[skip release] chore(release): sync non-package files from main"
+          git push origin "HEAD:${{ github.ref_name }}"
