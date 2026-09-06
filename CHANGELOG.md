@@ -8,6 +8,12 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-09-06
+  - WebExtension 新增扩展级 `browser.storage.local` 适配：WXT content-script 在加载共享 legacy runtime 前预读扩展存储并建立同步内存桥，使 Owlbear 主站与第三方跨域 iframe 共享 OverlayLex 设置和缓存。
+  - `wxt.config.ts` 新增最小 `storage` 权限，并在 `build-validate` CI 中增加三端 manifest 权限断言。
+  - OverlayLex 主运行时版本提升到 `0.2.17`，同步更新 UserScript、WXT 与根 `package.json` 版本。
+  - 清理 README 已过期的 `cherry-pick` 发布说明，改为当前真实的“从 main 提交按文件同步快照到 release”流程。
+  - 更新浏览器构建、商店提交、项目进度文档，记录 WebExtension 存储适配完成与正式送审阶段状态。
 - 2026-08-25
   - 新增根目录 Node/Vite 构建工程：使用 `vite-plugin-monkey` 生成 Tampermonkey / ScriptCat 等 UserScript，使用 WXT（Vite）统一生成 Chrome / Edge / Firefox Manifest V3 WebExtension。
   - 新增 `entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`：第一阶段让 UserScript 与三端 WebExtension 直接复用同一个 `src/userscript/overlaylex.user.js` 运行时，避免维护两份翻译核心。

@@ -149,6 +149,6 @@
 
 ## 当前执行状态（2026-09-06）
 - [x] Step 1: 本地 `main` 已 fast-forward 到 `origin/main`，本地 `5etool.csv` 保持未跟踪、未修改。
-- [ ] Step 2: WebExtension storage adapter 与 README 旧发布说明收尾。
+- [x] Step 2: WebExtension storage adapter 与 README 旧发布说明收尾；版本同步提升为 `0.2.17`。
 - [ ] Step 3: 多端构建、ZIP 与安装级回归。
 - [ ] Step 4: Firefox AMO / Edge Add-ons 发布与送审。

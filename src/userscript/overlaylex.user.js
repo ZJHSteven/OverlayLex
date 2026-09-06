@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Translator
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.16
+// @version      0.2.17
 // @description  OverlayLex 主翻译脚本：按域名加载翻译包并执行页面文本覆盖翻译。
 // @author       OverlayLex
 // @match        *://*/*
@@ -30,7 +30,7 @@
   // ------------------------------
   // 常量区
   // ------------------------------
-  const SCRIPT_VERSION = "0.2.16";
+  const SCRIPT_VERSION = "0.2.17";
   const STORAGE_KEYS = {
     MANIFEST_CACHE: "overlaylex:manifest-cache:v2",
     PACKAGE_CACHE: "overlaylex:package-cache:v2",
@@ -281,7 +281,36 @@
     }
   }
 
+  /**
+   * 读取 WXT WebExtension 入口预先注入的扩展级存储桥。
+   *
+   * UserScript 环境中这个对象不存在，因此会自然返回 null，继续走 GM/localStorage；
+   * WebExtension 环境中则优先使用 browser.storage.local 的内存快照桥，从而让
+   * Owlbear 主站与不同来源的插件 iframe 共享同一份设置和缓存。
+   */
+  function getExtensionStorageBridge() {
+    try {
+      const bridge = globalThis.__OVERLAYLEX_EXTENSION_STORAGE__;
+      if (!bridge || typeof bridge.get !== "function" || typeof bridge.set !== "function") {
+        return null;
+      }
+      return bridge;
+    } catch (error) {
+      Logger.warn("读取 WebExtension 存储桥失败，继续使用原有存储回退。", error);
+      return null;
+    }
+  }
+
   function safeLocalStorageGet(key, fallbackValue) {
+    const extensionBridge = getExtensionStorageBridge();
+    if (extensionBridge) {
+      try {
+        return extensionBridge.get(key, fallbackValue);
+      } catch (error) {
+        Logger.warn(`读取 WebExtension 共享存储失败: ${key}`, error);
+      }
+    }
+
     try {
       const raw = localStorage.getItem(key);
       if (!raw) {
@@ -295,6 +324,16 @@
   }
 
   function safeLocalStorageSet(key, value) {
+    const extensionBridge = getExtensionStorageBridge();
+    if (extensionBridge) {
+      try {
+        extensionBridge.set(key, value);
+        return;
+      } catch (error) {
+        Logger.warn(`写入 WebExtension 共享存储失败: ${key}`, error);
+      }
+    }
+
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (error) {
@@ -317,15 +356,21 @@
    */
   function safeSharedStorageGet(key, fallbackValue) {
     try {
-      if (typeof GM_getValue !== "function") {
-        return fallbackValue;
+      if (typeof GM_getValue === "function") {
+        const value = GM_getValue(key, fallbackValue);
+        if (value && typeof value === "object" && typeof value.then === "function") {
+          Logger.warn(`GM_getValue 返回 Promise，当前流程回退到其它存储: ${key}`);
+        } else {
+          return typeof value === "undefined" ? fallbackValue : value;
+        }
       }
-      const value = GM_getValue(key, fallbackValue);
-      if (value && typeof value === "object" && typeof value.then === "function") {
-        Logger.warn(`GM_getValue 返回 Promise，当前流程回退到本地存储: ${key}`);
-        return fallbackValue;
+
+      const extensionBridge = getExtensionStorageBridge();
+      if (extensionBridge) {
+        return extensionBridge.get(key, fallbackValue);
       }
-      return typeof value === "undefined" ? fallbackValue : value;
+
+      return fallbackValue;
     } catch (error) {
       Logger.warn(`读取共享存储失败: ${key}`, error);
       return fallbackValue;
@@ -344,6 +389,12 @@
     try {
       if (typeof GM_setValue === "function") {
         GM_setValue(key, value);
+        return;
+      }
+
+      const extensionBridge = getExtensionStorageBridge();
+      if (extensionBridge) {
+        extensionBridge.set(key, value);
       }
     } catch (error) {
       Logger.warn(`写入共享存储失败: ${key}`, error);

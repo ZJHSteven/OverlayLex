@@ -1,6 +1,6 @@
 {
   "name": "overlaylex",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "private": true,
   "type": "module",
   "description": "OverlayLex runtime translation layer for Owlbear Rodeo and its extensions.",

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'wxt';
 
-const version = '0.2.16';
+const version = '0.2.17';
 const allowlist = JSON.parse(
   readFileSync(new URL('./src/packages/overlaylex-domain-allowlist.json', import.meta.url), 'utf8'),
 );
@@ -32,6 +32,8 @@ export default defineConfig({
     short_name: 'OverlayLex',
     version,
     description: '为 Owlbear Rodeo 及已适配扩展提供运行时中文覆盖翻译。',
+    // WebExtension 运行时使用扩展级 storage 共享主站与第三方 iframe 的缓存/设置。
+    permissions: ['storage'],
     ...(browser === 'firefox'
       ? {
           browser_specific_settings: {

@@ -276,8 +276,8 @@ node src/tools/release-from-staged.mjs prepare-from-staged
 3. 自动维护 `overlaylex-domain-allowlist.json`（补齐所有翻译包 host 覆盖；有变化则自动 bump 版本）。
 4. 自动同步 `src/worker/src/data.js` 里的 `PACKAGE_CATALOG` 版本与包目录。
 5. 校验“本次待发布包版本号必须高于线上版本”。
-6. 自动执行：`main commit -> push main -> cherry-pick 到 release -> push release`。
-7. 若 `cherry-pick` 仅在 `src/packages/*.json` 发生冲突：自动采用 `main` 提交版本（`--theirs`）并 `cherry-pick --continue`；若出现非包文件冲突则停止并提示人工处理。
+6. 自动执行：`main commit -> push main -> 按文件同步提交快照到 release -> push release`。
+7. release 只接收“本次发布所需包文件 + 发布元数据文件”；工具会直接从刚生成的 main commit 取这些文件的精确快照，避免把无关历史或开发文件带入 release。
 
 说明：
 - 该流程不再依赖“云端自动 bump 版本”；版本统一在本地发布脚本阶段完成，避免 `main/release` 版本漂移。
@@ -285,7 +285,7 @@ node src/tools/release-from-staged.mjs prepare-from-staged
 - 发布包选择权在你手里：脚本只会把“你暂存的翻译包”加入发布目录（`PACKAGE_CATALOG`），不会按译文内容自动替你筛选。
 - 工作区可以不干净：脚本不会强制你清空其他改动；提交时只会包含“你原始暂存的包 + 自动维护的 `overlaylex-domain-allowlist.json` + `src/worker/src/data.js`”。
 - 默认自动 `stash`：在 `main push` 后、切换到 `release` 前，脚本会自动暂存当前未暂存/未跟踪改动，并在发布流程结束后自动恢复，减少“切分支失败（本地有开发中改动）”中断；如需关闭可传 `--no-auto-stash`。
-- 若脚本提示“检测到 cherry-pick 仍在进行”，说明遇到了非包文件冲突并保留了现场；请按提示手动解决后执行 `git cherry-pick --continue`（或 `--abort`）。
+- 当前发布流程已经不再使用 `cherry-pick`；release 的职责是保存可部署快照，而不是复刻 main 的提交历史。
 
 ## CI Secrets 配置
 

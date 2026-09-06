@@ -36,7 +36,7 @@ OverlayLex 在受支持的 Owlbear Rodeo 页面和第三方扩展 iframe 中读�
 - 扩展会访问 `overlaylex-api.zjhstudio.com` 获取 manifest、域名准入信息和翻译包。
 - 翻译包请求可能间接表明用户正在使用哪个 OverlayLex 已支持的 Owlbear/第三方扩展域名，因此 Firefox 构建按当前 AMO 数据分类规则声明 `browsingActivity`，而不是错误声明 `none`。
 - OverlayLex 不包含广告 SDK，不出售用户数据，不进行跨站广告追踪，也不要求 OverlayLex 用户账户。
-- 设置、缓存和翻译包保存在本地浏览器存储中；当前迁移第一阶段的 WebExtension 运行时在 GM API 不存在时会回退到页面 localStorage，后续将迁移为 WebExtension storage adapter。
+- 设置、缓存和翻译包保存在本地浏览器存储中；WebExtension 版使用 `browser.storage.local` 在 Owlbear 主站和不同来源的第三方插件 iframe 之间共享缓存，UserScript 版使用脚本管理器提供的 GM storage。
 - 托管/CDN/安全基础设施可能生成正常的网络访问日志；项目本身不以建立用户画像为目的使用这些日志。
 
 ## Firefox reviewer notes

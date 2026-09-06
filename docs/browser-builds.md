@@ -61,6 +61,14 @@ Firefox 构建当前声明 `browsingActivity` 为 required data collection。原
 
 后续如果把翻译包完全随扩展离线打包，或把远端请求设计成无法识别当前插件的统一匿名资源，再重新评估是否可降为 `none`。
 
+## WebExtension 存储适配
+
+Chrome / Edge / Firefox 构建现在显式申请最小的 `storage` 权限，并使用 `browser.storage.local` 保存 OverlayLex 设置与缓存。
+
+为继续复用现有同步 UserScript runtime，WXT content-script 入口会先异步读取扩展存储，再建立一个同步内存桥，最后才加载 `overlaylex.user.js`。运行时因此可以保持原有同步初始化结构，同时不同来源的 Owlbear 插件 iframe 会共享同一份扩展级缓存，不再退化为各域独立的页面 `localStorage`。
+
+UserScript 构建不受影响：Tampermonkey / Violentmonkey 等环境仍优先使用 `GM_getValue` / `GM_setValue`，没有 GM API 时才使用页面 `localStorage` 作为最后兜底。
+
 ## 下一阶段源码拆分
 
 当前阶段优先保证多端产物来自同一个已验证运行时。后续再把单体脚本拆成：
@@ -71,4 +79,4 @@ src/adapters/userscript/
 src/adapters/webext/
 ```
 
-其中 UserScript adapter 使用 GM storage，WebExtension adapter 使用 `browser.storage` / `chrome.storage`，解决当前扩展版跨域共享缓存只能回退到页面 `localStorage` 的局限。
+其中第一阶段的 WebExtension storage 适配已经通过 WXT 入口同步桥完成；后续再抽 `core + adapter` 时，可以把这层桥正式收敛为独立 adapter，而无需改变现有数据语义。

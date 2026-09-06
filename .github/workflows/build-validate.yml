@@ -53,6 +53,7 @@ jobs:
             const manifest = JSON.parse(fs.readFileSync(`.output/${browser}-mv3/manifest.json`, 'utf8'));
             const scripts = manifest.content_scripts ?? [];
             if (!scripts.length) throw new Error(`${browser}: missing content_scripts`);
+            if (!manifest.permissions?.includes('storage')) throw new Error(`${browser}: storage permission missing`);
             const overlay = scripts.find((item) => item.all_frames === true);
             if (!overlay) throw new Error(`${browser}: OverlayLex content script is not configured for all frames`);
             if (overlay.matches?.includes('<all_urls>')) throw new Error(`${browser}: store build must not request <all_urls>`);
