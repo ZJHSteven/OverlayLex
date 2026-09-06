@@ -75,6 +75,21 @@ jobs:
           npm run zip:edge
           npm run zip:firefox
 
+      - name: Validate Firefox reviewer sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -l .output/overlaylex-*-sources.zip > .tmp-firefox-sources.txt
+          grep -Fq 'SOURCE_CODE_REVIEW.md' .tmp-firefox-sources.txt
+          grep -Fq 'entrypoints/overlay.content.ts' .tmp-firefox-sources.txt
+          grep -Fq 'src/userscript/overlaylex.user.js' .tmp-firefox-sources.txt
+          grep -Fq 'src/packages/overlaylex-domain-allowlist.json' .tmp-firefox-sources.txt
+          if grep -Eq '5etool\.csv|tmp/collector|src/worker|src/tools' .tmp-firefox-sources.txt; then
+            echo 'Firefox reviewer sources contains unrelated local/backend files.'
+            cat .tmp-firefox-sources.txt
+            exit 1
+          fi
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

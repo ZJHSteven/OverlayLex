@@ -152,3 +152,7 @@
 - [x] Step 2: WebExtension storage adapter 与 README 旧发布说明收尾；版本同步提升为 `0.2.17`。
 - [ ] Step 3: 多端构建、ZIP 与安装级回归。
 - [ ] Step 4: Firefox AMO / Edge Add-ons 发布与送审。
+
+### Step 3 阶段发现
+- 首轮 `wxt zip -b firefox` 虽成功，但默认 reviewer sources ZIP 意外包含本地未跟踪 `5etool.csv`、`tmp/collector.selected.json`、Worker/翻译工具等无关文件。
+- 已改用 WXT `zip.includeSources` 严格列出 Firefox 重建所需源码，并增加 CI 回归断言；下一步重新打包并从 sources ZIP 独立重建验证。

@@ -4,7 +4,7 @@
 - 现状：OverlayLex 已完成第一阶段“单源码、多产物”改造：同一个 `src/userscript/overlaylex.user.js` 可通过 `vite-plugin-monkey` 生成 UserScript，并通过 WXT（Vite）生成 Chrome / Edge / Firefox Manifest V3 扩展。WebExtension 已补齐扩展级 `browser.storage.local` 存储桥，主站与跨域 iframe 不再依赖按域隔离的页面 localStorage。远端 GitHub Actions 已实际完成四类构建与三端 ZIP 打包。
 - 已完成：新增根目录 `package.json`、`vite.userscript.config.js`、`wxt.config.ts`、`entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`；WXT 商店版 host 权限由 `src/packages/overlaylex-domain-allowlist.json` 自动生成，不申请 `<all_urls>`；Firefox 构建设置稳定 extension id `overlaylex@zjhstudio.com` 并按 AMO 当前规则声明 `browsingActivity`；新增 `build-validate` CI，检查四类产物、iframe 注入、host 权限和 Firefox 数据声明；补充 `docs/browser-builds.md` 与 `docs/store-submission.md`；修复原 `release-publish.yml` 中 `steps:` 错误嵌入 `env:` 导致 workflow 无法解析的问题。
 - 验证结果：远端 CI 使用 Node.js 22 + Vite 8.2.2 + WXT 0.21.4 + vite-plugin-monkey 8.1.0 完整构建成功；UserScript 约 65.6 kB；Chrome/Edge 扩展 ZIP 约 14.5 kB，Firefox ZIP 约 14.6 kB，并生成 Firefox reviewer sources ZIP。权限收紧后的 manifest 验证同样通过。
-- 正在做：浏览器商店上线准备与真实浏览器安装级回归；Firefox AMO 与 Microsoft Edge Partner Center 账户已由用户完成注册，本轮将继续尝试直接送审。
+- 正在做：浏览器商店上线准备与真实浏览器安装级回归；Firefox AMO reviewer sources 已改为严格源码 allowlist，避免本地未跟踪资料被 WXT 默认打包；Firefox AMO 与 Microsoft Edge Partner Center 账户已由用户完成注册，本轮将继续尝试直接送审。
 - 下一步：① 在本机空白浏览器 profile 对 Chrome/Edge/Firefox 成品做真实运行回归；② 将 UserScript 的 `@updateURL/@downloadURL` 从 GitHub Raw 迁至自有域/CDN；③ 准备/核对商店图标、截图和公开隐私政策 URL；④ 提交 Firefox AMO / Edge Add-ons 审核。
 
 ## 关键决策与理由（防止“吃书”）
@@ -33,6 +33,7 @@
 - 决策V：WebExtension 商店版权限由现有 domain allowlist 自动生成，不使用 `<all_urls>`（原因：最小权限更符合 Chrome/Edge/Firefox 商店审核，也避免普通用户看到“读取所有网站”这一高风险提示）。
 - 决策W：Firefox 当前如实声明 `browsingActivity`（原因：远端翻译包请求能够间接暴露正在使用的受支持插件/域名；在这种架构下声明 `none` 不准确，可能导致 AMO 审核问题）。
 - 决策X：WebExtension 第一阶段不重写 legacy runtime 为全异步存储，而是在 WXT content-script 启动时预读 `browser.storage.local` 并建立同步内存桥（原因：以最小改动获得跨域共享扩展存储，同时避免为了发布重写已经长期验证的翻译核心）。
+- 决策Y：Firefox reviewer sources 使用 `zip.includeSources` 严格 allowlist，而不是 WXT 默认全工作区来源集合（原因：真实开发目录存在未跟踪术语表、采集临时文件等，与扩展重建无关且不应送交 AMO）。
 
 ## 常见坑 / 复现方法
 - 坑1：油猴脚本显示“启用/亮起”不等于翻译流程已生效；脚本可能在域名门禁阶段提前退出。

@@ -27,6 +27,25 @@ const browserMatches = buildBrowserMatches(allowlist.rules ?? []);
 export default defineConfig({
   manifestVersion: 3,
   targetBrowsers: ['chrome', 'edge', 'firefox'],
+  zip: {
+    /**
+     * Firefox AMO 会要求 reviewer sources ZIP。WXT 默认会把 sourcesRoot 下几乎所有
+     * 非隐藏文件都装进去，这对我们的真实工作区不安全：未跟踪的术语 CSV、临时采集
+     * JSON 等本地资料也可能被意外上传。
+     *
+     * 因此这里改成严格 allowlist，只包含“能够从源码重建 Firefox 扩展”所需文件。
+     */
+    includeSources: [
+      'entrypoints/**',
+      'src/userscript/overlaylex.user.js',
+      'src/packages/overlaylex-domain-allowlist.json',
+      'wxt.config.ts',
+      'package.json',
+      'package-lock.json',
+      'tsconfig.json',
+      'SOURCE_CODE_REVIEW.md',
+    ],
+  },
   manifest: ({ browser }) => ({
     name: 'OverlayLex 枭熊汉化',
     short_name: 'OverlayLex',
