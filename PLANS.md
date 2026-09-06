@@ -156,3 +156,4 @@
 ### Step 3 阶段发现
 - 首轮 `wxt zip -b firefox` 虽成功，但默认 reviewer sources ZIP 意外包含本地未跟踪 `5etool.csv`、`tmp/collector.selected.json`、Worker/翻译工具等无关文件。
 - 已改用 WXT `zip.includeSources` 严格列出 Firefox 重建所需源码，并增加 CI 回归断言；下一步重新打包并从 sources ZIP 独立重建验证。
+- `web-ext lint` 检出 1 条最低版本兼容性警告与 3 条内部 UI `innerHTML` 警告；最低版本已从 140 调整为 142，内部模板警告经核对不包含网页/用户/翻译数据输入，保留并写入 reviewer source 说明。

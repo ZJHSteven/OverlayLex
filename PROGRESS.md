@@ -34,6 +34,7 @@
 - 决策W：Firefox 当前如实声明 `browsingActivity`（原因：远端翻译包请求能够间接暴露正在使用的受支持插件/域名；在这种架构下声明 `none` 不准确，可能导致 AMO 审核问题）。
 - 决策X：WebExtension 第一阶段不重写 legacy runtime 为全异步存储，而是在 WXT content-script 启动时预读 `browser.storage.local` 并建立同步内存桥（原因：以最小改动获得跨域共享扩展存储，同时避免为了发布重写已经长期验证的翻译核心）。
 - 决策Y：Firefox reviewer sources 使用 `zip.includeSources` 严格 allowlist，而不是 WXT 默认全工作区来源集合（原因：真实开发目录存在未跟踪术语表、采集临时文件等，与扩展重建无关且不应送交 AMO）。
+- 决策Z：Firefox 最低版本统一提高到 `142.0`（原因：当前 manifest 使用的数据收集声明从 142 起进入桌面/Android 一致支持范围；宁可收紧最低版本，也不保留 AMO linter 明确指出的兼容性矛盾）。
 
 ## 常见坑 / 复现方法
 - 坑1：油猴脚本显示“启用/亮起”不等于翻译流程已生效；脚本可能在域名门禁阶段提前退出。

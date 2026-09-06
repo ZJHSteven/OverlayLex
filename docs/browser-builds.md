@@ -59,6 +59,8 @@ WebExtension 不申请 `<all_urls>`。`wxt.config.ts` 会读取 `src/packages/ov
 
 Firefox 构建当前声明 `browsingActivity` 为 required data collection。原因是 OverlayLex 会向自己的 API 请求与当前支持域名/插件对应的翻译包；即使页面文本本身不上传，这个请求也可能让服务端推知正在使用的受支持 Owlbear/插件域名，因此不应错误声明为 `none`。
 
+Firefox 最低版本设为 `142.0`。这是因为当前使用的 `browser_specific_settings.gecko.data_collection_permissions` 在 Firefox / Firefox for Android 142 起才进入 AMO lint 的完整支持范围；提高最低版本可以避免“声明了新 manifest 能力、却声称支持更旧版本”的不一致。
+
 后续如果把翻译包完全随扩展离线打包，或把远端请求设计成无法识别当前插件的统一匿名资源，再重新评估是否可降为 `none`。
 
 ## WebExtension 存储适配

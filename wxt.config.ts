@@ -58,7 +58,10 @@ export default defineConfig({
           browser_specific_settings: {
             gecko: {
               id: 'overlaylex@zjhstudio.com',
-              strict_min_version: '140.0',
+              // `data_collection_permissions` 在 Firefox / Firefox for Android 142
+              // 起才完整受支持。把最低版本统一到 142，避免 AMO linter 对 Android
+              // 兼容性产生误导性警告，也确保商店展示的能力声明与实际 manifest 一致。
+              strict_min_version: '142.0',
               data_collection_permissions: {
                 // OverlayLex currently requests a domain-specific translation package
                 // from its own API. That package identifier can reveal which supported

@@ -15,6 +15,7 @@
   - 清理 README 已过期的 `cherry-pick` 发布说明，改为当前真实的“从 main 提交按文件同步快照到 release”流程。
   - 更新浏览器构建、商店提交、项目进度文档，记录 WebExtension 存储适配完成与正式送审阶段状态。
   - 收紧 Firefox reviewer sources ZIP：由默认“几乎整个工作区”改为严格源码 allowlist，防止未跟踪 `5etool.csv`、临时采集 JSON、Worker/翻译后台工具等无关内容意外进入 AMO 源码包；新增 `SOURCE_CODE_REVIEW.md` 与 CI 内容断言。
+  - Firefox `strict_min_version` 从 `140.0` 调整为 `142.0`，与 `data_collection_permissions` 的 AMO lint 支持范围对齐；剩余 lint 提示仅来自内部固定 UI/SVG 的 `innerHTML` 模板，并在源码审查说明中记录。
 - 2026-08-25
   - 新增根目录 Node/Vite 构建工程：使用 `vite-plugin-monkey` 生成 Tampermonkey / ScriptCat 等 UserScript，使用 WXT（Vite）统一生成 Chrome / Edge / Firefox Manifest V3 WebExtension。
   - 新增 `entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`：第一阶段让 UserScript 与三端 WebExtension 直接复用同一个 `src/userscript/overlaylex.user.js` 运行时，避免维护两份翻译核心。
