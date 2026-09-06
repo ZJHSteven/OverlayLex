@@ -126,3 +126,29 @@
 - Firefox 构建设置稳定 extension id，并按远端翻译包请求的真实数据行为声明 `browsingActivity`。
 - 手工检查真实 UserScript 产物发现 Vite 拼接产生 `"use strict"(function...)` 的运行时 TypeError；已加入显式 IIFE statement boundary 修复，并在 CI 增加回归检查。
 - 原 `release-publish.yml` 的 `steps:` 被错误嵌套在 `env:` 下，导致 workflow 无法解析；已仅修正 YAML 层级，保留原 release 行为。
+
+---
+
+## 任务：多浏览器正式发布前收尾与送审（2026-09-06）
+
+1. 同步真实工作区
+- 目标：将 `D:\Workspace\DnD5e\OBR2\OverlayLex` 的 `main` 快进到 GitHub 最新 `origin/main`，保留本地未跟踪资料。
+- 预期：本地工作区与已合并的 WXT / UserScript 多端构建迁移保持一致。
+
+2. 修复 WebExtension 存储适配与过期发布文档
+- 目标：让浏览器扩展环境优先使用 `browser.storage` / `chrome.storage` 的扩展级共享存储，同时保留 UserScript 的 GM 存储路径；清理 README 中已经失效的 `cherry-pick` 发布说明。
+- 预期：Chrome / Edge / Firefox iframe 间的 OverlayLex 配置与 allowlist 缓存不再退化为按域隔离的页面 `localStorage`，文档与真实 release 按文件同步逻辑一致。
+
+3. 完整构建与安装级回归
+- 目标：运行 UserScript + Chrome + Edge + Firefox 全量构建、静态校验与 ZIP 打包；尽可能在真实/临时浏览器 profile 中安装成品并验证 Owlbear 主站、iframe、翻译 UI、更新与缓存路径。
+- 预期：正式送审前确认多端行为无明显回归，而不是只验证 manifest 能生成。
+
+4. 商店发布准备与实际送审
+- 目标：核对 Firefox AMO 与 Microsoft Edge Add-ons 的当前官方首发/更新流程；优先使用已登录的开发者后台或官方 API，补齐能够自动生成的元数据、审查说明和构建材料，并在账户权限允许时直接提交审核。
+- 预期：能自动完成的步骤本轮直接完成；若遇到必须本人完成的协议确认、二次验证或首发后台专属字段，则保留已填写草稿并准确记录阻塞点。
+
+## 当前执行状态（2026-09-06）
+- [x] Step 1: 本地 `main` 已 fast-forward 到 `origin/main`，本地 `5etool.csv` 保持未跟踪、未修改。
+- [ ] Step 2: WebExtension storage adapter 与 README 旧发布说明收尾。
+- [ ] Step 3: 多端构建、ZIP 与安装级回归。
+- [ ] Step 4: Firefox AMO / Edge Add-ons 发布与送审。
