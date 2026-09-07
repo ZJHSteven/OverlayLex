@@ -151,7 +151,7 @@
 - [x] Step 1: 本地 `main` 已 fast-forward 到 `origin/main`，本地 `5etool.csv` 保持未跟踪、未修改。
 - [x] Step 2: WebExtension storage adapter 与 README 旧发布说明收尾；版本同步提升为 `0.2.17`。
 - [x] Step 3: 多端构建、ZIP 与安装级回归；Chrome / Edge / Firefox 顶层与跨域 iframe 翻译均已通过实际浏览器验证。
-- [ ] Step 4: Firefox AMO / Edge Add-ons 发布与送审（送审材料已落仓，下一步推送 CI 后在两个开发者后台提交）。
+- [ ] Step 4: Firefox AMO / Edge Add-ons 发布与送审（Edge 0.2.17 已于 2026-09-07 首次提交并进入审核；Firefox 已进入 AMO 授权流程，但 Add-ons 强制要求账户先启用两步验证，待账户本人完成 2FA 后继续上传 Firefox ZIP + reviewer sources 并提交）。
 
 ### Step 3 阶段发现
 - 首轮 `wxt zip -b firefox` 虽成功，但默认 reviewer sources ZIP 意外包含本地未跟踪 `5etool.csv`、`tmp/collector.selected.json`、Worker/翻译工具等无关文件。

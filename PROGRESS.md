@@ -4,8 +4,8 @@
 - 现状：OverlayLex 已完成第一阶段“单源码、多产物”改造：同一个 `src/userscript/overlaylex.user.js` 可通过 `vite-plugin-monkey` 生成 UserScript，并通过 WXT（Vite）生成 Chrome / Edge / Firefox Manifest V3 扩展。WebExtension 已补齐扩展级 `browser.storage.local` 存储桥，主站与跨域 iframe 不再依赖按域隔离的页面 localStorage。远端 GitHub Actions 已实际完成四类构建与三端 ZIP 打包。
 - 已完成：新增根目录 `package.json`、`vite.userscript.config.js`、`wxt.config.ts`、`entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`；WXT 商店版 host 权限由 `src/packages/overlaylex-domain-allowlist.json` 自动生成，不申请 `<all_urls>`；Firefox 构建设置稳定 extension id `overlaylex@zjhstudio.com` 并按 AMO 当前规则声明 `browsingActivity`；新增 `build-validate` CI，检查四类产物、iframe 注入、host 权限和 Firefox 数据声明；补充 `docs/browser-builds.md` 与 `docs/store-submission.md`；修复原 `release-publish.yml` 中 `steps:` 错误嵌入 `env:` 导致 workflow 无法解析的问题。
 - 验证结果：远端 CI 使用 Node.js 22 + Vite 8.2.2 + WXT 0.21.4 + vite-plugin-monkey 8.1.0 完整构建成功；UserScript 约 65.6 kB；Chrome/Edge 扩展 ZIP 约 14.5 kB，Firefox ZIP 约 14.6 kB，并生成 Firefox reviewer sources ZIP。权限收紧后的 manifest 验证同样通过。
-- 正在做：浏览器商店首发提交。Chrome / Edge / Firefox 的安装级、顶层翻译、跨域 iframe 翻译与 WebExtension 共享存储均已完成真实浏览器回归；Firefox reviewer sources 已做独立可复现构建验证。Firefox AMO 与 Microsoft Edge Partner Center 账户已由用户完成注册。
-- 下一步：① 推送首发准备提交并等待 GitHub Actions 绿灯；② 使用 `PRIVACY.md`、`docs/store-submission.md` 与 `assets/store/` 提交 Firefox AMO / Edge Add-ons；③ 记录两家 submission id / review 状态；④ UserScript `@updateURL/@downloadURL` 迁移至自有域/CDN 作为非阻塞后续工作。
+- 正在做：浏览器商店首发提交。Edge Add-ons 已于 2026-09-07 成功提交 `0.2.17`，Partner Center 状态为“正在审阅”；Microsoft Store ID 为 `0RDCKF095F0Z`，CRX ID 为 `dpahikojbecgfmpiokgieikahiadlbkd`，产品 ID 为 `abb3dd91-3d41-4eba-98bb-45b2d01aefa2`。Firefox AMO 已进入账户授权流程，但 Add-ons 强制要求先启用两步验证（AAL2），当前停在账户本人 2FA 设置步骤。
+- 下一步：① 账户本人完成 Mozilla 两步验证后，上传 CI 生成的 `overlaylex-0.2.17-firefox.zip` 与 reviewer sources ZIP 并提交 AMO；② 关注 Edge 首发审核结果；③ 后续再处理 UserScript `@updateURL/@downloadURL` 从 GitHub Raw 迁移到自有域/CDN；④ 下一次翻译数据发布时补齐线上 allowlist 与本地 `0.2.12` 的单条 Emanation 域名漂移。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。
