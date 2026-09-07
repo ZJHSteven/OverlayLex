@@ -8,6 +8,11 @@
 - 提交信息推荐采用 Conventional Commits 风格。
 
 ## 变更日志
+- 2026-09-07
+  - 完成 Chrome / Edge / Firefox 0.2.17 正式送审前安装级回归；Firefox 通过 WebDriver BiDi + 临时本地域夹具验证主站、顶层插件域与跨域 iframe 的真实翻译执行。
+  - 核对 UserScript 0.2.17：相对 0.2.16 仅增加 WebExtension storage bridge 与版本号；UserScript 环境继续走 GM storage，重新构建语法校验通过。
+  - 实查线上 `/manifest`：所有翻译包 URL 均指向 `https://overlaylex-api.zjhstudio.com/packages/...`，运行时汉化包不依赖 GitHub Raw。
+  - 新增 `PRIVACY.md` 与 `assets/store/` 商店首发资源，并扩充 `docs/store-submission.md` 的 Edge 长描述、审核说明、隐私说明及完整实机验证记录。
 - 2026-09-06
   - WebExtension 新增扩展级 `browser.storage.local` 适配：WXT content-script 在加载共享 legacy runtime 前预读扩展存储并建立同步内存桥，使 Owlbear 主站与第三方跨域 iframe 共享 OverlayLex 设置和缓存。
   - `wxt.config.ts` 新增最小 `storage` 权限，并在 `build-validate` CI 中增加三端 manifest 权限断言。

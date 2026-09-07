@@ -150,10 +150,15 @@
 ## 当前执行状态（2026-09-06）
 - [x] Step 1: 本地 `main` 已 fast-forward 到 `origin/main`，本地 `5etool.csv` 保持未跟踪、未修改。
 - [x] Step 2: WebExtension storage adapter 与 README 旧发布说明收尾；版本同步提升为 `0.2.17`。
-- [ ] Step 3: 多端构建、ZIP 与安装级回归。
-- [ ] Step 4: Firefox AMO / Edge Add-ons 发布与送审。
+- [x] Step 3: 多端构建、ZIP 与安装级回归；Chrome / Edge / Firefox 顶层与跨域 iframe 翻译均已通过实际浏览器验证。
+- [ ] Step 4: Firefox AMO / Edge Add-ons 发布与送审（送审材料已落仓，下一步推送 CI 后在两个开发者后台提交）。
 
 ### Step 3 阶段发现
 - 首轮 `wxt zip -b firefox` 虽成功，但默认 reviewer sources ZIP 意外包含本地未跟踪 `5etool.csv`、`tmp/collector.selected.json`、Worker/翻译工具等无关文件。
 - 已改用 WXT `zip.includeSources` 严格列出 Firefox 重建所需源码，并增加 CI 回归断言；下一步重新打包并从 sources ZIP 独立重建验证。
 - `web-ext lint` 检出 1 条最低版本兼容性警告与 3 条内部 UI `innerHTML` 警告；最低版本已从 140 调整为 142，内部模板警告经核对不包含网页/用户/翻译数据输入，保留并写入 reviewer source 说明。
+- Firefox 155 最终 BiDi 回归通过：Owlbear 主站实际替换 8 处文本；使用临时 profile 的 `network.dns.localDomains` 把两个已支持域映射到本机固定夹具后，Smoke 顶层 `Alignment -> 适配地图`、Clash 跨域 iframe `Loading... / Settings -> 加载中… / 设置`，确认 `all_frames` 生效。
+- UserScript 0.2.17 相对 0.2.16 仅增加 WebExtension storage bridge 与版本号；UserScript 环境无该 bridge，继续使用 GM storage。重新构建通过 `node --check`。
+- 线上 `/manifest` 实查所有域名包与翻译包 URL 均为 `https://overlaylex-api.zjhstudio.com/packages/...`，运行时汉化包不从 GitHub Raw 拉取。
+- 发现线上 domain allowlist 仍为 `0.2.11`，本地为 `0.2.12`，唯一差异为本地新增 `owlbear-emanation.pages.dev`；扩展 host 权限已包含该域，后续翻译数据发布时需把线上 allowlist/catalog 一并同步。
+- 首发隐私政策、Edge 长描述/reviewer notes、商店 Logo（300×300 / 128×128）已落仓。
