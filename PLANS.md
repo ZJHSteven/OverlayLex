@@ -185,6 +185,6 @@
 
 ## 当前执行状态（2026-09-09）
 - [x] Step 1: 已确认服务器 `https://smoke.battle-system.com/manifest.json` 当前为 `5.0.0`；账号 My Extensions 曾显示缓存的 `v4.20`，而当前房间并未注册 Smoke action/background frame；旧 OverlayLex Smoke 包仍为 `0.1.7`。
-- [ ] Step 2: Collector 0.2.4 审计完成，已确认缺少 ARIA/alt 与 open Shadow DOM 采集；准备升级。
+- [x] Step 2: Collector 已升级为 0.2.5，补齐 `aria-label` / `aria-description` / `aria-valuetext` / `alt` 与 open Shadow DOM 扫描、动态监听；`node --check` 与 `git diff --check` 通过。
 - [ ] Step 3: 待新版 Collector 安装到日常 Chrome 后，恢复 Smoke 5.0 注册并开始全量遍历采集。
 - [ ] Step 4: 待完成语料 diff、补译、Smoke package 发布与真实房间回归。
