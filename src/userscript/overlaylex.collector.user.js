@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OverlayLex Collector
 // @namespace    https://github.com/ZJHSteven/OverlayLex
-// @version      0.2.4
+// @version      0.2.5
 // @description  OverlayLex 采集脚本：实时收集页面英文词条并导出为翻译原文素材。
 // @author       OverlayLex
 // @match        *://*/*
@@ -43,9 +43,20 @@
   const COLLECTOR_UPLOAD_API_PATH = "/collector/submissions";
   const COLLECTOR_UPLOAD_SOFT_CHUNK_BYTES = 36 * 1024;
   const COLLECTOR_UPLOAD_HARD_CHUNK_BYTES = 46 * 1024;
-  const SCRIPT_VERSION = "0.2.4";
+  const SCRIPT_VERSION = "0.2.5";
   const CJK_REGEX = /[\u3400-\u9fff]/;
   const IGNORED_TEXT_PARENT_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "TEMPLATE"]);
+  // 这些属性都可能承载“用户实际看到/听到”的 UI 文案。
+  // 尤其是新版 Web UI 常把图标按钮的文案只放在 aria-label 里；旧采集器只抓 placeholder/title，
+  // 会导致无可见文本的按钮系统性漏采。sourceType 会保留属性来源，方便后续清洗动态内容。
+  const COLLECTABLE_TEXT_ATTRIBUTES = [
+    ["placeholder", "placeholder"],
+    ["title", "title"],
+    ["aria-label", "aria-label"],
+    ["aria-description", "aria-description"],
+    ["aria-valuetext", "aria-valuetext"],
+    ["alt", "alt"],
+  ];
 
   // ------------------------------
   // 日志工具
@@ -306,13 +317,11 @@
     if (!element || element.nodeType !== Node.ELEMENT_NODE) {
       return;
     }
-    const placeholder = element.getAttribute?.("placeholder");
-    if (placeholder) {
-      collectTextCandidate(placeholder, "placeholder");
-    }
-    const title = element.getAttribute?.("title");
-    if (title) {
-      collectTextCandidate(title, "title");
+    for (const [attributeName, sourceType] of COLLECTABLE_TEXT_ATTRIBUTES) {
+      const attributeText = element.getAttribute?.(attributeName);
+      if (attributeText) {
+        collectTextCandidate(attributeText, sourceType);
+      }
     }
     if (isCollectableInputValueElement(element)) {
       const valueText = String(element.getAttribute?.("value") || element.value || "");
@@ -488,6 +497,7 @@
       if (element.tagName === "IFRAME") {
         collectIframeHostFromElement(element);
       }
+      collectFromOpenShadowRoot(element);
     }
 
     const walker = ownerDocument.createTreeWalker(
@@ -517,9 +527,30 @@
         if (current.tagName === "IFRAME") {
           collectIframeHostFromElement(current);
         }
+        collectFromOpenShadowRoot(current);
       }
       current = walker.nextNode();
     }
+  }
+
+  // setupMutationCollector 会在启动时把这个函数替换成真正的 ShadowRoot 注册器。
+  // 之所以先保留一个 no-op，是为了让 collectFromNode 不必关心“监听器是否已经初始化”，
+  // 同时也避免函数之间形成难以阅读的初始化依赖。
+  let observeCollectorRoot = () => {};
+
+  /**
+   * collectFromOpenShadowRoot:
+   * - Web Components 可以把真实 UI 放到 open Shadow DOM 中，document.body 的 TreeWalker 看不到其中节点；
+   * - 对可访问的 open shadowRoot，我们立即做一次完整扫描，并把它注册到 MutationObserver；
+   * - closed Shadow DOM 按浏览器安全模型无法从外部读取，这里不会尝试绕过。
+   */
+  function collectFromOpenShadowRoot(element) {
+    const shadowRoot = element?.shadowRoot;
+    if (!shadowRoot) {
+      return;
+    }
+    observeCollectorRoot(shadowRoot);
+    collectFromNode(shadowRoot);
   }
 
   function setupMutationCollector() {
@@ -530,6 +561,7 @@
 
     let timerId = null;
     const pendingNodes = new Set();
+    const observedRoots = new WeakSet();
 
     function flush() {
       timerId = null;
@@ -563,13 +595,29 @@
       timerId = window.setTimeout(flush, OBSERVER_DEBOUNCE_MS);
     });
 
-    observer.observe(root, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ["placeholder", "title", "value", "src"],
-    });
+    /**
+     * 一个 MutationObserver 可以同时 observe 多个根节点，因此不用为每个 ShadowRoot 创建新 observer。
+     * WeakSet 只负责去重，不会阻止 ShadowRoot 被 GC。
+     */
+    observeCollectorRoot = (mutationRoot) => {
+      if (!mutationRoot || observedRoots.has(mutationRoot)) {
+        return;
+      }
+      observedRoots.add(mutationRoot);
+      observer.observe(mutationRoot, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: [
+          ...COLLECTABLE_TEXT_ATTRIBUTES.map(([attributeName]) => attributeName),
+          "value",
+          "src",
+        ],
+      });
+    };
+
+    observeCollectorRoot(root);
   }
 
   function setupActivityCollector() {
