@@ -162,3 +162,29 @@
 - 线上 `/manifest` 实查所有域名包与翻译包 URL 均为 `https://overlaylex-api.zjhstudio.com/packages/...`，运行时汉化包不从 GitHub Raw 拉取。
 - 发现线上 domain allowlist 仍为 `0.2.11`，本地为 `0.2.12`，唯一差异为本地新增 `owlbear-emanation.pages.dev`；扩展 host 权限已包含该域，后续翻译数据发布时需把线上 allowlist/catalog 一并同步。
 - 首发隐私政策、Edge 长描述/reviewer notes、商店 Logo（300×300 / 128×128）已落仓。
+
+---
+
+## 任务：Smoke & Spectre 5.0 翻译应急重采集（2026-09-09）
+
+1. 核实生产故障与真实版本
+- 目标：在日常 Chrome CDP 登录态中确认 Owlbear 房间实际加载状态、Smoke & Spectre 当前 manifest 与旧翻译包版本，避免把缓存中的商店版本号当成真值。
+- 预期：明确“插件没有加载”和“词典失配”分别占多大比例，并保留可复现的真实房间测试路径。
+
+2. 加固 OverlayLex Collector
+- 目标：在不采集用户输入的前提下补齐 `aria-label`、`aria-description`、`aria-valuetext`、`alt` 等可翻译属性，并递归扫描/监听可访问的 open Shadow DOM；保持现有 iframe 汇总、云端去重和 OverlayLex 自身 UI 排除逻辑。
+- 预期：新版 Smoke 即使大量使用无可见文本的图标按钮或 Web Components，也不会被旧的“普通 DOM + placeholder/title”策略系统性漏采。
+
+3. 在日常 Chrome 中安装新版采集器并全量遍历 Smoke
+- 目标：刷新/恢复 Smoke & Spectre 5.0 在 Owlbear 房间中的真实 action/background 注册，安装最新 Collector，依次展开 Smoke、Spectre、Settings、帮助/高级项等安全 UI 状态，收集当前域完整英文语料。
+- 预期：得到可审计的 `smoke.battle-system.com` 新语料集合，并记录旧词典命中、失效和新增词条数量；不触发删除场景、清空数据等破坏性操作。
+
+4. 重建翻译包并发布回归
+- 目标：对新语料去重/清洗，优先复用仍有效的旧译文，对新增/改写文案补译，更新 Smoke package，执行 JSON/构建/运行时回归并走现有发布链上线。
+- 预期：用户无需等待浏览器扩展重新过审即可通过远端翻译包恢复 S&S 主要中文界面；上线后在真实 Owlbear + Smoke 5.0 中人工/自动联合回归。
+
+## 当前执行状态（2026-09-09）
+- [x] Step 1: 已确认服务器 `https://smoke.battle-system.com/manifest.json` 当前为 `5.0.0`；账号 My Extensions 曾显示缓存的 `v4.20`，而当前房间并未注册 Smoke action/background frame；旧 OverlayLex Smoke 包仍为 `0.1.7`。
+- [ ] Step 2: Collector 0.2.4 审计完成，已确认缺少 ARIA/alt 与 open Shadow DOM 采集；准备升级。
+- [ ] Step 3: 待新版 Collector 安装到日常 Chrome 后，恢复 Smoke 5.0 注册并开始全量遍历采集。
+- [ ] Step 4: 待完成语料 diff、补译、Smoke package 发布与真实房间回归。
