@@ -8,6 +8,7 @@ on:
       - "src/tools/obr-harvester.mjs"
       - "src/tools/obr-harvester.test.mjs"
       - "src/tools/obr-mock-smoke.mjs"
+      - "src/tools/obr-harvest-merge.mjs"
       - ".github/workflows/obr-harvester-experiment.yml"
       - "src/packages/obr-smoke-battle-system-com.json"
       - "docs/obr-harvester-experiment.md"
@@ -101,12 +102,15 @@ jobs:
             messageCount: r.messageCount,
             messageCounts: r.messageCounts,
             registeredUiCount: r.registeredUi?.length || 0,
+            sdkUiStringCount: r.sdkUiStringCount || 0,
+            runtimeTextCount: r.runtimeTextCount || 0,
             pageErrors: r.pageErrors
           }, null, 2));
           console.log('```');
-          console.log('\n### Body text preview\n```text');
-          console.log((r.bodyText || '').slice(0, 4000));
-          console.log('```');
+          console.log('\n### Navigated views');
+          for (const s of r.navigation?.snapshots || []) {
+            console.log(`- ${s.name}: ${s.uiStrings?.length || 0} UI strings, ${s.bodyTextLength || 0} body chars`);
+          }
           NODE
           else
             echo 'mock-report.json was not produced.' >> "$GITHUB_STEP_SUMMARY"
@@ -119,4 +123,61 @@ jobs:
           name: smoke-mock-host
           path: .harvest/mock-smoke/
           if-no-files-found: warn
+          retention-days: 14
+
+  smoke-high-confidence-merge:
+    needs:
+      - smoke-static-harvest
+      - smoke-mock-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download static harvest
+        uses: actions/download-artifact@v4
+        with:
+          name: smoke-static-harvest
+          path: .harvest/smoke
+
+      - name: Download mock-host harvest
+        uses: actions/download-artifact@v4
+        with:
+          name: smoke-mock-host
+          path: .harvest/mock-smoke
+
+      - name: Merge high-confidence sources
+        run: |
+          rm -rf .harvest/merged
+          node src/tools/obr-harvest-merge.mjs \
+            --static .harvest/smoke \
+            --mock .harvest/mock-smoke \
+            --existing src/packages/obr-smoke-battle-system-com.json \
+            --out .harvest/merged
+
+      - name: Write merged coverage summary
+        shell: bash
+        run: |
+          echo '## High-confidence automatic corpus' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat .harvest/merged/report.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '### First 80 new high-confidence strings' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          node -e 'const x=require("./.harvest/merged/new-high-confidence.json"); console.log(x.slice(0,80).map(v=>`${v.text} [${v.origins.join(",")}]`).join("\n"))' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload merged corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-high-confidence-corpus
+          path: .harvest/merged/
+          if-no-files-found: error
           retention-days: 14
