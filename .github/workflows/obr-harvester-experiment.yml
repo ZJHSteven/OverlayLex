@@ -10,10 +10,12 @@ on:
       - "src/tools/obr-mock-smoke.mjs"
       - "src/tools/obr-mock-host.mjs"
       - "src/tools/obr-mock-host.test.mjs"
+      - "src/tools/obr-mock-run.mjs"
       - "src/tools/obr-harvest-merge.mjs"
       - ".github/workflows/obr-harvester-experiment.yml"
       - "src/packages/obr-smoke-battle-system-com.json"
       - "docs/obr-harvester-experiment.md"
+      - "docs/obr-mock-host.md"
   workflow_dispatch:
 
 permissions:

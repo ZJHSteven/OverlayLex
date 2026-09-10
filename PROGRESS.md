@@ -8,6 +8,8 @@
 - 通用化进度：已从 Smoke runner 抽出 `src/tools/obr-mock-host.mjs`，并新增不依赖真实 Owlbear/Smoke 的本地假 Extension 集成测试。首次本机执行发现嵌入浏览器 resolver 的模板字符串注释包含未转义反引号，导致 Node 语法错误；已修复并继续执行双层回归。
 - 假 Extension 自测首次运行还暴露了 OBR_READY 重试的幂等边界：Mock Host 会发送两次 Ready 作为容错，而极简测试页曾重复创建 ShadowRoot。已让测试 fixture 只初始化一次；保留 Host 的双 Ready 设计，用测试显式覆盖这一行为。
 - Smoke 重构版首次本机跑完后仅把 `OBR_SCENE_SET_METADATA`、`OBR_BROADCAST_SEND_MESSAGE`、`OBR_NOTIFICATION_SHOW` 标记为 unknown；三者均为不依赖返回 payload 的写/通知操作，Smoke 同时保持 `pageErrors=[]`。已扩展通用 ACK 动作识别，目标是让真实 Smoke 的 `unhandledRequestIds` 清零，同时继续把未知 getter 作为真正的 Mock 缺口暴露出来。
+- 本机最终回归：通用 Host 自测通过；Smoke 5.0.2 通过重构后的通用 Host 再次得到 82 条 SDK 消息、37 种消息类型、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，`unhandledRequestIds=[]`、`pageErrors=[]`、`navigationErrors=[]`。多源合并仍为 292 条主语料 / 264 条新词，没有因通用化发生覆盖回退。
+- 通用使用入口：新增 `src/tools/obr-mock-run.mjs`，支持 URL + fixture + `--expect-clean` 的基础 E2E；Smoke runner 只保留扩展专用导航；使用方法与 fixture 结构记录在 `docs/obr-mock-host.md`。
 - 下一步：① 把 Smoke 专用 Mock 协议层抽成通用 `obr-mock-host.mjs` 并以独立假 Extension 做协议自测；② Smoke runner 只保留扩展专用导航策略；③ 根据 `unhandledRequestIds` 与多 fixture 场景逐步扩展 SDK mock，而不是手写整个 Extension SDK；④ 将角色/scene/items/metadata fixture 形成可复用 E2E 场景矩阵；⑤ 旧 Collector 仅保留为运行时补漏/覆盖率基准工具。
 
 ## 关键决策与理由（防止“吃书”）

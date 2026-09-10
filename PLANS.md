@@ -211,6 +211,6 @@
 
 ## 当前执行状态（2026-09-10）
 - [x] Step 1: 已创建 `D:\Workspace\DnD5e\OBR2\OverlayLex-harvester` 独立 worktree，跟踪 `origin/feat/obr-harvester`。
-- [ ] Step 2: 正在本机复跑静态 Harvester。
-- [ ] Step 3: 待本机复跑 OBR Mock Host + Playwright。
-- [ ] Step 4: 待对比本机多源结果并收敛通用 E2E 设计。
+- [x] Step 2: 本机静态 Harvester 复跑完成，Smoke 5.0.2 得到 73 个资源节点 / 62 个文本资源 / 4362 个原始候选，与远端实验一致。
+- [x] Step 3: 本机 Playwright Mock Host 复跑完成；重构为通用 core 后仍得到 82 条 SDK 消息、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，且 `unhandledRequestIds=[]`、`pageErrors=[]`、`navigationErrors=[]`。
+- [x] Step 4: 本机多源合并稳定为 250 条 i18n + 42 条 SDK + 72 条 DOM，去重后 292 条主语料；已抽出通用 `obr-mock-host.mjs`，新增零真实 Owlbear 依赖的假 Extension 集成测试与通用 CLI。
