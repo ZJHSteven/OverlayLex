@@ -121,7 +121,7 @@ function browserResolverSource() {
       return { known: true, data: { distance: 0 } };
     }
     // 写操作通常只需要 ACK。这里返回空对象，但仍记录 ID，后续如果某个扩展依赖更具体的
-    // 返回结构，就可以根据 `unhandledRequestIds` / pageErrors 再精确补 fixture。
+    // 返回结构，就可以根据 unhandledRequestIds / pageErrors 再精确补 fixture。
     if (/_(?:SET|ADD|DELETE|UPDATE|SELECT|DESELECT|CREATE|OPEN|CLOSE|SEND|UPLOAD|CLEAR|UNDO|REDO|REMOVE)$/.test(id)) {
       return { known: true, data: {} };
     }

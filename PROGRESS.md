@@ -5,6 +5,7 @@
 - 已完成：新增根目录 `package.json`、`vite.userscript.config.js`、`wxt.config.ts`、`entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`；WXT 商店版 host 权限由 `src/packages/overlaylex-domain-allowlist.json` 自动生成，不申请 `<all_urls>`；Firefox 构建设置稳定 extension id `overlaylex@zjhstudio.com` 并按 AMO 当前规则声明 `browsingActivity`；新增 `build-validate` CI，检查四类产物、iframe 注入、host 权限和 Firefox 数据声明；补充 `docs/browser-builds.md` 与 `docs/store-submission.md`；修复原 `release-publish.yml` 中 `steps:` 错误嵌入 `env:` 导致 workflow 无法解析的问题。
 - 验证结果：远端 CI 使用 Node.js 22 + Vite 8.2.2 + WXT 0.21.4 + vite-plugin-monkey 8.1.0 完整构建成功；UserScript 约 65.6 kB；Chrome/Edge 扩展 ZIP 约 14.5 kB，Firefox ZIP 约 14.6 kB，并生成 Firefox reviewer sources ZIP。权限收紧后的 manifest 验证同样通过。
 - 正在做：Smoke & Spectre 5.x 翻译采集链正在从人工 Runtime Collector 迁移为 `manifest/static harvester + OBR Mock Host + Playwright + runtime fallback`。本机已复现 Smoke 5.0.2 静态采集（73 个资源节点 / 62 个文本资源 / 4362 个原始候选）和 Mock Host（82 条 SDK 消息 / 30 次 UI 注册 / 42 条 SDK UI 文案 / 72 条 DOM 文案，`pageErrors=[]`）。本机三路合并得到 250 条英文 i18n + 42 条 SDK + 72 条 DOM，去重后 292 条主语料，其中 264 条为旧 Smoke 包未覆盖的新词。
+- 通用化进度：已从 Smoke runner 抽出 `src/tools/obr-mock-host.mjs`，并新增不依赖真实 Owlbear/Smoke 的本地假 Extension 集成测试。首次本机执行发现嵌入浏览器 resolver 的模板字符串注释包含未转义反引号，导致 Node 语法错误；已修复并继续执行双层回归。
 - 下一步：① 把 Smoke 专用 Mock 协议层抽成通用 `obr-mock-host.mjs` 并以独立假 Extension 做协议自测；② Smoke runner 只保留扩展专用导航策略；③ 根据 `unhandledRequestIds` 与多 fixture 场景逐步扩展 SDK mock，而不是手写整个 Extension SDK；④ 将角色/scene/items/metadata fixture 形成可复用 E2E 场景矩阵；⑤ 旧 Collector 仅保留为运行时补漏/覆盖率基准工具。
 
 ## 关键决策与理由（防止“吃书”）
