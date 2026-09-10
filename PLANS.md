@@ -188,3 +188,29 @@
 - [x] Step 2: Collector 已升级为 0.2.5，补齐 `aria-label` / `aria-description` / `aria-valuetext` / `alt` 与 open Shadow DOM 扫描、动态监听；`node --check` 与 `git diff --check` 通过。
 - [ ] Step 3: 待新版 Collector 安装到日常 Chrome 后，恢复 Smoke 5.0 注册并开始全量遍历采集。
 - [ ] Step 4: 待完成语料 diff、补译、Smoke package 发布与真实房间回归。
+
+---
+
+## 任务：OBR Harvester / Mock Host 本机验证与通用 E2E 收敛（2026-09-10）
+
+1. 本地化实验分支
+- 目标：把远端 `feat/obr-harvester` 放入独立本机 worktree，避免打扰生产 `main` 与其中未跟踪的 `5etool.csv`。
+- 验收：本地分支与 `origin/feat/obr-harvester` 对齐，可独立安装实验依赖并生成 `.harvest/**` 结果。
+
+2. 复跑静态 Harvester
+- 目标：在 Windows 本机直接从 Smoke & Spectre 生产 manifest 出发递归发现 HTML / JS / CSS / chunk，并与旧 Smoke 翻译包做 diff。
+- 验收：单元测试通过；本机产出的资源图、候选数量与 GitHub Actions 同量级，并确认生产 manifest 版本。
+
+3. 复跑 OBR Mock Host + Playwright
+- 目标：在本机 Chromium 中用假 Owlbear 宿主完成 `OBR_READY`、常见 Extension SDK request/response、SDK UI 注册拦截与 Smoke 页面自动导航。
+- 验收：Smoke 页面可加载；`pageErrors=0`；能自动捕获 Context Menu / Tool / Mode / Action 文案与主面板 DOM 文案。
+
+4. 多源合并与下一步通用化
+- 目标：合并 i18n catalog + SDK registration + Mock DOM，评估噪声和自动覆盖能力；根据本机实测决定 Mock API fixture 与通用 E2E API 的下一轮抽象边界。
+- 验收：生成高置信语料报告，并把结论同步到 `PROGRESS.md`；在确认通用接口稳定前不合并进生产 `main`。
+
+## 当前执行状态（2026-09-10）
+- [x] Step 1: 已创建 `D:\Workspace\DnD5e\OBR2\OverlayLex-harvester` 独立 worktree，跟踪 `origin/feat/obr-harvester`。
+- [ ] Step 2: 正在本机复跑静态 Harvester。
+- [ ] Step 3: 待本机复跑 OBR Mock Host + Playwright。
+- [ ] Step 4: 待对比本机多源结果并收敛通用 E2E 设计。
