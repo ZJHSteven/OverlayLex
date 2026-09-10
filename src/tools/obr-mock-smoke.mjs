@@ -109,10 +109,44 @@ async function collectControls(frame) {
   }));
 }
 
-async function snapshot(frame, name) {
+async function collectDomUiStrings(frame) {
+  return frame.locator('body').evaluate(body => {
+    const strings = new Set();
+    const attrs = ['aria-label', 'aria-description', 'aria-valuetext', 'placeholder', 'title', 'alt'];
+    const add = value => {
+      const text = String(value || '').replace(/\s+/g, ' ').trim();
+      if (text.length >= 2 && text.length <= 500 && /[A-Za-z]/.test(text)) strings.add(text);
+    };
+    const scanRoot = root => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const parent = node.parentElement;
+        if (!parent || ['SCRIPT','STYLE','NOSCRIPT'].includes(parent.tagName)) continue;
+        add(node.nodeValue);
+      }
+      const elements = root.querySelectorAll ? root.querySelectorAll('*') : [];
+      for (const element of elements) {
+        for (const attr of attrs) add(element.getAttribute?.(attr));
+        if (element.shadowRoot) scanRoot(element.shadowRoot);
+      }
+    };
+    scanRoot(body);
+    return [...strings];
+  });
+}
+
+function safeFileName(name) {
+  return name.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'snapshot';
+}
+
+async function snapshot(frame, name, index) {
   const bodyText = await frame.locator('body').innerText().catch(() => '');
   const controls = await collectControls(frame).catch(() => []);
-  return { name, url: frame.url(), bodyText: bodyText.slice(0, 30000), bodyTextLength: bodyText.length, controls };
+  const uiStrings = await collectDomUiStrings(frame).catch(() => []);
+  const screenshotPath = path.join(OUT_DIR, 'screenshots', `${String(index).padStart(2, '0')}-${safeFileName(name)}.png`);
+  await frame.locator('body').screenshot({ path: screenshotPath }).catch(() => {});
+  return { name, url: frame.url(), bodyText: bodyText.slice(0, 30000), bodyTextLength: bodyText.length, uiStrings, controls };
 }
 
 async function findMenuButton(frame) {
@@ -132,13 +166,20 @@ async function findMenuButton(frame) {
   return best;
 }
 
-async function crawlNavigation(frame) {
-  const snapshots = [await snapshot(frame, 'initial')];
+async function openNavigation(frame) {
   const menu = await findMenuButton(frame);
-  if (!menu) return { snapshots, menuLabels: [], navigationErrors: ['menu-button-not-found'] };
+  if (!menu) return false;
   await menu.locator.click({ timeout: 3000 }).catch(() => {});
-  await frame.waitForTimeout(400);
-  snapshots.push(await snapshot(frame, 'menu-open'));
+  await frame.waitForTimeout(600);
+  return true;
+}
+
+async function crawlNavigation(frame) {
+  await fs.mkdir(path.join(OUT_DIR, 'screenshots'), { recursive: true });
+  let shot = 0;
+  const snapshots = [await snapshot(frame, 'initial', shot++)];
+  if (!(await openNavigation(frame))) return { snapshots, menuLabels: [], navigationErrors: ['menu-button-not-found'] };
+  snapshots.push(await snapshot(frame, 'menu-open', shot++));
 
   const controls = (await collectControls(frame)).filter(c => c.visible && c.text && !c.href);
   const menuLabels = [...new Set(controls.map(c => c.text).filter(text => text.length <= 80))];
@@ -147,17 +188,17 @@ async function crawlNavigation(frame) {
 
   for (const label of menuLabels.slice(0, 30)) {
     if (skip.test(label)) continue;
-    const currentText = (await frame.locator('body').innerText().catch(() => '')).trim();
-    if (!currentText.includes(label)) {
-      const reopen = await findMenuButton(frame);
-      if (reopen) { await reopen.locator.click().catch(() => {}); await frame.waitForTimeout(250); }
+    let candidate = frame.getByRole('button', { name: label, exact: true });
+    const visibleNow = (await candidate.count()) > 0 && await candidate.first().isVisible().catch(() => false);
+    if (!visibleNow) {
+      await openNavigation(frame);
+      candidate = frame.getByRole('button', { name: label, exact: true });
     }
-    const candidates = frame.locator('button,a,[role="button"],[role="tab"],[role="menuitem"]').filter({ hasText: label });
-    if (!(await candidates.count())) continue;
+    if (!(await candidate.count())) continue;
     try {
-      await candidates.first().click({ timeout: 2500 });
-      await frame.waitForTimeout(500);
-      snapshots.push(await snapshot(frame, `nav:${label}`));
+      await candidate.first().click({ timeout: 2500 });
+      await frame.waitForTimeout(2200);
+      snapshots.push(await snapshot(frame, `nav:${label}`, shot++));
     } catch (error) {
       navigationErrors.push(`${label}: ${String(error?.message || error).split('\n')[0]}`);
     }
@@ -202,14 +243,14 @@ async function main() {
   await page.waitForTimeout(7000);
   const frame = page.frames().find(f => f.url().startsWith(TARGET_PAGE));
   const navigation = frame ? await crawlNavigation(frame) : { snapshots: [], menuLabels: [], navigationErrors: ['target-frame-not-found'] };
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(1000);
   const bodyText = frame ? await frame.locator('body').innerText().catch(() => '') : '';
   const html = frame ? await frame.locator('body').innerHTML().catch(() => '') : '';
   const messages = await page.evaluate(() => window.__obrMockMessages || []);
   const counts = Object.fromEntries([...new Set(messages.map(m => m.id))].sort().map(id => [id, messages.filter(m => m.id === id).length]));
   const registeredUi = messages.filter(m => /OBR_(?:CONTEXT_MENU_CREATE|TOOL_(?:CREATE|MODE_CREATE|ACTION_CREATE)|POPOVER_OPEN|MODAL_OPEN|NOTIFICATION_SHOW|ACTION_SET)/.test(m.id || ''));
   const sdkUiStrings = extractSdkUiStrings(messages);
-  const runtimeText = [...new Set(navigation.snapshots.flatMap(s => s.bodyText.split(/\n+/).map(x => x.trim()).filter(Boolean)))];
+  const runtimeText = [...new Set(navigation.snapshots.flatMap(s => s.uiStrings))];
   const report = {
     target: TARGET_PAGE,
     loaded: Boolean(frame),
@@ -241,7 +282,7 @@ async function main() {
     sdkUiStringCount: report.sdkUiStringCount,
     runtimeTextCount: report.runtimeTextCount,
     menuLabels: navigation.menuLabels,
-    snapshots: navigation.snapshots.map(s => ({ name: s.name, bodyTextLength: s.bodyTextLength })),
+    snapshots: navigation.snapshots.map(s => ({ name: s.name, bodyTextLength: s.bodyTextLength, uiStrings: s.uiStrings.length })),
     navigationErrors: navigation.navigationErrors,
     pageErrors
   }, null, 2));
