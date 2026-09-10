@@ -28,6 +28,9 @@ function responseFor(id, data) {
     OBR_SCENE_ITEMS_GET_ALL_ITEMS: { items: [] },
     OBR_SCENE_ITEMS_GET_ITEMS: { items: [] },
     OBR_SCENE_ITEMS_GET_ITEM_ATTACHMENTS: { items: [] },
+    OBR_SCENE_LOCAL_GET_ALL_ITEMS: { items: [] },
+    OBR_SCENE_LOCAL_GET_ITEMS: { items: [] },
+    OBR_SCENE_LOCAL_GET_ITEM_ATTACHMENTS: { items: [] },
     OBR_PLAYER_GET_SELECTION: { selection: [] },
     OBR_PLAYER_GET_NAME: { name: mockPlayer.name },
     OBR_PLAYER_GET_COLOR: { color: mockPlayer.color },
@@ -56,7 +59,7 @@ function responseFor(id, data) {
   if (Object.hasOwn(table, id)) return table[id];
   if (id === 'OBR_SCENE_GRID_SNAP_POSITION') return { position: data?.position || { x: 0, y: 0 } };
   if (id === 'OBR_SCENE_GRID_GET_DISTANCE') return { distance: 0 };
-  if (/_(?:SET|ADD|DELETE|UPDATE|SELECT|DESELECT|CREATE|OPEN|CLOSE|SEND|UPLOAD|CLEAR|UNDO|REDO)/.test(id)) return {};
+  if (/_(?:SET|ADD|DELETE|UPDATE|SELECT|DESELECT|CREATE|OPEN|CLOSE|SEND|UPLOAD|CLEAR|UNDO|REDO|REMOVE)/.test(id)) return {};
   return {};
 }
 
@@ -89,6 +92,98 @@ function hostHtml(port) {
   </script>`;
 }
 
+async function collectControls(frame) {
+  return frame.locator('button,a,[role="button"],[role="tab"],[role="menuitem"]').evaluateAll(nodes => nodes.map((el, index) => {
+    const r = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return {
+      index,
+      tag: el.tagName,
+      text: (el.textContent || '').replace(/\s+/g, ' ').trim(),
+      ariaLabel: el.getAttribute('aria-label') || '',
+      title: el.getAttribute('title') || '',
+      href: el instanceof HTMLAnchorElement ? el.href : '',
+      visible: r.width > 0 && r.height > 0 && style.visibility !== 'hidden' && style.display !== 'none',
+      x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height)
+    };
+  }));
+}
+
+async function snapshot(frame, name) {
+  const bodyText = await frame.locator('body').innerText().catch(() => '');
+  const controls = await collectControls(frame).catch(() => []);
+  return { name, url: frame.url(), bodyText: bodyText.slice(0, 30000), bodyTextLength: bodyText.length, controls };
+}
+
+async function findMenuButton(frame) {
+  const buttons = frame.locator('button,[role="button"]');
+  const count = await buttons.count();
+  let best = null;
+  for (let i = 0; i < count; i++) {
+    const locator = buttons.nth(i);
+    const box = await locator.boundingBox().catch(() => null);
+    if (!box) continue;
+    const text = (await locator.innerText().catch(() => '')).trim();
+    const aria = await locator.getAttribute('aria-label').catch(() => '');
+    if (box.x < 120 && box.y > 600 && (!text || text.length < 20)) {
+      if (!best || box.y > best.box.y) best = { locator, box, text, aria };
+    }
+  }
+  return best;
+}
+
+async function crawlNavigation(frame) {
+  const snapshots = [await snapshot(frame, 'initial')];
+  const menu = await findMenuButton(frame);
+  if (!menu) return { snapshots, menuLabels: [], navigationErrors: ['menu-button-not-found'] };
+  await menu.locator.click({ timeout: 3000 }).catch(() => {});
+  await frame.waitForTimeout(400);
+  snapshots.push(await snapshot(frame, 'menu-open'));
+
+  const controls = (await collectControls(frame)).filter(c => c.visible && c.text && !c.href);
+  const menuLabels = [...new Set(controls.map(c => c.text).filter(text => text.length <= 80))];
+  const skip = /(?:patreon|discord|github|changelog|documentation|support|delete|remove|reset|clear)/i;
+  const navigationErrors = [];
+
+  for (const label of menuLabels.slice(0, 30)) {
+    if (skip.test(label)) continue;
+    const currentText = (await frame.locator('body').innerText().catch(() => '')).trim();
+    if (!currentText.includes(label)) {
+      const reopen = await findMenuButton(frame);
+      if (reopen) { await reopen.locator.click().catch(() => {}); await frame.waitForTimeout(250); }
+    }
+    const candidates = frame.locator('button,a,[role="button"],[role="tab"],[role="menuitem"]').filter({ hasText: label });
+    if (!(await candidates.count())) continue;
+    try {
+      await candidates.first().click({ timeout: 2500 });
+      await frame.waitForTimeout(500);
+      snapshots.push(await snapshot(frame, `nav:${label}`));
+    } catch (error) {
+      navigationErrors.push(`${label}: ${String(error?.message || error).split('\n')[0]}`);
+    }
+  }
+  return { snapshots, menuLabels, navigationErrors };
+}
+
+function extractSdkUiStrings(messages) {
+  const uiCall = /OBR_(?:CONTEXT_MENU_CREATE|TOOL_(?:CREATE|MODE_CREATE|ACTION_CREATE)|POPOVER_OPEN|MODAL_OPEN|NOTIFICATION_SHOW|ACTION_SET)/;
+  const keys = new Set(['label','title','message','description','tooltip']);
+  const rows = [];
+  function walk(value, keyPath, messageId) {
+    if (Array.isArray(value)) return value.forEach((v, i) => walk(v, [...keyPath, String(i)], messageId));
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      const next = [...keyPath, key];
+      if (typeof child === 'string' && keys.has(key)) rows.push({ text: child, messageId, path: next.join('.') });
+      else walk(child, next, messageId);
+    }
+  }
+  for (const message of messages) if (uiCall.test(message.id || '')) walk(message.data, [], message.id);
+  const unique = new Map();
+  for (const row of rows) if (!unique.has(row.text)) unique.set(row.text, row);
+  return [...unique.values()];
+}
+
 async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
   const server = http.createServer((req, res) => {
@@ -104,30 +199,52 @@ async function main() {
   page.on('console', msg => consoleEvents.push({ type: msg.type(), text: msg.text() }));
   page.on('pageerror', error => pageErrors.push(String(error)));
   await page.goto(`http://127.0.0.1:${port}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(12000);
+  await page.waitForTimeout(7000);
   const frame = page.frames().find(f => f.url().startsWith(TARGET_PAGE));
+  const navigation = frame ? await crawlNavigation(frame) : { snapshots: [], menuLabels: [], navigationErrors: ['target-frame-not-found'] };
+  await page.waitForTimeout(2500);
   const bodyText = frame ? await frame.locator('body').innerText().catch(() => '') : '';
   const html = frame ? await frame.locator('body').innerHTML().catch(() => '') : '';
   const messages = await page.evaluate(() => window.__obrMockMessages || []);
-  const counts = Object.fromEntries([...new Set(messages.map(m => m.id))].map(id => [id, messages.filter(m => m.id === id).length]));
-  const registeredUi = messages.filter(m => /(?:CONTEXT_MENU_CREATE|TOOL_CREATE|POPOVER_OPEN|MODAL_OPEN|NOTIFICATION_SHOW|ACTION_SET)/.test(m.id || ''));
+  const counts = Object.fromEntries([...new Set(messages.map(m => m.id))].sort().map(id => [id, messages.filter(m => m.id === id).length]));
+  const registeredUi = messages.filter(m => /OBR_(?:CONTEXT_MENU_CREATE|TOOL_(?:CREATE|MODE_CREATE|ACTION_CREATE)|POPOVER_OPEN|MODAL_OPEN|NOTIFICATION_SHOW|ACTION_SET)/.test(m.id || ''));
+  const sdkUiStrings = extractSdkUiStrings(messages);
+  const runtimeText = [...new Set(navigation.snapshots.flatMap(s => s.bodyText.split(/\n+/).map(x => x.trim()).filter(Boolean)))];
   const report = {
     target: TARGET_PAGE,
     loaded: Boolean(frame),
     frameUrl: frame?.url() || null,
     bodyTextLength: bodyText.length,
-    bodyText: bodyText.slice(0, 20000),
+    bodyText: bodyText.slice(0, 30000),
     htmlLength: html.length,
     messageCount: messages.length,
     messageCounts: counts,
     registeredUi,
+    sdkUiStrings,
+    sdkUiStringCount: sdkUiStrings.length,
+    runtimeText,
+    runtimeTextCount: runtimeText.length,
+    navigation,
     consoleEvents: consoleEvents.slice(-200),
     pageErrors
   };
   await fs.writeFile(path.join(OUT_DIR, 'mock-report.json'), JSON.stringify(report, null, 2));
   await fs.writeFile(path.join(OUT_DIR, 'messages.json'), JSON.stringify(messages, null, 2));
+  await fs.writeFile(path.join(OUT_DIR, 'sdk-ui-strings.json'), JSON.stringify(sdkUiStrings, null, 2));
+  await fs.writeFile(path.join(OUT_DIR, 'runtime-text.json'), JSON.stringify(runtimeText, null, 2));
   await page.screenshot({ path: path.join(OUT_DIR, 'mock-smoke.png'), fullPage: true });
-  console.log(JSON.stringify({ loaded: report.loaded, bodyTextLength: report.bodyTextLength, messageCount: report.messageCount, messageCounts: report.messageCounts, registeredUiCount: registeredUi.length, pageErrors }, null, 2));
+  console.log(JSON.stringify({
+    loaded: report.loaded,
+    bodyTextLength: report.bodyTextLength,
+    messageCount: report.messageCount,
+    registeredUiCount: registeredUi.length,
+    sdkUiStringCount: report.sdkUiStringCount,
+    runtimeTextCount: report.runtimeTextCount,
+    menuLabels: navigation.menuLabels,
+    snapshots: navigation.snapshots.map(s => ({ name: s.name, bodyTextLength: s.bodyTextLength })),
+    navigationErrors: navigation.navigationErrors,
+    pageErrors
+  }, null, 2));
   await browser.close();
   await new Promise(resolve => server.close(resolve));
   if (!frame) process.exitCode = 2;
