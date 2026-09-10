@@ -46,6 +46,44 @@ function classifySource(url) {
   return 'app';
 }
 
+/**
+ * Production i18n modules often contain a small Vite preload helper before the
+ * actual translation dictionary. Treating every string inside Translation-*.js
+ * as a translation value therefore leaks strings such as "modulepreload" and
+ * CSS selectors into the corpus.
+ *
+ * A true catalog value usually has direct evidence in the scanner context such
+ * as: "settings.defaultVisionRange":`Default Vision Range`.
+ * When the scanner's three stored examples do not retain that exact occurrence,
+ * keep normal human-readable values but reject common loader/runtime shapes.
+ */
+function isEnglishCatalogValue(candidate) {
+  const catalogExamples = (candidate.examples || []).filter(example => classifySource(example.source) === 'english-catalog');
+  const text = normalize(candidate.text);
+
+  for (const example of catalogExamples) {
+    const context = String(example.context || '');
+    let from = 0;
+    while (from < context.length) {
+      const index = context.indexOf(text, from);
+      if (index < 0) break;
+      const before = context.slice(Math.max(0, index - 180), index);
+      if (/(?:(?:"[^"\n]{1,160}"|'[^'\n]{1,160}')|[A-Za-z_$][\w$.-]{0,160})\s*:\s*[`"']\s*$/.test(before)) return true;
+      from = index + Math.max(1, text.length);
+    }
+  }
+
+  // Vite/Promise/CSP preload helper strings are code, not localizable UI.
+  if (/^(?:en|load|link|script|stylesheet|modulepreload|nonce|fulfilled|rejected|error)$/i.test(text)) return false;
+  if (/preload(?:Error| CSS)|csp-nonce|^\[rel=["']?stylesheet/i.test(text)) return false;
+  if (/^meta\[property=/i.test(text)) return false;
+
+  // Preserve short genuine values such as Solid, Dotted, Other, Roller and
+  // Fly-Wheel even when their exact dictionary occurrence was not kept among
+  // the scanner's limited example contexts.
+  return Number(candidate.score) >= 1;
+}
+
 function setStats(a, b) {
   let n = 0;
   for (const value of a) if (b.has(value)) n++;
@@ -75,6 +113,8 @@ async function main() {
   const catalog = new Set();
   const appStatic = new Map();
   const sourceBreakdown = {};
+  let rejectedCatalogNoise = 0;
+
   for (const candidate of candidates) {
     const text = normalize(candidate.text);
     if (!isCandidate(text)) continue;
@@ -86,7 +126,12 @@ async function main() {
       sourceBreakdown[name].candidates++;
       sourceBreakdown[name][candidate.confidence || 'low']++;
     }
-    if (roles.has('english-catalog')) catalog.add(text);
+
+    if (roles.has('english-catalog')) {
+      if (isEnglishCatalogValue(candidate)) catalog.add(text);
+      else rejectedCatalogNoise++;
+    }
+
     if (!roles.has('vendor') && !roles.has('foreign-locale') && !roles.has('english-catalog') && Number(candidate.score) >= 4) {
       const current = appStatic.get(text);
       if (!current || Number(candidate.score) > current.score) appStatic.set(text, { text, score: Number(candidate.score), sources: candidate.sources || [] });
@@ -125,6 +170,7 @@ async function main() {
     staticResources: staticReport.fetchedTextResources || 0,
     rawStaticCandidates: staticReport.uniqueCandidates || candidates.length,
     englishCatalog: catalog.size,
+    rejectedCatalogNoise,
     sdkUiStrings: sdk.size,
     mockDomStrings: runtime.size,
     primaryUnion: primary.size,
