@@ -7,4 +7,5 @@ dist/
 src/worker/node_modules/
 src/worker/.wrangler/
 .tmp/
+.harvest/
 tmp/collector.selected.json

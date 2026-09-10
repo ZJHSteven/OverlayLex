@@ -8,6 +8,8 @@ on:
       - "src/tools/obr-harvester.mjs"
       - "src/tools/obr-harvester.test.mjs"
       - "src/tools/obr-mock-smoke.mjs"
+      - "src/tools/obr-mock-host.mjs"
+      - "src/tools/obr-mock-host.test.mjs"
       - "src/tools/obr-harvest-merge.mjs"
       - ".github/workflows/obr-harvester-experiment.yml"
       - "src/packages/obr-smoke-battle-system-com.json"
@@ -80,6 +82,9 @@ jobs:
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
+
+      - name: Test generic OBR Mock Host
+        run: node --test src/tools/obr-mock-host.test.mjs
 
       - name: Run Smoke in OBR Mock Host
         run: |
