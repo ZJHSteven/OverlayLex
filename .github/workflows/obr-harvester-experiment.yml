@@ -7,6 +7,7 @@ on:
     paths:
       - "src/tools/obr-harvester.mjs"
       - "src/tools/obr-harvester.test.mjs"
+      - "src/tools/obr-mock-smoke.mjs"
       - ".github/workflows/obr-harvester-experiment.yml"
       - "src/packages/obr-smoke-battle-system-com.json"
       - "docs/obr-harvester-experiment.md"
@@ -59,4 +60,63 @@ jobs:
           name: smoke-static-harvest
           path: .harvest/smoke/
           if-no-files-found: error
+          retention-days: 14
+
+  smoke-mock-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright for experiment
+        run: npm install --no-save --ignore-scripts playwright@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Smoke in OBR Mock Host
+        run: |
+          rm -rf .harvest/mock-smoke
+          node src/tools/obr-mock-smoke.mjs .harvest/mock-smoke
+
+      - name: Write mock-host summary
+        if: always()
+        shell: bash
+        run: |
+          echo '## Smoke & Spectre OBR Mock Host' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f .harvest/mock-smoke/mock-report.json ]; then
+            node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const r = require('./.harvest/mock-smoke/mock-report.json');
+          console.log('```json');
+          console.log(JSON.stringify({
+            loaded: r.loaded,
+            frameUrl: r.frameUrl,
+            bodyTextLength: r.bodyTextLength,
+            messageCount: r.messageCount,
+            messageCounts: r.messageCounts,
+            registeredUiCount: r.registeredUi?.length || 0,
+            pageErrors: r.pageErrors
+          }, null, 2));
+          console.log('```');
+          console.log('\n### Body text preview\n```text');
+          console.log((r.bodyText || '').slice(0, 4000));
+          console.log('```');
+          NODE
+          else
+            echo 'mock-report.json was not produced.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload mock-host report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-mock-host
+          path: .harvest/mock-smoke/
+          if-no-files-found: warn
           retention-days: 14
