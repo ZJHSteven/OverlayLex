@@ -90,6 +90,7 @@ test('generic host completes ready/request/registration/DOM capture without real
     assert.ok(report.messageCounts.OBR_SCENE_IS_READY >= 1);
     assert.ok(report.messageCounts.OBR_CONTEXT_MENU_CREATE >= 1);
     assert.ok(report.sdkUiStrings.some(row => row.text === 'Mock Menu'));
+    assert.deepEqual(report.unhandledRequestIds, []);
     assert.ok(report.runtimeText.includes('Harness Ready'));
     assert.ok(report.runtimeText.includes('Mock Action'));
     assert.ok(report.runtimeText.includes('Shadow Text'));
