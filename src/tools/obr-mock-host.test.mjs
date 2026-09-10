@@ -33,6 +33,7 @@ function fakeExtensionHtml() {
       const split = decoded.lastIndexOf(' ');
       const hostOrigin = decoded.slice(0, split);
       let nonce = 0;
+      let initialized = false;
       const pending = new Map();
 
       function request(id, data = {}) {
@@ -46,6 +47,10 @@ function fakeExtensionHtml() {
       addEventListener('message', async event => {
         if (event.origin !== hostOrigin) return;
         if (event.data?.id === 'OBR_READY') {
+          // 通用 Host 会发送两次 OBR_READY 做启动容错。这个极简测试页没有真实 SDK
+          // 内部的初始化状态机，因此自己保证幂等，避免第二次 Ready 重复 attachShadow。
+          if (initialized) return;
+          initialized = true;
           const ready = await request('OBR_SCENE_IS_READY');
           document.getElementById('status').textContent = ready.ready ? 'Harness Ready' : 'Harness Not Ready';
           parent.postMessage({
