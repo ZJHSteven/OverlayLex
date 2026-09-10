@@ -1,0 +1,62 @@
+name: OBR Harvester Experiment
+
+on:
+  push:
+    branches:
+      - feat/obr-harvester
+    paths:
+      - "src/tools/obr-harvester.mjs"
+      - "src/tools/obr-harvester.test.mjs"
+      - ".github/workflows/obr-harvester-experiment.yml"
+      - "src/packages/obr-smoke-battle-system-com.json"
+      - "docs/obr-harvester-experiment.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-static-harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: node --test src/tools/obr-harvester.test.mjs
+
+      - name: Harvest Smoke & Spectre production bundle
+        run: |
+          rm -rf .harvest/smoke
+          node src/tools/obr-harvester.mjs \
+            https://smoke.battle-system.com/manifest.json \
+            --existing src/packages/obr-smoke-battle-system-com.json \
+            --out .harvest/smoke \
+            --max-assets 300
+
+      - name: Write experiment summary
+        shell: bash
+        run: |
+          echo '## Smoke & Spectre static harvest' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat .harvest/smoke/report.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Top 40 new medium/high-confidence candidates:' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          node -e 'const x=require("./.harvest/smoke/new-candidates.json"); console.log(x.slice(0,40).map(v=>`[${v.score}] ${v.text}`).join("\n"))' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload harvest report
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-static-harvest
+          path: .harvest/smoke/
+          if-no-files-found: error
+          retention-days: 14
