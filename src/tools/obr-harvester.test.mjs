@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { scanQuotedStrings, scanHtmlText, extractRefs, mergeCandidates } from './obr-harvester.mjs';
+import http from 'node:http';
+import { scanQuotedStrings, scanHtmlText, extractRefs, mergeCandidates, fetchText } from './obr-harvester.mjs';
 
 test('extracts compiled React/MUI UI text and deprioritizes imports', () => {
   const src = `import x from './chunk-a.js'; const a=jsx(Button,{children:"Enable Vision",title:"Settings"}); fetch("/api/state.json");`;
@@ -23,4 +24,32 @@ test('discovers same-page module and sourcemap references', () => {
   assert.ok(refs.includes('https://example.test/assets/chunk.js'));
   assert.ok(refs.includes('https://example.test/assets/lazy.js'));
   assert.ok(refs.includes('https://example.test/assets/main.js.map'));
+});
+
+test('retries transient HTTP failures before succeeding', async () => {
+  let requests = 0;
+  const server = http.createServer((request, response) => {
+    requests += 1;
+    if (requests === 1) {
+      response.writeHead(503, { 'content-type': 'text/plain' });
+      response.end('temporary outage');
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end('{"ok":true}');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+
+  try {
+    const result = await fetchText(
+      `http://127.0.0.1:${server.address().port}/manifest.json`,
+      1024,
+      { attempts: 2, baseDelayMs: 1 }
+    );
+    assert.equal(requests, 2);
+    assert.equal(result.text, '{"ok":true}');
+    assert.match(result.sha256, /^[a-f0-9]{64}$/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 });

@@ -146,13 +146,31 @@ function resolveManifestPage(manifest, manifestUrl, configuredPage = '') {
 }
 
 async function fetchManifest(manifestUrl) {
-  const response = await fetch(manifestUrl, {
-    headers: {
-      'user-agent': 'OverlayLex-OBR-Upstream-Watch/0.1 (+https://github.com/ZJHSteven/OverlayLex)'
+  let lastError;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      const response = await fetch(manifestUrl, {
+        headers: {
+          'user-agent': 'OverlayLex-OBR-Upstream-Watch/0.1 (+https://github.com/ZJHSteven/OverlayLex)'
+        }
+      });
+      if (!response.ok) {
+        const error = new Error(`Manifest ${manifestUrl} -> HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      return response.json();
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status || 0);
+      const retryable = !status || status === 408 || status === 425 || status === 429 || status >= 500;
+      if (attempt >= 4 || !retryable) throw error;
+      const delayMs = 500 * (2 ** (attempt - 1));
+      console.warn(`[OBR Watch] manifest retry ${attempt}/3: ${manifestUrl} | ${error?.message || error} | wait ${delayMs}ms`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
-  });
-  if (!response.ok) throw new Error(`Manifest ${manifestUrl} -> HTTP ${response.status}`);
-  return response.json();
+  }
+  throw lastError;
 }
 
 async function runTarget(target, options, state) {

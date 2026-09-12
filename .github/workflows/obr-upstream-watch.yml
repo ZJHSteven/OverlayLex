@@ -52,14 +52,27 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run daily OBR harvest
+        shell: bash
         run: |
-          rm -rf .harvest/upstream-watch
-          node src/tools/obr-upstream-watch.mjs \
-            --config config/obr-upstream-targets.json \
-            --state config/obr-upstream-state.json \
-            --out .harvest/upstream-watch \
-            --apply-packages \
-            --update-state
+          # Hosted Runner 到第三方扩展站点偶尔会有瞬时网络超时。
+          # watcher 内部对单请求有重试，这里再给整轮一次更高层的容错；每次重跑前都会
+          # 清空诊断目录，而 package/state 只有在整轮成功末尾才会写入，因此重试安全。
+          for attempt in 1 2 3; do
+            rm -rf .harvest/upstream-watch
+            if node src/tools/obr-upstream-watch.mjs \
+              --config config/obr-upstream-targets.json \
+              --state config/obr-upstream-state.json \
+              --out .harvest/upstream-watch \
+              --apply-packages \
+              --update-state; then
+              exit 0
+            fi
+            if [ "${attempt}" -eq 3 ]; then
+              echo "OBR upstream watch failed after 3 attempts."
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
 
       - name: Validate generated changes
         run: |

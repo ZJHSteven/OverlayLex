@@ -209,7 +209,11 @@ function manifestEntryUrls(manifest, manifestUrl) {
   return [...urls];
 }
 
-async function fetchText(url, maxBytes) {
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchTextOnce(url, maxBytes) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20000);
   try {
@@ -235,6 +239,39 @@ async function fetchText(url, maxBytes) {
       sha256
     };
   } finally { clearTimeout(timer); }
+}
+
+/**
+ * 生产扩展站点偶尔会在 GitHub Hosted Runner 上出现瞬时 ETIMEDOUT。
+ * 对每日巡检而言，一次 TCP 抖动不应该让整轮 Harvester 直接失败，因此对网络错误和
+ * 5xx/429 做有限次数退避重试；确定性的 4xx 仍会快速失败，不把“资源真不存在”拖成
+ * 很长的 CI。
+ */
+export async function fetchText(url, maxBytes, options = {}) {
+  const attempts = Number(options.attempts || 4);
+  const baseDelayMs = Number(options.baseDelayMs || 500);
+  let lastError;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetchTextOnce(url, maxBytes);
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error);
+      const statusMatch = message.match(/^HTTP\s+(\d+)/i);
+      const status = statusMatch ? Number(statusMatch[1]) : 0;
+      const retryableHttp = status === 408 || status === 425 || status === 429 || status >= 500;
+      const retryableNetwork = !statusMatch;
+      const canRetry = attempt < attempts && (retryableHttp || retryableNetwork);
+      if (!canRetry) throw error;
+
+      const delayMs = baseDelayMs * (2 ** (attempt - 1));
+      console.warn(`[OBR Harvester] fetch retry ${attempt}/${attempts - 1}: ${url} | ${message} | wait ${delayMs}ms`);
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError;
 }
 
 function classifyTextAsset(url, contentType) {
