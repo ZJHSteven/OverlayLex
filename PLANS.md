@@ -214,3 +214,29 @@
 - [x] Step 2: 本机静态 Harvester 复跑完成，Smoke 5.0.2 得到 73 个资源节点 / 62 个文本资源 / 4362 个原始候选，与远端实验一致。
 - [x] Step 3: 本机 Playwright Mock Host 复跑完成；重构为通用 core 后仍得到 82 条 SDK 消息、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，且 `unhandledRequestIds=[]`、`pageErrors=[]`、`navigationErrors=[]`。
 - [x] Step 4: 本机多源合并稳定为 250 条 i18n + 42 条 SDK + 72 条 DOM，去重后 292 条主语料；已抽出通用 `obr-mock-host.mjs`，新增零真实 Owlbear 依赖的假 Extension 集成测试与通用 CLI。
+
+---
+
+## 任务：OBR 上游每日巡检 + Smoke 5.0.2 新词立即推送 ParaTranz（2026-09-13）
+
+1. 将 Harvester 从实验工作流收敛为每日巡检
+- 目标：配置化维护 OBR 扩展目标，默认每天运行一次，不再依赖维护者电脑长期在线。
+- 预期：manifest / production asset graph / 高置信英文语料发生变化时自动生成诊断产物与仓库变更；无变化时不制造无意义提交。
+
+2. 复用现有高置信三路采集链
+- 目标：继续使用 i18n catalog + OBR SDK registration payload + Fake OBR/Playwright DOM/ARIA/Shadow 三路并集，不把 4000+ 原始 bundle 字符串直接送翻译平台。
+- 预期：Smoke 5.0.2 维持约 292 条高置信主语料，其中约 264 条为旧包未覆盖新增项；真实数量以本轮重新执行结果为准。
+
+3. 立即把 Smoke 新 original 推送 ParaTranz
+- 目标：把高置信新增词条通过现有 `merge-collected` / `push-paratranz` 链路写入项目 17950，尽快让协作者开始翻译。
+- 预期：不覆盖已有译文、不自动删除旧词；上传后通过 ParaTranz API 回读文件/词条统计，确认新增项已经进入待翻译队列。
+
+4. 保留仓库审计与后续自动化
+- 目标：每日巡检发现变化时把同一份 original/state 形成 bot PR；ParaTranz 可先收到新增词，不被 PR 审核节奏阻塞。
+- 预期：翻译人员先开工，仓库仍保持可审计；后续译文继续以 ParaTranz 为真源并走现有回拉/发布链。
+
+## 当前执行状态（2026-09-13）
+- [x] Step 1: 恢复本地 `feat/obr-harvester` worktree 与工具通道。
+- [ ] Step 2: 落地每日巡检 workflow / watcher 并完成本地与 CI 验证。
+- [ ] Step 3: 重新运行 Smoke 5.0.2 Harvester，合并新增 original 并真实推送 ParaTranz。
+- [ ] Step 4: 回读 ParaTranz 确认新增数量与待翻译状态，更新 `PROGRESS.md` 并推送分支。
