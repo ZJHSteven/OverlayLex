@@ -240,3 +240,29 @@
 - [x] Step 2: 已落地每日巡检 watcher/workflow；本地连续两轮验证通过，第二轮 `changed=false / newHighConfidence=0` 且工作区零变化，待 push 后由 GitHub Actions 做 Linux 终验。
 - [x] Step 3: 实时重跑发现生产版已更新到 Smoke 5.0.3；过滤 3 条 Mock fixture 动态污染后得到 289 条主语料，其中 261 条旧包未覆盖。261 条已全部合并进 Smoke package 并真实推送 ParaTranz。
 - [x] Step 4: ParaTranz 回读确认 Smoke 文件现有 589 条：328 条已有译文保持不变，261 条新 original 处于待翻译状态；大小写不同的 `Ignore hidden tokens` / `Ignore Hidden Tokens` 均独立存在。
+
+---
+
+## 任务：Smoke 5.0.3 模板翻译、上下文增强与首轮机翻（2026-09-13）
+
+1. 区分普通 literal 与 i18n 模板
+- 目标：识别 `{{count}}` / `{{name}}` / `{{message}}` 等模板 original，不再把它们当成只能做精确字符串匹配的普通词条。
+- 预期：普通 literal 继续走 O(1) 精确 Map；模板单独编译为安全正则并保留命名占位符，运行时把捕获值回填到译文模板。
+
+2. 把 Harvester 上下文真正带进 ParaTranz
+- 目标：为高置信词条生成 sidecar context，至少记录来源类型（i18n / SDK / DOM）、i18n key、SDK 注册类型、页面/资源文件与关键源码上下文；`push-paratranz` 上传时把这些信息写入 ParaTranz `context`。
+- 预期：翻译人员能直接知道词条来自 Settings、Context Menu、Tool、Notification 等位置，不再靠猜。
+
+3. 清洗并首轮机翻 Smoke 新词
+- 目标：对当前 261 条待翻译词条先做结构校验；普通 literal 直接初译；模板词保留原占位符集合并在运行时能力落地后一起可用。
+- 预期：ParaTranz 从“261 条空白待翻译”变为“已有中文初稿待审核”，已有 328 条人工译文不被覆盖。
+
+4. 自动回拉与回归
+- 目标：保留现有 `paratranz-sync-pr` 自动回拉链，并补测试确保模板翻译不会破坏现有精确匹配；Harvester/Context/模板能力通过后再合并回 `main`。
+- 预期：ParaTranz 审核/润色后的译文继续自动回仓库，随后可用 Fake OBR + Playwright 做中文运行时回归。
+
+## 当前执行状态（2026-09-13）
+- [x] Step 1: 已确认 Smoke package 共 589 条，其中 328 已翻译、261 空白；空白项中 17 条包含 `{{...}}` 模板占位符。
+- [ ] Step 2: 实现模板运行时与上下文 sidecar / ParaTranz context 上传。
+- [ ] Step 3: 生成并校验 261 条首轮中文初译，写回 ParaTranz。
+- [ ] Step 4: 完成自动回拉确认、构建/单测/Mock OBR 回归并提交 PR。
