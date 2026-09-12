@@ -14,6 +14,8 @@
 - 推送翻译前发现 Mock DOM 会把 fixture 玩家名渲染成 `Mock GM` / `Mock GM (You)` / `View As: Mock GM`；这类动态测试值不是固定 UI 原文。现已让 Mock Host 输出 `volatileRuntimeTokens`，merge 阶段只从 `mock-dom` 来源中过滤含这些 token 的文本，保留原始 E2E 报告用于诊断。
 - Smoke 5.0.3 清洗后高置信主语料为 289 条，其中旧包未覆盖 261 条；ParaTranz 已真实回读确认远端 Smoke 文件从 328 条扩展到 589 条，新增 261 条当前全部处于待翻译状态，已有 328 条译文保持不变。
 - 新增每日 `OBR Upstream Watch`：北京时间 09:17 自动运行；上游变化时用大小写敏感 JS Set 合并新 original，先即时推送 ParaTranz，再把 package/state 提交到持久 bot 分支并开 PR。状态哈希不记录每日检查时间，避免无变化时制造 PR；Harvester 资源图新增每个文本资源的 SHA-256，避免漏掉“同 URL/同大小但内容改变”的部署。
+- 每日 watcher 本机已连续执行两轮：首轮建立 Smoke 5.0.3 的 `manifestVersion + assetGraphHash + corpusHash` 基线，且 package 无新增；第二轮稳定得到 `changed=false / newHighConfidence=0`，Git 工作区保持干净，验证“无上游变化不产生每日空 PR”。
+- Windows 管道曾暴露一个重要边界：PowerShell `Sort-Object -Unique` 与 `ConvertFrom-Json` 都会把大小写不同的 JSON key 视为冲突/重复，曾暂时漏掉 1 条 original。现已明确规定上游词条链只用 JavaScript `Set` 做大小写敏感去重，并补单元测试防止回归；ParaTranz 二次回读已确认两个大小写变体分别存在。
 - 下一步：① 把 Smoke 专用 Mock 协议层抽成通用 `obr-mock-host.mjs` 并以独立假 Extension 做协议自测；② Smoke runner 只保留扩展专用导航策略；③ 根据 `unhandledRequestIds` 与多 fixture 场景逐步扩展 SDK mock，而不是手写整个 Extension SDK；④ 将角色/scene/items/metadata fixture 形成可复用 E2E 场景矩阵；⑤ 旧 Collector 仅保留为运行时补漏/覆盖率基准工具。
 
 ## 关键决策与理由（防止“吃书”）

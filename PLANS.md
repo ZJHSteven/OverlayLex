@@ -237,6 +237,6 @@
 
 ## 当前执行状态（2026-09-13）
 - [x] Step 1: 恢复本地 `feat/obr-harvester` worktree 与工具通道。
-- [ ] Step 2: 落地每日巡检 workflow / watcher 并完成本地与 CI 验证。
-- [ ] Step 3: 重新运行 Smoke 5.0.2 Harvester，合并新增 original 并真实推送 ParaTranz。
-- [ ] Step 4: 回读 ParaTranz 确认新增数量与待翻译状态，更新 `PROGRESS.md` 并推送分支。
+- [x] Step 2: 已落地每日巡检 watcher/workflow；本地连续两轮验证通过，第二轮 `changed=false / newHighConfidence=0` 且工作区零变化，待 push 后由 GitHub Actions 做 Linux 终验。
+- [x] Step 3: 实时重跑发现生产版已更新到 Smoke 5.0.3；过滤 3 条 Mock fixture 动态污染后得到 289 条主语料，其中 261 条旧包未覆盖。261 条已全部合并进 Smoke package 并真实推送 ParaTranz。
+- [x] Step 4: ParaTranz 回读确认 Smoke 文件现有 589 条：328 条已有译文保持不变，261 条新 original 处于待翻译状态；大小写不同的 `Ignore hidden tokens` / `Ignore Hidden Tokens` 均独立存在。
