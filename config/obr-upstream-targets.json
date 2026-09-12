@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "id": "smoke",
+      "enabled": true,
+      "manifest": "https://smoke.battle-system.com/manifest.json",
+      "host": "smoke.battle-system.com",
+      "package": "src/packages/obr-smoke-battle-system-com.json",
+      "runner": "smoke",
+      "maxAssets": 300
+    }
+  ]
+}

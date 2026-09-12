@@ -4,8 +4,20 @@
 - 现状：OverlayLex 已完成第一阶段“单源码、多产物”改造：同一个 `src/userscript/overlaylex.user.js` 可通过 `vite-plugin-monkey` 生成 UserScript，并通过 WXT（Vite）生成 Chrome / Edge / Firefox Manifest V3 扩展。WebExtension 已补齐扩展级 `browser.storage.local` 存储桥，主站与跨域 iframe 不再依赖按域隔离的页面 localStorage。远端 GitHub Actions 已实际完成四类构建与三端 ZIP 打包。
 - 已完成：新增根目录 `package.json`、`vite.userscript.config.js`、`wxt.config.ts`、`entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`；WXT 商店版 host 权限由 `src/packages/overlaylex-domain-allowlist.json` 自动生成，不申请 `<all_urls>`；Firefox 构建设置稳定 extension id `overlaylex@zjhstudio.com` 并按 AMO 当前规则声明 `browsingActivity`；新增 `build-validate` CI，检查四类产物、iframe 注入、host 权限和 Firefox 数据声明；补充 `docs/browser-builds.md` 与 `docs/store-submission.md`；修复原 `release-publish.yml` 中 `steps:` 错误嵌入 `env:` 导致 workflow 无法解析的问题。
 - 验证结果：远端 CI 使用 Node.js 22 + Vite 8.2.2 + WXT 0.21.4 + vite-plugin-monkey 8.1.0 完整构建成功；UserScript 约 65.6 kB；Chrome/Edge 扩展 ZIP 约 14.5 kB，Firefox ZIP 约 14.6 kB，并生成 Firefox reviewer sources ZIP。权限收紧后的 manifest 验证同样通过。
-- 正在做：Smoke & Spectre 5.0 翻译应急恢复。服务器 manifest 已确认升级到 `5.0.0`，而旧 Smoke 翻译包仍为 `0.1.7`；当前 Owlbear 房间没有实际注册 Smoke action/background frame。Collector 已从 0.2.4 升级到 0.2.5，新增 ARIA/alt 与 open Shadow DOM 采集能力，等待装入日常 Chrome 后开始全量遍历。Firefox AMO `0.2.17` 当前后台状态为“等待审核”，不是审核完成后漏发邮件。
-- 下一步：① 在日常 Chrome 更新安装 Collector 0.2.5；② 刷新/恢复 Smoke & Spectre 5.0 的真实 Owlbear 注册并全量采集新 UI；③ 对新语料与旧 Smoke 包做 diff、补译、发布和真实房间回归；④ 等待 Firefox AMO 审核结论；⑤ 正式上线介绍页与六端安装帮助顺延到 Smoke 应急恢复之后。
+- 正在做：Smoke & Spectre 5.x 翻译采集链正在从人工 Runtime Collector 迁移为 `manifest/static harvester + OBR Mock Host + Playwright + runtime fallback`。本机已复现 Smoke 5.0.2 静态采集（73 个资源节点 / 62 个文本资源 / 4362 个原始候选）和 Mock Host（82 条 SDK 消息 / 30 次 UI 注册 / 42 条 SDK UI 文案 / 72 条 DOM 文案，`pageErrors=[]`）。本机三路合并得到 250 条英文 i18n + 42 条 SDK + 72 条 DOM，去重后 292 条主语料，其中 264 条为旧 Smoke 包未覆盖的新词。
+- 通用化进度：已从 Smoke runner 抽出 `src/tools/obr-mock-host.mjs`，并新增不依赖真实 Owlbear/Smoke 的本地假 Extension 集成测试。首次本机执行发现嵌入浏览器 resolver 的模板字符串注释包含未转义反引号，导致 Node 语法错误；已修复并继续执行双层回归。
+- 假 Extension 自测首次运行还暴露了 OBR_READY 重试的幂等边界：Mock Host 会发送两次 Ready 作为容错，而极简测试页曾重复创建 ShadowRoot。已让测试 fixture 只初始化一次；保留 Host 的双 Ready 设计，用测试显式覆盖这一行为。
+- Smoke 重构版首次本机跑完后仅把 `OBR_SCENE_SET_METADATA`、`OBR_BROADCAST_SEND_MESSAGE`、`OBR_NOTIFICATION_SHOW` 标记为 unknown；三者均为不依赖返回 payload 的写/通知操作，Smoke 同时保持 `pageErrors=[]`。已扩展通用 ACK 动作识别，目标是让真实 Smoke 的 `unhandledRequestIds` 清零，同时继续把未知 getter 作为真正的 Mock 缺口暴露出来。
+- 本机最终回归：通用 Host 自测通过；Smoke 5.0.2 通过重构后的通用 Host 再次得到 82 条 SDK 消息、37 种消息类型、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，`unhandledRequestIds=[]`、`pageErrors=[]`、`navigationErrors=[]`。多源合并仍为 292 条主语料 / 264 条新词，没有因通用化发生覆盖回退。
+- 通用使用入口：新增 `src/tools/obr-mock-run.mjs`，支持 URL + fixture + `--expect-clean` 的基础 E2E；Smoke runner 只保留扩展专用导航；使用方法与 fixture 结构记录在 `docs/obr-mock-host.md`。
+- 2026-09-13 实时重跑发现 Smoke & Spectre 生产 manifest 已从 5.0.2 更新到 5.0.3；资源图仍为 73 个节点 / 62 个文本资源，Fake OBR 仍为 82 条 SDK 消息、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，且无未知请求或页面错误。
+- 推送翻译前发现 Mock DOM 会把 fixture 玩家名渲染成 `Mock GM` / `Mock GM (You)` / `View As: Mock GM`；这类动态测试值不是固定 UI 原文。现已让 Mock Host 输出 `volatileRuntimeTokens`，merge 阶段只从 `mock-dom` 来源中过滤含这些 token 的文本，保留原始 E2E 报告用于诊断。
+- Smoke 5.0.3 清洗后高置信主语料为 289 条，其中旧包未覆盖 261 条；ParaTranz 已真实回读确认远端 Smoke 文件从 328 条扩展到 589 条，新增 261 条当前全部处于待翻译状态，已有 328 条译文保持不变。
+- 新增每日 `OBR Upstream Watch`：北京时间 09:17 自动运行；上游变化时用大小写敏感 JS Set 合并新 original，先即时推送 ParaTranz，再把 package/state 提交到持久 bot 分支并开 PR。状态哈希不记录每日检查时间，避免无变化时制造 PR；Harvester 资源图新增每个文本资源的 SHA-256，避免漏掉“同 URL/同大小但内容改变”的部署。
+- 每日 watcher 本机已连续执行两轮：首轮建立 Smoke 5.0.3 的 `manifestVersion + assetGraphHash + corpusHash` 基线，且 package 无新增；第二轮稳定得到 `changed=false / newHighConfidence=0`，Git 工作区保持干净，验证“无上游变化不产生每日空 PR”。
+- Windows 管道曾暴露一个重要边界：PowerShell `Sort-Object -Unique` 与 `ConvertFrom-Json` 都会把大小写不同的 JSON key 视为冲突/重复，曾暂时漏掉 1 条 original。现已明确规定上游词条链只用 JavaScript `Set` 做大小写敏感去重，并补单元测试防止回归；ParaTranz 二次回读已确认两个大小写变体分别存在。
+- 首次推送每日 watcher 后，GitHub Hosted Runner 的静态 Harvest 在根 manifest 请求上遇到一次瞬时 `ETIMEDOUT`，而同轮 Playwright Mock 随后访问 Smoke 正常。已为 Harvester 文本请求与 watcher manifest 请求增加有限指数退避，并在每日 workflow 外层增加最多 3 轮整任务重试，避免第三方站点一次网络抖动造成全天漏检。
+- 下一步：① 把 Smoke 专用 Mock 协议层抽成通用 `obr-mock-host.mjs` 并以独立假 Extension 做协议自测；② Smoke runner 只保留扩展专用导航策略；③ 根据 `unhandledRequestIds` 与多 fixture 场景逐步扩展 SDK mock，而不是手写整个 Extension SDK；④ 将角色/scene/items/metadata fixture 形成可复用 E2E 场景矩阵；⑤ 旧 Collector 仅保留为运行时补漏/覆盖率基准工具。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：保留“全站触发 + 门禁快速退出”总体架构（原因：兼顾兼容性与性能，不干扰非目标站点）。

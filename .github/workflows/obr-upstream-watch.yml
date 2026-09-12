@@ -1,0 +1,182 @@
+name: OBR Upstream Watch
+
+on:
+  schedule:
+    # 北京时间每天 09:17（UTC 01:17）。刻意避开整点，也避开现有 ParaTranz 回拉时段。
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: obr-upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PARATRANZ_TOKEN: ${{ secrets.PARATRANZ_TOKEN }}
+      PARATRANZ_PROJECT_ID: ${{ secrets.PARATRANZ_PROJECT_ID }}
+      BOT_BRANCH: bot/obr-upstream-watch
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Continue existing bot branch when present
+        shell: bash
+        run: |
+          # PR 尚未合并时，下一次定时任务从已有 bot 分支继续。
+          # 这样已经推给 ParaTranz 的 original/state 不会第二天从 main 再发现一次。
+          if git fetch origin "${BOT_BRANCH}:refs/remotes/origin/${BOT_BRANCH}" 2>/dev/null; then
+            git checkout -B "${BOT_BRANCH}" "origin/${BOT_BRANCH}"
+            git merge --no-edit "${GITHUB_SHA}"
+          else
+            git checkout -b "${BOT_BRANCH}"
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright package
+        run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run daily OBR harvest
+        shell: bash
+        run: |
+          # Hosted Runner 到第三方扩展站点偶尔会有瞬时网络超时。
+          # watcher 内部对单请求有重试，这里再给整轮一次更高层的容错；每次重跑前都会
+          # 清空诊断目录，而 package/state 只有在整轮成功末尾才会写入，因此重试安全。
+          for attempt in 1 2 3; do
+            rm -rf .harvest/upstream-watch
+            if node src/tools/obr-upstream-watch.mjs \
+              --config config/obr-upstream-targets.json \
+              --state config/obr-upstream-state.json \
+              --out .harvest/upstream-watch \
+              --apply-packages \
+              --update-state; then
+              exit 0
+            fi
+            if [ "${attempt}" -eq 3 ]; then
+              echo "OBR upstream watch failed after 3 attempts."
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
+
+      - name: Validate generated changes
+        run: |
+          git diff --check
+          node --test \
+            src/tools/obr-harvester.test.mjs \
+            src/tools/obr-mock-host.test.mjs \
+            src/tools/obr-upstream-watch.test.mjs
+
+      - name: Detect package and state changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- src/packages/; then
+            echo "packages=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "packages=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if git diff --quiet -- config/obr-upstream-state.json src/packages/; then
+            echo "tracked=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tracked=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate ParaTranz credentials
+        if: steps.changes.outputs.packages == 'true'
+        shell: bash
+        run: |
+          if [ -z "${PARATRANZ_TOKEN}" ]; then
+            echo "PARATRANZ_TOKEN is missing."
+            exit 1
+          fi
+
+      - name: Push new originals to ParaTranz immediately
+        if: steps.changes.outputs.packages == 'true'
+        shell: bash
+        run: |
+          # staged-only 是现有同步脚本的安全门：只允许本次真正改过的翻译包上传。
+          git add src/packages/
+          PROJECT_ID="${PARATRANZ_PROJECT_ID:-17950}"
+          node src/tools/overlaylex-i18n-flow.mjs push-paratranz \
+            --staged-only \
+            --project-id "${PROJECT_ID}"
+          git reset HEAD -- src/packages/
+
+      - name: Commit tracked upstream baseline and originals
+        if: steps.changes.outputs.tracked == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/obr-upstream-state.json src/packages/
+          git commit -m "chore(i18n): refresh OBR upstream strings"
+          git push origin "HEAD:${BOT_BRANCH}"
+
+      - name: Create or refresh upstream PR
+        if: steps.changes.outputs.tracked == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          PR_NUMBER="$(gh pr list --state open --base main --head "${BOT_BRANCH}" --json number --jq '.[0].number // empty')"
+          BODY_FILE="${RUNNER_TEMP}/obr-upstream-watch.md"
+          cat > "${BODY_FILE}" <<'BODY'
+          OverlayLex OBR Harvester 自动监测到上游版本、资源图或高置信英文语料变化。
+
+          本 PR 的 original 来自：
+          - manifest / production bundle 静态分析；
+          - Fake OBR Host 截获的 SDK 注册 UI；
+          - Playwright DOM / ARIA / open Shadow DOM 运行时采样。
+
+          新增 original 已在本次 Action 中先行推送 ParaTranz，翻译人员无需等待 PR 合并即可开工。
+          本流程只新增 original，不自动删除旧词，也不覆盖现有译文。
+          BODY
+
+          if [ -n "${PR_NUMBER}" ]; then
+            gh pr edit "${PR_NUMBER}" \
+              --title "chore(i18n): OBR upstream strings changed" \
+              --body-file "${BODY_FILE}"
+          else
+            gh pr create \
+              --base main \
+              --head "${BOT_BRANCH}" \
+              --title "chore(i18n): OBR upstream strings changed" \
+              --body-file "${BODY_FILE}"
+          fi
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        run: |
+          echo "## OBR Upstream Watch" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f .harvest/upstream-watch/summary.json ]; then
+            echo '```json' >> "$GITHUB_STEP_SUMMARY"
+            cat .harvest/upstream-watch/summary.json >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: obr-upstream-watch
+          path: .harvest/upstream-watch/
+          if-no-files-found: warn
+          retention-days: 14

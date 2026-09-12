@@ -1,0 +1,195 @@
+name: OBR Harvester Experiment
+
+on:
+  push:
+    branches:
+      - feat/obr-harvester
+    paths:
+      - "src/tools/obr-harvester.mjs"
+      - "src/tools/obr-harvester.test.mjs"
+      - "src/tools/obr-mock-smoke.mjs"
+      - "src/tools/obr-mock-host.mjs"
+      - "src/tools/obr-mock-host.test.mjs"
+      - "src/tools/obr-mock-run.mjs"
+      - "src/tools/obr-harvest-merge.mjs"
+      - "src/tools/obr-upstream-watch.mjs"
+      - "src/tools/obr-upstream-watch.test.mjs"
+      - "config/obr-upstream-targets.json"
+      - "config/obr-upstream-state.json"
+      - ".github/workflows/obr-upstream-watch.yml"
+      - ".github/workflows/obr-harvester-experiment.yml"
+      - "src/packages/obr-smoke-battle-system-com.json"
+      - "docs/obr-harvester-experiment.md"
+      - "docs/obr-mock-host.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-static-harvest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: node --test src/tools/obr-harvester.test.mjs src/tools/obr-upstream-watch.test.mjs
+
+      - name: Harvest Smoke & Spectre production bundle
+        run: |
+          rm -rf .harvest/smoke
+          node src/tools/obr-harvester.mjs \
+            https://smoke.battle-system.com/manifest.json \
+            --existing src/packages/obr-smoke-battle-system-com.json \
+            --out .harvest/smoke \
+            --max-assets 300
+
+      - name: Write experiment summary
+        shell: bash
+        run: |
+          echo '## Smoke & Spectre static harvest' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat .harvest/smoke/report.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Top 40 new medium/high-confidence candidates:' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          node -e 'const x=require("./.harvest/smoke/new-candidates.json"); console.log(x.slice(0,40).map(v=>`[${v.score}] ${v.text}`).join("\n"))' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload harvest report
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-static-harvest
+          path: .harvest/smoke/
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke-mock-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Playwright for experiment
+        run: npm install --no-save --ignore-scripts playwright@1.55.0
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Test generic OBR Mock Host
+        run: node --test src/tools/obr-mock-host.test.mjs
+
+      - name: Run Smoke in OBR Mock Host
+        run: |
+          rm -rf .harvest/mock-smoke
+          node src/tools/obr-mock-smoke.mjs .harvest/mock-smoke
+
+      - name: Write mock-host summary
+        if: always()
+        shell: bash
+        run: |
+          echo '## Smoke & Spectre OBR Mock Host' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f .harvest/mock-smoke/mock-report.json ]; then
+            node - <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const r = require('./.harvest/mock-smoke/mock-report.json');
+          console.log('```json');
+          console.log(JSON.stringify({
+            loaded: r.loaded,
+            frameUrl: r.frameUrl,
+            bodyTextLength: r.bodyTextLength,
+            messageCount: r.messageCount,
+            messageCounts: r.messageCounts,
+            registeredUiCount: r.registeredUi?.length || 0,
+            sdkUiStringCount: r.sdkUiStringCount || 0,
+            runtimeTextCount: r.runtimeTextCount || 0,
+            pageErrors: r.pageErrors
+          }, null, 2));
+          console.log('```');
+          console.log('\n### Navigated views');
+          for (const s of r.navigation?.snapshots || []) {
+            console.log(`- ${s.name}: ${s.uiStrings?.length || 0} UI strings, ${s.bodyTextLength || 0} body chars`);
+          }
+          NODE
+          else
+            echo 'mock-report.json was not produced.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload mock-host report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-mock-host
+          path: .harvest/mock-smoke/
+          if-no-files-found: warn
+          retention-days: 14
+
+  smoke-high-confidence-merge:
+    needs:
+      - smoke-static-harvest
+      - smoke-mock-host
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download static harvest
+        uses: actions/download-artifact@v4
+        with:
+          name: smoke-static-harvest
+          path: .harvest/smoke
+
+      - name: Download mock-host harvest
+        uses: actions/download-artifact@v4
+        with:
+          name: smoke-mock-host
+          path: .harvest/mock-smoke
+
+      - name: Merge high-confidence sources
+        run: |
+          rm -rf .harvest/merged
+          node src/tools/obr-harvest-merge.mjs \
+            --static .harvest/smoke \
+            --mock .harvest/mock-smoke \
+            --existing src/packages/obr-smoke-battle-system-com.json \
+            --out .harvest/merged
+
+      - name: Write merged coverage summary
+        shell: bash
+        run: |
+          echo '## High-confidence automatic corpus' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat .harvest/merged/report.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '### First 80 new high-confidence strings' >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          node -e 'const x=require("./.harvest/merged/new-high-confidence.json"); console.log(x.slice(0,80).map(v=>`${v.text} [${v.origins.join(",")}]`).join("\n"))' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload merged corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-high-confidence-corpus
+          path: .harvest/merged/
+          if-no-files-found: error
+          retention-days: 14
