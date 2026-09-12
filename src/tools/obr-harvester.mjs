@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+import crypto from 'node:crypto';
 
 const DEFAULT_MAX_ASSETS = 300;
 const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
@@ -223,7 +224,16 @@ async function fetchText(url, maxBytes) {
     const buffer = new Uint8Array(await response.arrayBuffer());
     if (buffer.byteLength > maxBytes) throw new Error(`asset too large (${buffer.byteLength} bytes)`);
     const contentType = response.headers.get('content-type') || '';
-    return { text: new TextDecoder('utf-8', { fatal: false }).decode(buffer), contentType, finalUrl: response.url, bytes: buffer.byteLength };
+    // 每个文本资源都记录内容哈希。仅比较 URL / 文件大小会漏掉“同 URL、同大小、内容变化”
+    // 这种少见但完全可能发生的上游部署；每日 watcher 用这个值判断资源图是否真的变化。
+    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+    return {
+      text: new TextDecoder('utf-8', { fatal: false }).decode(buffer),
+      contentType,
+      finalUrl: response.url,
+      bytes: buffer.byteLength,
+      sha256
+    };
   } finally { clearTimeout(timer); }
 }
 
@@ -274,7 +284,7 @@ async function main() {
   const manifest = JSON.parse(manifestResponse.text);
   const queue = manifestEntryUrls(manifest, manifestUrl).map(url => ({ url, discoveredBy: 'manifest' }));
   const seen = new Set([manifestUrl]);
-  const resources = [{ url: manifestUrl, finalUrl: manifestResponse.finalUrl, contentType: manifestResponse.contentType, bytes: manifestResponse.bytes, discoveredBy: 'root-manifest', status: 'ok' }];
+  const resources = [{ url: manifestUrl, finalUrl: manifestResponse.finalUrl, contentType: manifestResponse.contentType, bytes: manifestResponse.bytes, sha256: manifestResponse.sha256, discoveredBy: 'root-manifest', status: 'ok' }];
   const rawCandidates = [];
   const errors = [];
 
@@ -295,10 +305,10 @@ async function main() {
     try {
       const response = await fetchText(next.url, args.maxBytes);
       if (!classifyTextAsset(response.finalUrl, response.contentType)) {
-        resources.push({ url: next.url, finalUrl: response.finalUrl, contentType: response.contentType, bytes: response.bytes, discoveredBy: next.discoveredBy, status: 'non-text-skipped' });
+        resources.push({ url: next.url, finalUrl: response.finalUrl, contentType: response.contentType, bytes: response.bytes, sha256: response.sha256, discoveredBy: next.discoveredBy, status: 'non-text-skipped' });
         continue;
       }
-      resources.push({ url: next.url, finalUrl: response.finalUrl, contentType: response.contentType, bytes: response.bytes, discoveredBy: next.discoveredBy, status: 'ok' });
+      resources.push({ url: next.url, finalUrl: response.finalUrl, contentType: response.contentType, bytes: response.bytes, sha256: response.sha256, discoveredBy: next.discoveredBy, status: 'ok' });
       rawCandidates.push(...scanQuotedStrings(response.text, response.finalUrl));
       if (/html/i.test(response.contentType) || /\/pages\/?(?:$|\?)/i.test(response.finalUrl) || /\.html?(?:$|\?)/i.test(response.finalUrl)) {
         rawCandidates.push(...scanHtmlText(response.text, response.finalUrl));

@@ -12,6 +12,11 @@ on:
       - "src/tools/obr-mock-host.test.mjs"
       - "src/tools/obr-mock-run.mjs"
       - "src/tools/obr-harvest-merge.mjs"
+      - "src/tools/obr-upstream-watch.mjs"
+      - "src/tools/obr-upstream-watch.test.mjs"
+      - "config/obr-upstream-targets.json"
+      - "config/obr-upstream-state.json"
+      - ".github/workflows/obr-upstream-watch.yml"
       - ".github/workflows/obr-harvester-experiment.yml"
       - "src/packages/obr-smoke-battle-system-com.json"
       - "docs/obr-harvester-experiment.md"
@@ -35,7 +40,7 @@ jobs:
           node-version: 22
 
       - name: Unit tests
-        run: node --test src/tools/obr-harvester.test.mjs
+        run: node --test src/tools/obr-harvester.test.mjs src/tools/obr-upstream-watch.test.mjs
 
       - name: Harvest Smoke & Spectre production bundle
         run: |

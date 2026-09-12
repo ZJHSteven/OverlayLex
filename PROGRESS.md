@@ -12,6 +12,8 @@
 - 通用使用入口：新增 `src/tools/obr-mock-run.mjs`，支持 URL + fixture + `--expect-clean` 的基础 E2E；Smoke runner 只保留扩展专用导航；使用方法与 fixture 结构记录在 `docs/obr-mock-host.md`。
 - 2026-09-13 实时重跑发现 Smoke & Spectre 生产 manifest 已从 5.0.2 更新到 5.0.3；资源图仍为 73 个节点 / 62 个文本资源，Fake OBR 仍为 82 条 SDK 消息、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，且无未知请求或页面错误。
 - 推送翻译前发现 Mock DOM 会把 fixture 玩家名渲染成 `Mock GM` / `Mock GM (You)` / `View As: Mock GM`；这类动态测试值不是固定 UI 原文。现已让 Mock Host 输出 `volatileRuntimeTokens`，merge 阶段只从 `mock-dom` 来源中过滤含这些 token 的文本，保留原始 E2E 报告用于诊断。
+- Smoke 5.0.3 清洗后高置信主语料为 289 条，其中旧包未覆盖 261 条；ParaTranz 已真实回读确认远端 Smoke 文件从 328 条扩展到 589 条，新增 261 条当前全部处于待翻译状态，已有 328 条译文保持不变。
+- 新增每日 `OBR Upstream Watch`：北京时间 09:17 自动运行；上游变化时用大小写敏感 JS Set 合并新 original，先即时推送 ParaTranz，再把 package/state 提交到持久 bot 分支并开 PR。状态哈希不记录每日检查时间，避免无变化时制造 PR；Harvester 资源图新增每个文本资源的 SHA-256，避免漏掉“同 URL/同大小但内容改变”的部署。
 - 下一步：① 把 Smoke 专用 Mock 协议层抽成通用 `obr-mock-host.mjs` 并以独立假 Extension 做协议自测；② Smoke runner 只保留扩展专用导航策略；③ 根据 `unhandledRequestIds` 与多 fixture 场景逐步扩展 SDK mock，而不是手写整个 Extension SDK；④ 将角色/scene/items/metadata fixture 形成可复用 E2E 场景矩阵；⑤ 旧 Collector 仅保留为运行时补漏/覆盖率基准工具。
 
 ## 关键决策与理由（防止“吃书”）
