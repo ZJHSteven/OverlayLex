@@ -266,6 +266,7 @@
     "If you prefer to use the base Owlbear Rodeo drawing tools, you can. All shapes and lines created via the default tools can be converted into an Obstruction. Just right-click the shape and select 'Convert to Obstruction'. This will remove the shape/line/drawing as it was, and recreate it as an Obstruction object.": "如果你更喜欢使用枭熊自己的绘图工具，你也可以使用它来绘制用作障碍的线条。所有使用枭熊的绘图工具绘制的图形和线条都可以被转换为S&S中的障碍。右键该图形并选择菜单栏中的“转换为障碍”，这会移除原本的图形/线条/涂鸦，并创建一个新的作为S&S障碍存在的图形/线条/涂鸦。",
     "If you're looking to have your characters explore a dark area where they have to hold torches, it's a simple task. Create torch tokens, enable vision, set them as a torchlight and then attach them to the characters. Your other players will then be able to see each other when the light of the torch is not behind something obstructing it.": "如果你要让角色探索一个需要手持火把（或其它照明方式）探索的黑暗区域，你可以先制作火把素材然后将其设置为光源，并将其绑定至角色token上。在火把的光照没有被遮挡住的时候，玩家们就可以互相看到彼此的token。",
     "Ignore hidden tokens": "",
+    "Ignore Hidden Tokens": "",
     "Import": "导入",
     "Import file contains invalid JSON.": "",
     "Import file has no walls to import.": "",
