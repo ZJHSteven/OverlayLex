@@ -95,6 +95,9 @@ test('generic host completes ready/request/registration/DOM capture without real
     assert.ok(report.runtimeText.includes('Mock Action'));
     assert.ok(report.runtimeText.includes('Shadow Text'));
     assert.ok(report.runtimeText.includes('Shadow Description'));
+    // 默认玩家名属于测试 fixture 动态值，必须显式标记给后续 Harvester merge，
+    // 防止类似 `View As: Mock GM` 的字符串被误送到翻译平台。
+    assert.ok(report.volatileRuntimeTokens.includes('Mock GM'));
   } finally {
     await new Promise(resolve => extensionServer.close(resolve));
     await fs.rm(outDir, { recursive: true, force: true });

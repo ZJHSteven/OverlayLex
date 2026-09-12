@@ -42,6 +42,34 @@ export const DEFAULT_THEME = {
 };
 
 /**
+ * 收集“来自测试 fixture、但可能被扩展渲染进 UI”的动态字符串。
+ *
+ * 为什么需要这一步：
+ * - Mock Host 会给扩展一个假的玩家，例如默认名称 `Mock GM`；
+ * - 某些扩展会把这个动态名称渲染成 `View As: Mock GM`、`Mock GM (You)`；
+ * - 这些文字虽然真实出现在 DOM 中，却不是扩展的固定英文原文，不能送进翻译平台。
+ *
+ * 当前自动收集玩家姓名，并允许 runner 通过 `fixture.volatileTextTokens` 显式补充
+ * 其它会进入界面的动态值。这里只记录“污染源 token”，真正过滤仍放在 merge 阶段，
+ * 这样原始 Mock 报告仍保留完整现场，便于 E2E 调试和复盘。
+ */
+function collectVolatileRuntimeTokens(fixture, player) {
+  const tokens = [];
+
+  if (player?.name) tokens.push(player.name);
+  for (const partyPlayer of fixture.party || []) {
+    if (partyPlayer?.name) tokens.push(partyPlayer.name);
+  }
+  for (const token of fixture.volatileTextTokens || []) {
+    tokens.push(token);
+  }
+
+  return [...new Set(tokens
+    .map(value => String(value || '').replace(/\s+/g, ' ').trim())
+    .filter(value => value.length >= 2))];
+}
+
+/**
  * 生成默认 SDK 响应表。
  *
  * 返回值刻意模拟官方 SDK 常用 getter 的“外层对象 shape”，例如：
@@ -333,6 +361,7 @@ export async function runObrMockHost(options) {
   const responses = createDefaultResponses(fixture);
   const readyData = fixture.readyData || { userId: player.id, ref: 'mock-ref' };
   const roomId = fixture.roomId || 'mock-room';
+  const volatileRuntimeTokens = collectVolatileRuntimeTokens(fixture, player);
   await fs.mkdir(outDir, { recursive: true });
 
   const server = http.createServer((request, response) => {
@@ -398,6 +427,9 @@ export async function runObrMockHost(options) {
       sdkUiStringCount: sdkUiStrings.length,
       runtimeText,
       runtimeTextCount: runtimeText.length,
+      // 这些值来自测试 fixture，不是扩展固定文案。Harvester merge 会用它们剔除
+      // `View As: Mock GM` 这类动态污染，但原始 runtimeText 仍保持完整。
+      volatileRuntimeTokens,
       navigation: exploration || { snapshots, navigationErrors: [] },
       consoleEvents: consoleEvents.slice(-200),
       pageErrors

@@ -90,6 +90,22 @@ function setStats(a, b) {
   return n;
 }
 
+/**
+ * 判断一条运行时 DOM 文本是否包含 Mock fixture 注入的动态值。
+ *
+ * 这里只过滤 `mock-dom` 来源，不碰 i18n catalog / SDK registration：
+ * 如果某个字符串同时存在于扩展自己的固定词典里，它仍会通过其它来源进入主语料。
+ */
+function isFixtureDerivedRuntimeText(text, volatileTokens) {
+  const normalizedText = normalize(text).toLocaleLowerCase();
+  if (!normalizedText) return false;
+
+  return volatileTokens.some(token => {
+    const normalizedToken = normalize(token).toLocaleLowerCase();
+    return normalizedToken.length >= 2 && normalizedText.includes(normalizedToken);
+  });
+}
+
 async function readJson(file, fallback) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
   catch { return fallback; }
@@ -139,7 +155,20 @@ async function main() {
   }
 
   const sdk = new Set(sdkRows.map(row => normalize(row.text)).filter(isCandidate));
-  const runtime = new Set(runtimeRows.map(normalize).filter(isCandidate));
+  const volatileRuntimeTokens = (mockReport.volatileRuntimeTokens || [])
+    .map(normalize)
+    .filter(Boolean);
+  const rejectedFixtureRuntimeText = [];
+  const runtime = new Set();
+  for (const rawText of runtimeRows) {
+    const text = normalize(rawText);
+    if (!isCandidate(text)) continue;
+    if (isFixtureDerivedRuntimeText(text, volatileRuntimeTokens)) {
+      rejectedFixtureRuntimeText.push(text);
+      continue;
+    }
+    runtime.add(text);
+  }
   const primary = new Map();
   function addOrigin(sourceSet, origin) {
     for (const text of sourceSet) {
@@ -173,6 +202,7 @@ async function main() {
     rejectedCatalogNoise,
     sdkUiStrings: sdk.size,
     mockDomStrings: runtime.size,
+    rejectedFixtureRuntimeText: rejectedFixtureRuntimeText.length,
     primaryUnion: primary.size,
     primaryNew: newPrimary.length,
     secondaryAppStatic: secondaryRows.length,
@@ -194,6 +224,7 @@ async function main() {
   await fs.writeFile(path.join(args.outDir, 'high-confidence.json'), JSON.stringify(primaryRows, null, 2));
   await fs.writeFile(path.join(args.outDir, 'new-high-confidence.json'), JSON.stringify(newPrimary, null, 2));
   await fs.writeFile(path.join(args.outDir, 'secondary-static.json'), JSON.stringify(secondaryRows, null, 2));
+  await fs.writeFile(path.join(args.outDir, 'fixture-derived-runtime.json'), JSON.stringify(rejectedFixtureRuntimeText.sort((a, b) => a.localeCompare(b)), null, 2));
   await fs.writeFile(path.join(args.outDir, 'source-breakdown.json'), JSON.stringify(sourceBreakdown, null, 2));
   await fs.writeFile(path.join(args.outDir, 'report.json'), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary, null, 2));

@@ -10,6 +10,8 @@
 - Smoke 重构版首次本机跑完后仅把 `OBR_SCENE_SET_METADATA`、`OBR_BROADCAST_SEND_MESSAGE`、`OBR_NOTIFICATION_SHOW` 标记为 unknown；三者均为不依赖返回 payload 的写/通知操作，Smoke 同时保持 `pageErrors=[]`。已扩展通用 ACK 动作识别，目标是让真实 Smoke 的 `unhandledRequestIds` 清零，同时继续把未知 getter 作为真正的 Mock 缺口暴露出来。
 - 本机最终回归：通用 Host 自测通过；Smoke 5.0.2 通过重构后的通用 Host 再次得到 82 条 SDK 消息、37 种消息类型、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，`unhandledRequestIds=[]`、`pageErrors=[]`、`navigationErrors=[]`。多源合并仍为 292 条主语料 / 264 条新词，没有因通用化发生覆盖回退。
 - 通用使用入口：新增 `src/tools/obr-mock-run.mjs`，支持 URL + fixture + `--expect-clean` 的基础 E2E；Smoke runner 只保留扩展专用导航；使用方法与 fixture 结构记录在 `docs/obr-mock-host.md`。
+- 2026-09-13 实时重跑发现 Smoke & Spectre 生产 manifest 已从 5.0.2 更新到 5.0.3；资源图仍为 73 个节点 / 62 个文本资源，Fake OBR 仍为 82 条 SDK 消息、30 次 UI 注册、42 条 SDK 文案、72 条 DOM 文案，且无未知请求或页面错误。
+- 推送翻译前发现 Mock DOM 会把 fixture 玩家名渲染成 `Mock GM` / `Mock GM (You)` / `View As: Mock GM`；这类动态测试值不是固定 UI 原文。现已让 Mock Host 输出 `volatileRuntimeTokens`，merge 阶段只从 `mock-dom` 来源中过滤含这些 token 的文本，保留原始 E2E 报告用于诊断。
 - 下一步：① 把 Smoke 专用 Mock 协议层抽成通用 `obr-mock-host.mjs` 并以独立假 Extension 做协议自测；② Smoke runner 只保留扩展专用导航策略；③ 根据 `unhandledRequestIds` 与多 fixture 场景逐步扩展 SDK mock，而不是手写整个 Extension SDK；④ 将角色/scene/items/metadata fixture 形成可复用 E2E 场景矩阵；⑤ 旧 Collector 仅保留为运行时补漏/覆盖率基准工具。
 
 ## 关键决策与理由（防止“吃书”）
