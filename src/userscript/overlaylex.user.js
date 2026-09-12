@@ -437,6 +437,10 @@
     packageCache: safeLocalStorageGet(STORAGE_KEYS.PACKAGE_CACHE, {}),
     userSwitches: safeLocalStorageGet(STORAGE_KEYS.USER_SWITCHES, {}),
     translationMap: new Map(),
+    // 模板词条单独保存为已编译正则。
+    // 普通词仍然优先走 translationMap 的 O(1) 精确命中；只有精确命中失败时才遍历模板，
+    // 因此不会因为支持 {{count}} / {{name}} 这类 i18n 模板而拖慢绝大多数页面文本。
+    templateTranslations: [],
     observer: null,
     isApplyingTranslation: false,
     iframeObserverMap: new WeakMap(),
@@ -601,6 +605,7 @@
 
     const showUpdatingIndicator = Boolean(options.showUpdatingIndicator);
     const nextMap = new Map();
+    const nextTemplates = [];
     for (const pkgMeta of state.manifest.packages) {
       // 只读取 translation 包，域名包由专门流程处理。
       if (pkgMeta.kind && pkgMeta.kind !== "translation") {
@@ -620,6 +625,10 @@
             continue;
           }
           nextMap.set(sourceText, targetText);
+          const compiledTemplate = compileTemplateTranslation(sourceText, targetText);
+          if (compiledTemplate) {
+            nextTemplates.push(compiledTemplate);
+          }
         }
       } catch (error) {
         Logger.warn(`加载翻译包失败: ${pkgMeta.id}`, error);
@@ -627,6 +636,7 @@
     }
 
     state.translationMap = nextMap;
+    state.templateTranslations = nextTemplates;
   }
 
   function isPackageTargetMatched(packageData) {
@@ -754,6 +764,82 @@
     return text.replace(/\s+/g, " ").trim();
   }
 
+  // OVERLAYLEX_TEMPLATE_HELPERS_START
+  // 这组函数保持“纯函数”特征：不依赖 DOM、不读 state，方便用 Node vm 直接提取同一份源码做单元测试。
+  // 模板语法沿用上游常见 i18n 形式：{{count}} / {{name}} / {{message}}。
+  const TEMPLATE_PLACEHOLDER_RE = /\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g;
+
+  function escapeTemplateRegexLiteral(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function getTemplatePlaceholderNames(text) {
+    return [...String(text).matchAll(TEMPLATE_PLACEHOLDER_RE)].map((match) => match[1]);
+  }
+
+  function compileTemplateTranslation(sourceText, targetText) {
+    if (!sourceText || !targetText) {
+      return null;
+    }
+
+    const matches = [...String(sourceText).matchAll(TEMPLATE_PLACEHOLDER_RE)];
+    if (matches.length === 0) {
+      return null;
+    }
+
+    // 译文中的变量必须来自原文；若翻译人员误写了一个不存在的占位符，运行时宁可跳过该模板，
+    // 也不要把 {{typo}} 原样显示给用户。
+    const sourceNames = new Set(matches.map((match) => match[1]));
+    const targetNames = getTemplatePlaceholderNames(targetText);
+    if (targetNames.some((name) => !sourceNames.has(name))) {
+      return null;
+    }
+
+    let cursor = 0;
+    let pattern = "^";
+    const placeholderNames = [];
+    for (const match of matches) {
+      pattern += escapeTemplateRegexLiteral(sourceText.slice(cursor, match.index));
+      // 使用非贪婪且允许空字符串的捕获组。
+      // 这能兼容 `{{skippedText}}{{dedupeText}}` 这种相邻可选片段；两个片段在译文中仍按原顺序回填。
+      pattern += "([\\s\\S]*?)";
+      placeholderNames.push(match[1]);
+      cursor = match.index + match[0].length;
+    }
+    pattern += escapeTemplateRegexLiteral(sourceText.slice(cursor));
+    pattern += "$";
+
+    return {
+      sourceText,
+      targetText,
+      placeholderNames,
+      regex: new RegExp(pattern),
+    };
+  }
+
+  function applyCompiledTemplateTranslation(rawText, compiledTemplates) {
+    for (const template of compiledTemplates || []) {
+      const match = template.regex.exec(rawText);
+      if (!match) {
+        continue;
+      }
+
+      const values = new Map();
+      template.placeholderNames.forEach((name, index) => {
+        // 同名占位符出现多次时，优先保留第一次捕获值；正常 i18n 模板一般要求它们语义一致。
+        if (!values.has(name)) {
+          values.set(name, match[index + 1] ?? "");
+        }
+      });
+
+      return template.targetText.replace(TEMPLATE_PLACEHOLDER_RE, (whole, name) => {
+        return values.has(name) ? values.get(name) : whole;
+      });
+    }
+    return null;
+  }
+  // OVERLAYLEX_TEMPLATE_HELPERS_END
+
   function translateByMap(rawText) {
     const directHit = state.translationMap.get(rawText);
     if (typeof directHit === "string") {
@@ -762,13 +848,21 @@
 
     const normalized = normalizeText(rawText);
     const normalizedHit = state.translationMap.get(normalized);
-    if (typeof normalizedHit !== "string") {
+    let translatedText = typeof normalizedHit === "string" ? normalizedHit : null;
+
+    // 精确词典失败后才进入模板匹配。
+    // 例如包内保存 `Blocked {{count}} wall(s).`，页面实际显示 `Blocked 12 wall(s).` 时，
+    // 这里会捕获 count=12，并把它回填到中文译文的 {{count}} 位置。
+    if (translatedText === null && state.templateTranslations.length > 0) {
+      translatedText = applyCompiledTemplateTranslation(normalized, state.templateTranslations);
+    }
+    if (typeof translatedText !== "string") {
       return null;
     }
 
     const leadingSpaces = rawText.match(/^\s*/)?.[0] ?? "";
     const trailingSpaces = rawText.match(/\s*$/)?.[0] ?? "";
-    return `${leadingSpaces}${normalizedHit}${trailingSpaces}`;
+    return `${leadingSpaces}${translatedText}${trailingSpaces}`;
   }
 
   function canProcessTextNode(textNode) {

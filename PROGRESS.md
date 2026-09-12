@@ -1,6 +1,7 @@
 # 项目状态快照
 
 ## 当前结论（必须最新）
+- Smoke 5.0.3 新增 261 条中已确认 17 条为上游真实 `{{...}}` i18n 模板；OverlayLex 正在从“仅精确字符串 Map”升级为“精确词优先 + 模板正则兜底”，保证 `Blocked {{count}} wall(s).` 等模板能够匹配页面实际渲染的动态数字/名称。
 - 现状：OverlayLex 已完成第一阶段“单源码、多产物”改造：同一个 `src/userscript/overlaylex.user.js` 可通过 `vite-plugin-monkey` 生成 UserScript，并通过 WXT（Vite）生成 Chrome / Edge / Firefox Manifest V3 扩展。WebExtension 已补齐扩展级 `browser.storage.local` 存储桥，主站与跨域 iframe 不再依赖按域隔离的页面 localStorage。远端 GitHub Actions 已实际完成四类构建与三端 ZIP 打包。
 - 已完成：新增根目录 `package.json`、`vite.userscript.config.js`、`wxt.config.ts`、`entrypoints/overlay.content.ts` 与 `src/userscript/overlaylex.entry.js`；WXT 商店版 host 权限由 `src/packages/overlaylex-domain-allowlist.json` 自动生成，不申请 `<all_urls>`；Firefox 构建设置稳定 extension id `overlaylex@zjhstudio.com` 并按 AMO 当前规则声明 `browsingActivity`；新增 `build-validate` CI，检查四类产物、iframe 注入、host 权限和 Firefox 数据声明；补充 `docs/browser-builds.md` 与 `docs/store-submission.md`；修复原 `release-publish.yml` 中 `steps:` 错误嵌入 `env:` 导致 workflow 无法解析的问题。
 - 验证结果：远端 CI 使用 Node.js 22 + Vite 8.2.2 + WXT 0.21.4 + vite-plugin-monkey 8.1.0 完整构建成功；UserScript 约 65.6 kB；Chrome/Edge 扩展 ZIP 约 14.5 kB，Firefox ZIP 约 14.6 kB，并生成 Firefox reviewer sources ZIP。权限收紧后的 manifest 验证同样通过。
