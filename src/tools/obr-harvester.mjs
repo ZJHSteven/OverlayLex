@@ -290,7 +290,17 @@ function mergeCandidates(candidates) {
     current.occurrences++;
     current.sources.add(item.source);
     item.reasons.forEach(r => current.reasons.add(r));
-    if (current.examples.length < 3) current.examples.push({ source: item.source, context: item.context, score: item.score });
+    // 保留原始字符串在生产 bundle 中的偏移量。它不参与运行时翻译，
+    // 只用于 Harvester 后处理阶段恢复 i18n 条目的先后顺序，进而给翻译人员
+    // 提供“上一条 / 下一条”这种真正有语义的上下文，而不是只暴露源码文件名。
+    if (current.examples.length < 3) {
+      current.examples.push({
+        source: item.source,
+        context: item.context,
+        score: item.score,
+        offset: Number.isFinite(item.offset) ? item.offset : null,
+      });
+    }
     map.set(key, current);
   }
   return [...map.values()].map(v => ({
