@@ -98,6 +98,16 @@ jobs:
             echo "contexts=true" >> "$GITHUB_OUTPUT"
           fi
 
+          # 只有 package/context 变化才需要人类审阅 PR。
+          # 单纯 assetGraphHash 改变表示“上游重新部署了代码，但可翻译语料没变”，
+          # 这类变化仍要把 state 持久化到 bot 分支，避免第二天重复报警，
+          # 但不值得制造一个翻译 PR，更不应该因此触发 action_required 邮件。
+          if git diff --quiet -- src/packages/ src/contexts/; then
+            echo "meaningful=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "meaningful=true" >> "$GITHUB_OUTPUT"
+          fi
+
           if git diff --quiet -- config/obr-upstream-state.json src/packages/ src/contexts/; then
             echo "tracked=false" >> "$GITHUB_OUTPUT"
           else
@@ -148,7 +158,7 @@ jobs:
           git push origin "HEAD:${BOT_BRANCH}"
 
       - name: Create or refresh upstream PR
-        if: steps.changes.outputs.tracked == 'true'
+        if: steps.changes.outputs.meaningful == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
