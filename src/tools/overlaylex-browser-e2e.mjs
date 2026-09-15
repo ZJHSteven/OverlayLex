@@ -120,8 +120,13 @@ async function main() {
   const profileDir = await fs.mkdtemp(path.join(os.tmpdir(), 'overlaylex-e2e-'));
   let context;
   try {
+    // Chromium 扩展测试需要真正的 persistent browser profile。
+    // Playwright 的纯 headless shell 不保证加载 unpacked extension；本机直接使用有界面模式，
+    // Linux CI 则由 xvfb-run 提供虚拟显示。若以后 Chromium 的新 headless 明确稳定支持扩展，
+    // 可以通过环境变量显式打开，而不是默认依赖这一行为。
+    const headless = process.env.OVERLAYLEX_E2E_HEADLESS === '1';
     context = await chromium.launchPersistentContext(profileDir, {
-      headless: true,
+      headless,
       args: [
         `--disable-extensions-except=${EXTENSION_DIR}`,
         `--load-extension=${EXTENSION_DIR}`,
