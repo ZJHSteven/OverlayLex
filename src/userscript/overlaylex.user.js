@@ -826,6 +826,20 @@
   }
 
   /**
+   * 根据变量语义选择捕获范围。
+   *
+   * `count` 是 i18n 体系中约定俗成的计数变量，Smoke 当前也只传整数；限制为数字后，
+   * `({{count}} skipped)({{count}} duplicates removed)` 这类相邻片段不会互相跨界吞噬。
+   * 其它变量（name/token/players/message/*Text）仍允许任意文本，由周围固定字面量负责定界。
+   */
+  function getTemplateCapturePattern(name) {
+    if (String(name).toLowerCase() === "count") {
+      return "(-?\\d+(?:\\.\\d+)?)";
+    }
+    return "([\\s\\S]*?)";
+  }
+
+  /**
    * 将 `Hello {{name}}!` 编译成正则主体 `Hello (.*?)!`。
    * 输入在进入模板匹配前已经通过 normalizeText 压平空白，因此模板本身也先归一化。
    */
@@ -839,8 +853,8 @@
 
     while ((match = placeholderRegex.exec(normalizedSource)) !== null) {
       pattern += escapeRegexLiteral(normalizedSource.slice(cursor, match.index));
-      // 使用非贪婪捕获并允许空值：Smoke 的 `skippedText` / `dedupeText` 就可能为空。
-      pattern += "([\\s\\S]*?)";
+      // `skippedText` / `dedupeText` 等允许空值；count 则使用更严格的数字捕获避免跨片段。
+      pattern += getTemplateCapturePattern(match[1]);
       placeholderNames.push(match[1]);
       cursor = match.index + match[0].length;
     }
