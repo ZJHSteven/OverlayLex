@@ -437,6 +437,9 @@
     packageCache: safeLocalStorageGet(STORAGE_KEYS.PACKAGE_CACHE, {}),
     userSwitches: safeLocalStorageGet(STORAGE_KEYS.USER_SWITCHES, {}),
     translationMap: new Map(),
+    // 动态模板翻译规则单独保存，避免每个普通 literal 都承担正则匹配成本。
+    // 例如："Blocked {{count}} wall(s)." -> "已阻挡 {{count}} 面墙。"
+    templateTranslations: [],
     observer: null,
     isApplyingTranslation: false,
     iframeObserverMap: new WeakMap(),
@@ -601,6 +604,7 @@
 
     const showUpdatingIndicator = Boolean(options.showUpdatingIndicator);
     const nextMap = new Map();
+    const nextTemplateTranslations = [];
     for (const pkgMeta of state.manifest.packages) {
       // 只读取 translation 包，域名包由专门流程处理。
       if (pkgMeta.kind && pkgMeta.kind !== "translation") {
@@ -620,6 +624,21 @@
             continue;
           }
           nextMap.set(sourceText, targetText);
+
+          // 模板规则只有在“原文含命名占位符且译文非空”时才编译。
+          // 空译文仍保留在 literal Map 中，便于后续远端更新；但不会生成无意义模板规则。
+          if (targetText && hasTemplatePlaceholder(sourceText)) {
+            const templateRule = compileTemplateTranslation(sourceText, targetText);
+            if (templateRule) {
+              nextTemplateTranslations.push(templateRule);
+            } else {
+              Logger.warn("模板翻译占位符不一致，已跳过该模板。", {
+                sourceText,
+                targetText,
+                packageId: pkgMeta.id,
+              });
+            }
+          }
         }
       } catch (error) {
         Logger.warn(`加载翻译包失败: ${pkgMeta.id}`, error);
@@ -627,6 +646,9 @@
     }
 
     state.translationMap = nextMap;
+    // 优先匹配“固定文本更多”的模板，降低较宽泛模板提前吞掉更具体模板的概率。
+    nextTemplateTranslations.sort((a, b) => b.specificity - a.specificity || b.source.length - a.source.length);
+    state.templateTranslations = nextTemplateTranslations;
   }
 
   function isPackageTargetMatched(packageData) {
@@ -754,6 +776,187 @@
     return text.replace(/\s+/g, " ").trim();
   }
 
+  // TEMPLATE_TRANSLATION_HELPERS_START
+  // ---------------------------------------------------------------------------
+  // 命名占位符模板翻译（纯函数区）
+  // ---------------------------------------------------------------------------
+  // 这一段刻意保持为“无 DOM / 无 state 依赖”的纯函数，便于 Node 测试直接从
+  // `overlaylex.user.js` 中抽取并执行，确保测试覆盖的就是用户真正安装的运行时代码。
+  const TEMPLATE_PLACEHOLDER_PATTERN = /{{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*}}/g;
+
+  /**
+   * 提取模板中的占位符名称，保留出现顺序与重复次数。
+   * 例如：`{{name}} / {{count}} / {{name}}` -> ["name", "count", "name"]。
+   */
+  function getTemplatePlaceholderNames(text) {
+    const names = [];
+    const regex = new RegExp(TEMPLATE_PLACEHOLDER_PATTERN.source, "g");
+    const source = String(text || "");
+    let match = null;
+    while ((match = regex.exec(source)) !== null) {
+      names.push(match[1]);
+    }
+    return names;
+  }
+
+  function hasTemplatePlaceholder(text) {
+    return getTemplatePlaceholderNames(text).length > 0;
+  }
+
+  /**
+   * 对比原文/译文的占位符“多重集合”。
+   * 不仅要求名称相同，也要求重复次数相同，避免翻译时误删变量。
+   */
+  function haveSameTemplatePlaceholders(sourceNames, targetNames) {
+    if (sourceNames.length !== targetNames.length) {
+      return false;
+    }
+    const sortedSource = [...sourceNames].sort();
+    const sortedTarget = [...targetNames].sort();
+    return sortedSource.every((name, index) => name === sortedTarget[index]);
+  }
+
+  /**
+   * 把普通字符串安全转义成正则字面量。
+   * 模板变量本身稍后再插入捕获组，因此这里绝不能让 `(`、`.`、`?` 等原文符号
+   * 被解释成正则语法。
+   */
+  function escapeRegexLiteral(text) {
+    return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /**
+   * 将 `Hello {{name}}!` 编译成正则主体 `Hello (.*?)!`。
+   * 输入在进入模板匹配前已经通过 normalizeText 压平空白，因此模板本身也先归一化。
+   */
+  function buildTemplateRegex(sourceText) {
+    const normalizedSource = String(sourceText || "").replace(/\s+/g, " ").trim();
+    const placeholderRegex = new RegExp(TEMPLATE_PLACEHOLDER_PATTERN.source, "g");
+    const placeholderNames = [];
+    let cursor = 0;
+    let pattern = "";
+    let match = null;
+
+    while ((match = placeholderRegex.exec(normalizedSource)) !== null) {
+      pattern += escapeRegexLiteral(normalizedSource.slice(cursor, match.index));
+      // 使用非贪婪捕获并允许空值：Smoke 的 `skippedText` / `dedupeText` 就可能为空。
+      pattern += "([\\s\\S]*?)";
+      placeholderNames.push(match[1]);
+      cursor = match.index + match[0].length;
+    }
+    pattern += escapeRegexLiteral(normalizedSource.slice(cursor));
+
+    return {
+      normalizedSource,
+      placeholderNames,
+      pattern,
+    };
+  }
+
+  /**
+   * 编译一条模板翻译。
+   * 若译文丢失/新增占位符，则返回 null，让上层拒绝启用该规则。
+   */
+  function compileTemplateTranslation(sourceText, targetText) {
+    const sourceInfo = buildTemplateRegex(sourceText);
+    if (sourceInfo.placeholderNames.length === 0) {
+      return null;
+    }
+
+    const target = String(targetText || "");
+    const targetNames = getTemplatePlaceholderNames(target);
+    if (!haveSameTemplatePlaceholders(sourceInfo.placeholderNames, targetNames)) {
+      return null;
+    }
+
+    // specificity 只统计固定字面量长度；固定文本越多，模板越具体，匹配优先级越高。
+    const literalOnly = sourceInfo.normalizedSource.replace(new RegExp(TEMPLATE_PLACEHOLDER_PATTERN.source, "g"), "");
+    return {
+      source: sourceInfo.normalizedSource,
+      target,
+      placeholderNames: sourceInfo.placeholderNames,
+      regex: new RegExp(`^${sourceInfo.pattern}$`),
+      fragmentPattern: sourceInfo.pattern,
+      specificity: literalOnly.length,
+    };
+  }
+
+  /**
+   * 根据一条模板规则，把捕获值填回目标译文。
+   * 同名变量重复出现时复用第一次捕获值，避免同一变量前后被替换成不同内容。
+   */
+  function renderTemplateTranslation(rule, capturedValues) {
+    const valueByName = new Map();
+    rule.placeholderNames.forEach((name, index) => {
+      if (!valueByName.has(name)) {
+        valueByName.set(name, String(capturedValues[index] ?? ""));
+      }
+    });
+
+    return rule.target.replace(new RegExp(TEMPLATE_PLACEHOLDER_PATTERN.source, "g"), (fullMatch, name) => {
+      return valueByName.has(name) ? valueByName.get(name) : fullMatch;
+    });
+  }
+
+  /**
+   * 翻译一个动态文本片段内部出现的子模板。
+   *
+   * Smoke 的转换结果会把 `{{skippedText}}{{dedupeText}}` 两个模板结果拼到主句尾部。
+   * 主句正则无法可靠推断两个相邻变量之间的边界，因此先把整个动态片段作为原值保留，
+   * 再用所有模板规则在片段内部做一次有界替换，就能把 `(2 skipped)`、
+   * `(1 duplicates removed)` 等子模板继续翻译成中文。
+   */
+  function translateTemplateFragments(text, rules, depth = 0) {
+    if (!text || depth > 2) {
+      return String(text || "");
+    }
+
+    let output = String(text);
+    for (const rule of rules) {
+      // 没有固定字面量的纯变量模板会匹配任意字符串，不允许拿来做片段替换。
+      if (rule.specificity <= 0) {
+        continue;
+      }
+      const fragmentRegex = new RegExp(rule.fragmentPattern, "g");
+      output = output.replace(fragmentRegex, (...args) => {
+        const captures = args.slice(1, 1 + rule.placeholderNames.length);
+        const translatedCaptures = captures.map((value, index) => {
+          const name = rule.placeholderNames[index];
+          // `*Text` 是作者已经拼好的可显示文本片段；允许递归翻译其内部子模板。
+          // count/name/token/players/message 等业务值保持原样，避免误翻用户名称和报错参数。
+          return /Text$/i.test(name)
+            ? translateTemplateFragments(String(value ?? ""), rules, depth + 1)
+            : String(value ?? "");
+        });
+        return renderTemplateTranslation(rule, translatedCaptures);
+      });
+    }
+    return output;
+  }
+
+  /**
+   * 尝试把一段已经 normalize 的页面文本匹配到模板译文。
+   * literal 精确匹配永远在它之前执行，因此这里只处理普通 Map 没命中的动态文案。
+   */
+  function translateByTemplateRules(normalizedText, rules) {
+    for (const rule of rules) {
+      const match = rule.regex.exec(normalizedText);
+      if (!match) {
+        continue;
+      }
+      const captures = match.slice(1, 1 + rule.placeholderNames.length);
+      const translatedCaptures = captures.map((value, index) => {
+        const name = rule.placeholderNames[index];
+        return /Text$/i.test(name)
+          ? translateTemplateFragments(String(value ?? ""), rules, 1)
+          : String(value ?? "");
+      });
+      return renderTemplateTranslation(rule, translatedCaptures);
+    }
+    return null;
+  }
+  // TEMPLATE_TRANSLATION_HELPERS_END
+
   function translateByMap(rawText) {
     const directHit = state.translationMap.get(rawText);
     if (typeof directHit === "string") {
@@ -762,13 +965,19 @@
 
     const normalized = normalizeText(rawText);
     const normalizedHit = state.translationMap.get(normalized);
-    if (typeof normalizedHit !== "string") {
+    let translated = typeof normalizedHit === "string" ? normalizedHit : null;
+
+    // 精确字符串未命中时，才进入模板规则；普通页面绝大多数文本仍保持 Map O(1) 路径。
+    if (translated === null && state.templateTranslations.length > 0) {
+      translated = translateByTemplateRules(normalized, state.templateTranslations);
+    }
+    if (typeof translated !== "string") {
       return null;
     }
 
     const leadingSpaces = rawText.match(/^\s*/)?.[0] ?? "";
     const trailingSpaces = rawText.match(/\s*$/)?.[0] ?? "";
-    return `${leadingSpaces}${normalizedHit}${trailingSpaces}`;
+    return `${leadingSpaces}${translated}${trailingSpaces}`;
   }
 
   function canProcessTextNode(textNode) {
@@ -848,7 +1057,7 @@
   }
 
   function translateSubtree(rootNode) {
-    if (!rootNode || state.translationMap.size === 0) {
+    if (!rootNode || (state.translationMap.size === 0 && state.templateTranslations.length === 0)) {
       return 0;
     }
 
