@@ -116,6 +116,8 @@ async function main() {
     </main>`;
   const clashFixture = `<!doctype html><meta charset="utf-8"><title>Clash E2E</title>
     <main><p id="loading">Loading...</p><p id="settings">Settings</p></main>`;
+  const seedFixture = `<!doctype html><meta charset="utf-8"><title>OverlayLex Seed E2E</title>
+    <main><p>OverlayLex cold-start seed page</p></main>`;
 
   const profileDir = await fs.mkdtemp(path.join(os.tmpdir(), 'overlaylex-e2e-'));
   let context;
@@ -156,6 +158,18 @@ async function main() {
       contentType: 'text/html; charset=utf-8',
       body: clashFixture,
     }));
+
+    await context.route('https://www.owlbear.rodeo/e2e-overlaylex', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: seedFixture,
+    }));
+
+    // OverlayLex 的本地 seeds 有意只保留 Owlbear 主域。全新 profile 先访问 seed，
+    // 让远端 allowlist 写入扩展共享 storage；之后 Smoke / Clash iframe 域才按真实用户路径放行。
+    const seedPage = await context.newPage();
+    await seedPage.goto('https://www.owlbear.rodeo/e2e-overlaylex', { waitUntil: 'domcontentloaded' });
+    await seedPage.locator('.overlaylex-ball').waitFor({ state: 'attached', timeout: 12000 });
 
     const smokePage = await context.newPage();
     await smokePage.goto('https://smoke.battle-system.com/e2e-overlaylex', { waitUntil: 'domcontentloaded' });
