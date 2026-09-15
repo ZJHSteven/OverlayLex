@@ -129,6 +129,10 @@ async function main() {
     context = await chromium.launchPersistentContext(profileDir, {
       headless,
       executablePath,
+      // Playwright 为普通页面测试默认追加 `--disable-extensions`；
+      // 若不显式移除，它会覆盖后面的 load-extension 参数，导致 E2E 看似在测扩展，
+      // 实际浏览器根本没有装入 OverlayLex。
+      ignoreDefaultArgs: ['--disable-extensions'],
       args: [
         `--disable-extensions-except=${EXTENSION_DIR}`,
         `--load-extension=${EXTENSION_DIR}`,
