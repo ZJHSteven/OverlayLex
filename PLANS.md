@@ -271,9 +271,9 @@
 
 ## 当前执行状态（2026-09-16）
 - [x] Step 0: 本地 `main` 已 fast-forward 到 Harvester 合并提交 `59beefa`；仅 `5etool.csv` 保持未跟踪。
-- [ ] Step 1: 分类新增 original 与来源/模板。
-- [ ] Step 2: 实现并测试模板翻译运行时。
-- [ ] Step 3: 上下文 sidecar 与 ParaTranz context。
-- [ ] Step 4: 当前 Agent 逐条人工初译。
-- [ ] Step 5: ParaTranz 写回与回读校验。
-- [ ] Step 6: 自动回拉/PR 语义收敛与文档更新。
+- [x] Step 1: 261 条新增 original 完成分类；其中 17 条为命名占位符模板，主语料来源关系为 i18n 250 / SDK 42 / clean Mock DOM 69，DOM 69 条全部被 i18n 覆盖，SDK 仍补充约 39 条宿主 UI。
+- [x] Step 2: 已实现模板翻译运行时并通过 5/5 专项回归；UserScript 重新构建成功。
+- [x] Step 3: 已生成 289 条 context sidecar，并把 richer context 刷新到 ParaTranz；典型词可看到 i18n key、SDK API/path、Mock 页面与源码示例。
+- [x] Step 4: 当前 Agent 已逐条人工完成 261 条初译，不调用外部机器翻译服务；人工批次文件已落仓并通过一一对应/占位符校验。
+- [x] Step 5: ParaTranz 写回成功并回读校验：589/589 均有译文，旧 328 条 0 变化，新 261 条与人工批次 0 差异，17 个模板 0 占位符错误。
+- [x] Step 6: 已明确两类 PR 职责，并把 ParaTranz 回拉从每日改为每小时第 43 分钟；待功能分支进入 main 后手动触发一次回拉 PR 与最终 CI/发布回归。

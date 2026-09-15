@@ -2,7 +2,9 @@ name: paratranz-sync-pr
 
 on:
   schedule:
-    - cron: "15 2 * * *"
+    # 每小时第 43 分钟检查一次。避开 OBR Upstream Watch 的 01:17 UTC，
+    # 让 ParaTranz 新译文通常在一小时内进入 GitHub 回拉 PR，而不是等到第二天。
+    - cron: "43 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -77,6 +79,7 @@ jobs:
             - 来源：ParaTranz 项目 `${{ secrets.PARATRANZ_PROJECT_ID }}`
             - 范围：`src/packages/*.json`
             - 规则：有变化才提交，无变化自动跳过
+            - 职责：这是“译文真源 -> GitHub”的回拉 PR；与 OBR Harvester 的“上游 original/context -> GitHub”审计 PR 分工不同
 
             如需发版，请先合并该 PR，再推送到 `release` 分支。
           add-paths: |

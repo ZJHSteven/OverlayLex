@@ -16,6 +16,8 @@
 - 2026-09-16 复核 261 条待译原文后确认其中有 17 条 `{{name}}` / `{{count}}` 等作者 i18n 模板；旧运行时只做精确字符串匹配，模板原文即使翻译也无法命中渲染后的动态文本。已新增最小模板运行时：literal Map 仍优先 O(1) 命中，失败后才尝试已编译模板；原文/译文占位符多重集合必须完全一致，并支持 `skippedText` / `dedupeText` 这类嵌套动态片段继续翻译。
 - 模板回归测试首次发现相邻 `skippedText` / `dedupeText` 子模板会被通用非贪婪捕获跨段吞噬；已把语义明确的 `count` 收紧为数字捕获，其余业务变量仍保持通用文本捕获，避免为 Smoke 写硬编码特例。
 - Harvester 上下文链开始正式落地：merge 阶段生成独立 `context-sidecar.json`，记录每条主语料的 literal/template 类型、占位符、i18n key、生产 bundle 来源、OBR SDK message/path、Mock 页面与精简源码上下文；watcher 可把 sidecar 写入 `src/contexts/`，而 `overlaylex-i18n-flow` 会据此生成更有语义的 ParaTranz context，运行时 package 本身不增加这些维护信息。
+- Smoke 5.0.3 新增 261 条已由当前 Agent 依据上述上下文逐条人工初译，审译批次记录在 `src/reviews/obr-smoke-battle-system-com.manual-zh-CN.json`；程序校验确认 261/261 精确覆盖空白 original、0 多余、0 空译文、17 条模板占位符多重集合全部一致。译文已通过 ParaTranz `updateFileTranslation(force=false)` 写入项目 17950，远端返回 `update=261`、`translated=589/589`、`reviewed=0`、`checked=0`；二次回读确认旧 328 条译文 0 改动、新 261 条与人工批次 0 差异。
+- ParaTranz 自动回拉仍使用独立 `bot/paratranz-sync` PR；其职责是把“翻译真源”回写 GitHub。与之相对，`bot/obr-upstream-watch` PR 负责记录“上游 original / context / corpus 基线”。为接近“翻完就拉”，ParaTranz 回拉频率从每日一次提高到每小时第 43 分钟，有变化才更新 PR、无变化静默退出。
 - 新增每日 `OBR Upstream Watch`：北京时间 09:17 自动运行；上游变化时用大小写敏感 JS Set 合并新 original，先即时推送 ParaTranz，再把 package/state 提交到持久 bot 分支并开 PR。状态哈希不记录每日检查时间，避免无变化时制造 PR；Harvester 资源图新增每个文本资源的 SHA-256，避免漏掉“同 URL/同大小但内容改变”的部署。
 - 每日 watcher 本机已连续执行两轮：首轮建立 Smoke 5.0.3 的 `manifestVersion + assetGraphHash + corpusHash` 基线，且 package 无新增；第二轮稳定得到 `changed=false / newHighConfidence=0`，Git 工作区保持干净，验证“无上游变化不产生每日空 PR”。
 - Windows 管道曾暴露一个重要边界：PowerShell `Sort-Object -Unique` 与 `ConvertFrom-Json` 都会把大小写不同的 JSON key 视为冲突/重复，曾暂时漏掉 1 条 original。现已明确规定上游词条链只用 JavaScript `Set` 做大小写敏感去重，并补单元测试防止回归；ParaTranz 二次回读已确认两个大小写变体分别存在。
