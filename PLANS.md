@@ -240,3 +240,40 @@
 - [x] Step 2: 已落地每日巡检 watcher/workflow；本地连续两轮验证通过，第二轮 `changed=false / newHighConfidence=0` 且工作区零变化，待 push 后由 GitHub Actions 做 Linux 终验。
 - [x] Step 3: 实时重跑发现生产版已更新到 Smoke 5.0.3；过滤 3 条 Mock fixture 动态污染后得到 289 条主语料，其中 261 条旧包未覆盖。261 条已全部合并进 Smoke package 并真实推送 ParaTranz。
 - [x] Step 4: ParaTranz 回读确认 Smoke 文件现有 589 条：328 条已有译文保持不变，261 条新 original 处于待翻译状态；大小写不同的 `Ignore hidden tokens` / `Ignore Hidden Tokens` 均独立存在。
+
+---
+
+## 任务：Smoke 5.0.3 人工初译 + 模板翻译 + ParaTranz 上下文完善（2026-09-16）
+
+1. 重新分类 261 条新增 original
+- 目标：逐条区分 `literal`、`template`（如 `{{count}}`）与异常/不可运行时命中的候选，不把作者 i18n 模板误当普通精确匹配词条。
+- 验收：得到大小写敏感、可审计的分类清单，并统计 i18n / SDK / DOM 来源与模板数量。
+
+2. 给 OverlayLex 增加最小模板翻译能力
+- 目标：在不破坏现有精确字符串匹配的前提下，支持 `{{name}}` / `{{count}}` 等命名占位符；译文必须完整保留原文占位符集合。
+- 验收：literal 仍走 O(1) 精确表；template 仅在 literal 未命中时尝试；包含正则特殊字符、重复占位符、多占位符、数字/任意文本等边界测试全部通过。
+
+3. 生成并保存 Harvester 上下文 sidecar
+- 目标：为每个 original 保存来源（i18n / sdk-registration / mock-dom）、i18n key 或 SDK message 类型、页面/导航状态、源码/DOM 示例等翻译上下文。
+- 验收：运行时 package 仍保持轻量；ParaTranz 上传时把 sidecar 的人类可读摘要写入词条 context，避免翻译者靠猜。
+
+4. 由当前 Agent 逐条人工翻译新增词条
+- 目标：不调用外部机器翻译服务；由当前 Agent 根据英文、来源和上下文逐条给出中文初译，template 译文严格保留占位符。
+- 验收：261 条新增 original 均有人工初译或被明确标记为不可直接运行时匹配；术语尽量复用现有 5etool/项目术语与旧 Smoke 译风。
+
+5. 写回 ParaTranz 并回读校验
+- 目标：通过 ParaTranz API 更新对应词条译文和状态；回读确认译文、大小写变体、占位符集合、context 均正确。
+- 验收：所有可翻译新增项不再处于空白状态；模板占位符校验 100% 通过；不覆盖旧 328 条已翻译内容。
+
+6. 收敛自动回拉与 PR 语义
+- 目标：确认现有 ParaTranz 自动回拉仍正常；把“上游 original PR”和“ParaTranz 译文回拉 PR”的职责在文档中明确分开，必要时把回拉频率提高到更及时的轮询。
+- 验收：自动回拉 workflow 可手动/定时运行并在有译文变化时生成 bot PR；无变化时静默退出。
+
+## 当前执行状态（2026-09-16）
+- [x] Step 0: 本地 `main` 已 fast-forward 到 Harvester 合并提交 `59beefa`；仅 `5etool.csv` 保持未跟踪。
+- [ ] Step 1: 分类新增 original 与来源/模板。
+- [ ] Step 2: 实现并测试模板翻译运行时。
+- [ ] Step 3: 上下文 sidecar 与 ParaTranz context。
+- [ ] Step 4: 当前 Agent 逐条人工初译。
+- [ ] Step 5: ParaTranz 写回与回读校验。
+- [ ] Step 6: 自动回拉/PR 语义收敛与文档更新。
