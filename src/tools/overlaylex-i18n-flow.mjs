@@ -565,31 +565,22 @@ function compactContextValue(value, limit = 180) {
 
 function createParatranzContextString(packageData, originalText, sidecar) {
   const hosts = getTargetHosts(packageData.target);
-  const fields = [
-    `packageId=${packageData.id || ""}`,
-    `hosts=${hosts.join(",")}`,
-    `pathPrefix=${packageData?.target?.pathPrefix || "/"}`,
-  ];
   const context = sidecar?.entries?.[originalText];
-  if (!context || typeof context !== "object") {
-    return fields.join("; ");
+  // ParaTranz 的 context 首先是给“翻译人员”看的，而不是给程序调试用的。
+  // Harvester sidecar 仍完整保存 i18n key、SDK messageId、bundle source 等技术元数据，
+  // 但默认上传到 ParaTranz 的只是一段自然语言说明：出现位置、相邻文案、变量含义。
+  // 这样跑团玩家无需理解源码结构也能判断词义。
+  const translatorContext = String(context?.translatorContext || "").trim();
+  if (translatorContext) {
+    return translatorContext;
   }
 
-  if (context.kind) fields.push(`kind=${context.kind}`);
-  if (Array.isArray(context.origins) && context.origins.length > 0) fields.push(`origin=${context.origins.join(",")}`);
-  if (Array.isArray(context.placeholders) && context.placeholders.length > 0) fields.push(`placeholders=${context.placeholders.join(",")}`);
-  if (Array.isArray(context.i18nKeys) && context.i18nKeys.length > 0) fields.push(`i18nKey=${context.i18nKeys.join(",")}`);
-  if (Array.isArray(context.sdk) && context.sdk.length > 0) {
-    fields.push(`sdk=${context.sdk.map(item => `${item.messageId || ""}:${item.path || ""}`).join(",")}`);
+  // 其它尚未接入 Harvester sidecar 的老包也避免回退到 `key=value; key=value`
+  // 这种开发日志式文本；至少用自然语言告诉翻译者这条文案属于哪个站点。
+  if (hosts.length > 0) {
+    return `适用位置：${hosts.join("、")} 的 OverlayLex 汉化界面。`;
   }
-  if (Array.isArray(context.mockPages) && context.mockPages.length > 0) fields.push(`pages=${context.mockPages.join(",")}`);
-  if (Array.isArray(context.sources) && context.sources.length > 0) {
-    const names = context.sources.map(source => path.basename(new URL(source).pathname)).filter(Boolean);
-    if (names.length > 0) fields.push(`source=${names.join(",")}`);
-  }
-  const example = context.examples?.[0]?.context;
-  if (example) fields.push(`example=${compactContextValue(example, 220)}`);
-  return fields.join("; ");
+  return "OverlayLex 汉化词条；当前尚未采集到更具体的界面上下文。";
 }
 
 function createParatranzRowsFromPackage(packageData) {
