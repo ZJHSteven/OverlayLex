@@ -120,24 +120,22 @@ async function main() {
   const profileDir = await fs.mkdtemp(path.join(os.tmpdir(), 'overlaylex-e2e-'));
   let context;
   try {
-    // Chromium 扩展测试需要真正的 persistent browser profile。
-    // Playwright 的纯 headless shell 不保证加载 unpacked extension；本机直接使用有界面模式，
-    // Linux CI 则由 xvfb-run 提供虚拟显示。若以后 Chromium 的新 headless 明确稳定支持扩展，
-    // 可以通过环境变量显式打开，而不是默认依赖这一行为。
-    const headless = process.env.OVERLAYLEX_E2E_HEADLESS === '1';
+    // Playwright 官方要求扩展测试使用 persistent context，并推荐 `channel: chromium`。
+    // 这个 channel 使用完整 Chromium 的新 headless 路径，能够加载 unpacked extension；
+    // 普通默认 headless shell 则不保证扩展能力。需要现场观察时可设 OVERLAYLEX_E2E_HEADED=1。
+    const headless = process.env.OVERLAYLEX_E2E_HEADED !== '1';
     const executablePath = String(process.env.OVERLAYLEX_E2E_CHROMIUM || '').trim() || undefined;
-    context = await chromium.launchPersistentContext(profileDir, {
+    const launchOptions = {
       headless,
-      executablePath,
-      // Playwright 为普通页面测试默认追加 `--disable-extensions`；
-      // 若不显式移除，它会覆盖后面的 load-extension 参数，导致 E2E 看似在测扩展，
-      // 实际浏览器根本没有装入 OverlayLex。
-      ignoreDefaultArgs: ['--disable-extensions'],
+      // `channel: chromium` 是 Playwright 文档明确给出的扩展测试方式；它和自定义
+      // executablePath 二选一。后者只保留给本机故障诊断，不作为 CI 默认路径。
+      ...(executablePath ? { executablePath } : { channel: 'chromium' }),
       args: [
         `--disable-extensions-except=${EXTENSION_DIR}`,
         `--load-extension=${EXTENSION_DIR}`,
       ],
-    });
+    };
+    context = await chromium.launchPersistentContext(profileDir, launchOptions);
 
     await context.route('https://overlaylex-api.zjhstudio.com/**', async route => {
       const url = new URL(route.request().url());
