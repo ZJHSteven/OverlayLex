@@ -125,8 +125,10 @@ async function main() {
     // Linux CI 则由 xvfb-run 提供虚拟显示。若以后 Chromium 的新 headless 明确稳定支持扩展，
     // 可以通过环境变量显式打开，而不是默认依赖这一行为。
     const headless = process.env.OVERLAYLEX_E2E_HEADLESS === '1';
+    const executablePath = String(process.env.OVERLAYLEX_E2E_CHROMIUM || '').trim() || undefined;
     context = await chromium.launchPersistentContext(profileDir, {
       headless,
+      executablePath,
       args: [
         `--disable-extensions-except=${EXTENSION_DIR}`,
         `--load-extension=${EXTENSION_DIR}`,
