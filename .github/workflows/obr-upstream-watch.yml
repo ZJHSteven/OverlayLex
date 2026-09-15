@@ -92,14 +92,20 @@ jobs:
             echo "packages=true" >> "$GITHUB_OUTPUT"
           fi
 
-          if git diff --quiet -- config/obr-upstream-state.json src/packages/; then
+          if git diff --quiet -- src/contexts/; then
+            echo "contexts=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "contexts=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if git diff --quiet -- config/obr-upstream-state.json src/packages/ src/contexts/; then
             echo "tracked=false" >> "$GITHUB_OUTPUT"
           else
             echo "tracked=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate ParaTranz credentials
-        if: steps.changes.outputs.packages == 'true'
+        if: steps.changes.outputs.packages == 'true' || steps.changes.outputs.contexts == 'true'
         shell: bash
         run: |
           if [ -z "${PARATRANZ_TOKEN}" ]; then
@@ -119,13 +125,25 @@ jobs:
             --project-id "${PROJECT_ID}"
           git reset HEAD -- src/packages/
 
+      - name: Refresh ParaTranz context when only sidecar changed
+        if: steps.changes.outputs.contexts == 'true' && steps.changes.outputs.packages != 'true'
+        shell: bash
+        run: |
+          PROJECT_ID="${PARATRANZ_PROJECT_ID:-17950}"
+          while IFS= read -r context_file; do
+            package_id="$(basename "${context_file}" .json)"
+            node src/tools/overlaylex-i18n-flow.mjs push-paratranz \
+              --package-id "${package_id}" \
+              --project-id "${PROJECT_ID}"
+          done < <(git diff --name-only -- src/contexts/)
+
       - name: Commit tracked upstream baseline and originals
         if: steps.changes.outputs.tracked == 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config/obr-upstream-state.json src/packages/
+          git add config/obr-upstream-state.json src/packages/ src/contexts/
           git commit -m "chore(i18n): refresh OBR upstream strings"
           git push origin "HEAD:${BOT_BRANCH}"
 
@@ -144,6 +162,9 @@ jobs:
           - manifest / production bundle 静态分析；
           - Fake OBR Host 截获的 SDK 注册 UI；
           - Playwright DOM / ARIA / open Shadow DOM 运行时采样。
+
+          PR 同时保存 Harvester 上下文 sidecar，记录 i18n key、SDK 注册位置与 Mock 页面位置；
+          ParaTranz 的 context 字段会由该 sidecar 自动生成，方便审译时判断词义。
 
           新增 original 已在本次 Action 中先行推送 ParaTranz，翻译人员无需等待 PR 合并即可开工。
           本流程只新增 original，不自动删除旧词，也不覆盖现有译文。

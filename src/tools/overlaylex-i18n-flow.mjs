@@ -33,6 +33,7 @@ const CURRENT_FILE = fileURLToPath(import.meta.url);
 const CURRENT_DIR = path.dirname(CURRENT_FILE);
 const REPO_ROOT = path.resolve(CURRENT_DIR, "..", "..");
 const DEFAULT_CONFIG_PATH = path.resolve(REPO_ROOT, "config", "overlaylex-i18n.config.json");
+const CONTEXT_SIDECAR_DIR = path.resolve(REPO_ROOT, "src", "contexts");
 
 /**
  * DEFAULT_CONFIG:
@@ -113,6 +114,7 @@ function printHelp() {
   --base-ref <ref>        git 比较基线（push-paratranz / bump-release-version）
   --changed-only          仅处理变更包（push-paratranz）
   --staged-only           仅处理暂存区中的翻译包（push-paratranz）
+  --package-id <id>       仅推送指定翻译包（push-paratranz，可用于只刷新 context）
   --commit-staged         推送前自动执行 git commit（仅 push-paratranz + --staged-only）
   --commit-message <msg>  自定义自动提交信息（push-paratranz + --commit-staged）
   --write                 将版本递增写回文件（bump-release-version）
@@ -542,16 +544,59 @@ function commitStagedFilesForI18nSync(stagedFiles, packageIds, customMessage = "
   };
 }
 
-function createParatranzRowsFromPackage(packageData) {
-  const translations = packageData.translations || {};
-  const originalList = Object.keys(translations).sort((a, b) => a.localeCompare(b, "en"));
+function loadPackageContextSidecar(packageData) {
+  const packageId = String(packageData?.id || "").trim();
+  if (!packageId) return null;
+  const sidecarPath = path.join(CONTEXT_SIDECAR_DIR, `${packageId}.json`);
+  if (!fs.existsSync(sidecarPath)) return null;
+  try {
+    const sidecar = readJsonFile(sidecarPath);
+    return sidecar && typeof sidecar === "object" ? sidecar : null;
+  } catch (error) {
+    logWarn("读取翻译上下文 sidecar 失败，已回退基础 context：", `${relativeToRepo(sidecarPath)} | ${error.message}`);
+    return null;
+  }
+}
+
+function compactContextValue(value, limit = 180) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
+}
+
+function createParatranzContextString(packageData, originalText, sidecar) {
   const hosts = getTargetHosts(packageData.target);
-  const hostForKey = getPrimaryHost(packageData.target);
-  const contextString = [
+  const fields = [
     `packageId=${packageData.id || ""}`,
     `hosts=${hosts.join(",")}`,
     `pathPrefix=${packageData?.target?.pathPrefix || "/"}`,
-  ].join("; ");
+  ];
+  const context = sidecar?.entries?.[originalText];
+  if (!context || typeof context !== "object") {
+    return fields.join("; ");
+  }
+
+  if (context.kind) fields.push(`kind=${context.kind}`);
+  if (Array.isArray(context.origins) && context.origins.length > 0) fields.push(`origin=${context.origins.join(",")}`);
+  if (Array.isArray(context.placeholders) && context.placeholders.length > 0) fields.push(`placeholders=${context.placeholders.join(",")}`);
+  if (Array.isArray(context.i18nKeys) && context.i18nKeys.length > 0) fields.push(`i18nKey=${context.i18nKeys.join(",")}`);
+  if (Array.isArray(context.sdk) && context.sdk.length > 0) {
+    fields.push(`sdk=${context.sdk.map(item => `${item.messageId || ""}:${item.path || ""}`).join(",")}`);
+  }
+  if (Array.isArray(context.mockPages) && context.mockPages.length > 0) fields.push(`pages=${context.mockPages.join(",")}`);
+  if (Array.isArray(context.sources) && context.sources.length > 0) {
+    const names = context.sources.map(source => path.basename(new URL(source).pathname)).filter(Boolean);
+    if (names.length > 0) fields.push(`source=${names.join(",")}`);
+  }
+  const example = context.examples?.[0]?.context;
+  if (example) fields.push(`example=${compactContextValue(example, 220)}`);
+  return fields.join("; ");
+}
+
+function createParatranzRowsFromPackage(packageData) {
+  const translations = packageData.translations || {};
+  const originalList = Object.keys(translations).sort((a, b) => a.localeCompare(b, "en"));
+  const hostForKey = getPrimaryHost(packageData.target);
+  const sidecar = loadPackageContextSidecar(packageData);
 
   const rows = [];
   for (const originalText of originalList) {
@@ -560,7 +605,7 @@ function createParatranzRowsFromPackage(packageData) {
       key: `${hostForKey}::${sha1Hex(originalText)}`,
       original: originalText,
       translation: translationText,
-      context: contextString,
+      context: createParatranzContextString(packageData, originalText, sidecar),
     });
   }
   return rows;
@@ -1029,6 +1074,7 @@ async function commandPushParatranz(config, options) {
   const packagesDir = resolvePathFromRepo(config.packagesDir);
   const changedOnly = Boolean(options["changed-only"]);
   const stagedOnly = Boolean(options["staged-only"]);
+  const packageId = String(options["package-id"] || "").trim();
   const commitStaged = Boolean(options["commit-staged"]);
   const commitMessage = String(options["commit-message"] || "").trim();
   const baseRef = String(options["base-ref"] || "").trim();
@@ -1040,8 +1086,9 @@ async function commandPushParatranz(config, options) {
   if (!token) {
     throw new Error(`push-paratranz 缺少 Token，请设置环境变量 ${tokenEnvName}。`);
   }
-  if (changedOnly && stagedOnly) {
-    throw new Error("push-paratranz 参数冲突：--changed-only 与 --staged-only 不能同时使用。");
+  const selectionModeCount = [changedOnly, stagedOnly, Boolean(packageId)].filter(Boolean).length;
+  if (selectionModeCount > 1) {
+    throw new Error("push-paratranz 参数冲突：--changed-only / --staged-only / --package-id 只能选择一种筛选方式。");
   }
   if (commitStaged && !stagedOnly) {
     throw new Error("push-paratranz --commit-staged 仅可与 --staged-only 同时使用。");
@@ -1072,6 +1119,11 @@ async function commandPushParatranz(config, options) {
     }
     const changedFiles = new Set(getChangedPackageFiles(packagesDir, baseRef).map((filePath) => path.resolve(filePath)));
     targetRecords = allRecords.filter((record) => changedFiles.has(path.resolve(record.absolutePath)));
+  } else if (packageId) {
+    targetRecords = allRecords.filter((record) => String(record.data?.id || "") === packageId);
+    if (targetRecords.length === 0) {
+      throw new Error(`push-paratranz 找不到指定包：${packageId}`);
+    }
   }
 
   if (targetRecords.length === 0) {

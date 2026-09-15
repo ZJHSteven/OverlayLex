@@ -79,6 +79,20 @@ async function writeJson(filePath, value) {
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+async function writeJsonIfChanged(filePath, value) {
+  const nextText = `${JSON.stringify(value, null, 2)}\n`;
+  let previousText = '';
+  try {
+    previousText = await fs.readFile(filePath, 'utf8');
+  } catch {
+    previousText = '';
+  }
+  if (previousText === nextText) return false;
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, nextText, 'utf8');
+  return true;
+}
+
 function hashJson(value) {
   return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
@@ -218,6 +232,7 @@ async function runTarget(target, options, state) {
   const highConfidenceRows = await readJson(path.join(mergedDir, 'high-confidence.json'), []);
   const newRows = await readJson(path.join(mergedDir, 'new-high-confidence.json'), []);
   const mergeReport = await readJson(path.join(mergedDir, 'report.json'), {});
+  const contextSidecar = await readJson(path.join(mergedDir, 'context-sidecar.json'), null);
   const newOriginals = uniqueOriginals(newRows);
 
   // collector 输入严格使用 JS Set 生成，避免 PowerShell 大小写不敏感去重造成丢词。
@@ -231,6 +246,11 @@ async function runTarget(target, options, state) {
       'merge-collected',
       '--input', collectorPath
     ]);
+  }
+
+  let contextSidecarChanged = false;
+  if (options.applyPackages && target.contextSidecar && contextSidecar) {
+    contextSidecarChanged = await writeJsonIfChanged(target.contextSidecar, contextSidecar);
   }
 
   const current = {
@@ -258,6 +278,7 @@ async function runTarget(target, options, state) {
     current,
     upstreamChanged,
     newHighConfidence: newOriginals.length,
+    contextSidecarChanged,
     mergeReport
   };
   await writeJson(path.join(targetOut, 'summary.json'), summary);

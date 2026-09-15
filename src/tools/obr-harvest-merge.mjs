@@ -90,6 +90,111 @@ function setStats(a, b) {
   return n;
 }
 
+const TEMPLATE_PLACEHOLDER_PATTERN = /{{\s*([A-Za-z_][A-Za-z0-9_.-]*)\s*}}/g;
+
+function getTemplatePlaceholders(text) {
+  return [...String(text || '').matchAll(new RegExp(TEMPLATE_PLACEHOLDER_PATTERN.source, 'g'))]
+    .map(match => match[1]);
+}
+
+/**
+ * 从生产 bundle 的 i18n 对象上下文里恢复作者原始 key。
+ * 例如：`"settings.defaultVisionRange":`Default Vision Range``
+ * 会得到 `settings.defaultVisionRange`，这对翻译者理解语义非常有帮助。
+ */
+function extractCatalogKeys(candidate, text) {
+  const keys = new Set();
+  for (const example of candidate?.examples || []) {
+    if (classifySource(example.source) !== 'english-catalog') continue;
+    const context = String(example.context || '');
+    let from = 0;
+    while (from < context.length) {
+      const index = context.indexOf(text, from);
+      if (index < 0) break;
+      const before = context.slice(Math.max(0, index - 220), index);
+      const matched = before.match(/(?:(?:"([^"\n]{1,180})"|'([^'\n]{1,180})')|([A-Za-z_$][\w$.-]{0,180}))\s*:\s*[`"']\s*$/);
+      const key = matched?.[1] || matched?.[2] || matched?.[3] || '';
+      if (key) keys.add(key);
+      from = index + Math.max(1, text.length);
+    }
+  }
+  return [...keys].sort();
+}
+
+function compactSourceExample(example) {
+  const context = normalize(example?.context || '');
+  return {
+    source: String(example?.source || ''),
+    // 只保留翻译判断所需的一小段上下文，避免 sidecar 变成生产 bundle 的复制品。
+    context: context.length > 420 ? `${context.slice(0, 417)}...` : context
+  };
+}
+
+/**
+ * 生成“只给维护/翻译流程使用”的上下文 sidecar。
+ * 它不会进入浏览器运行时翻译包，因此可以保存 i18n key、SDK API、页面位置等诊断信息。
+ */
+function buildContextSidecar({ primaryRows, candidates, sdkRows, mockReport, existingPackage, staticReport }) {
+  const candidateByText = new Map(candidates.map(candidate => [normalize(candidate.text), candidate]));
+  const sdkByText = new Map();
+  for (const row of sdkRows || []) {
+    const text = normalize(row?.text);
+    if (!text) continue;
+    const list = sdkByText.get(text) || [];
+    list.push({
+      messageId: String(row?.messageId || ''),
+      path: String(row?.path || '')
+    });
+    sdkByText.set(text, list);
+  }
+
+  const mockPagesByText = new Map();
+  for (const snapshot of mockReport?.navigation?.snapshots || []) {
+    const pageName = String(snapshot?.name || '');
+    for (const rawText of snapshot?.uiStrings || []) {
+      const text = normalize(rawText);
+      if (!text) continue;
+      const pages = mockPagesByText.get(text) || new Set();
+      if (pageName) pages.add(pageName);
+      mockPagesByText.set(text, pages);
+    }
+  }
+
+  const entries = {};
+  for (const row of primaryRows) {
+    const text = row.text;
+    const candidate = candidateByText.get(text);
+    const placeholders = getTemplatePlaceholders(text);
+    const sources = [...new Set(candidate?.sources || [])]
+      .filter(source => !['vendor', 'foreign-locale'].includes(classifySource(source)))
+      .sort();
+    const examples = (candidate?.examples || [])
+      .filter(example => !['vendor', 'foreign-locale'].includes(classifySource(example.source)))
+      .slice(0, 2)
+      .map(compactSourceExample);
+    const sdk = sdkByText.get(text) || [];
+    const mockPages = [...(mockPagesByText.get(text) || new Set())].sort();
+
+    entries[text] = {
+      kind: placeholders.length > 0 ? 'template' : 'literal',
+      placeholders,
+      origins: [...row.origins],
+      i18nKeys: extractCatalogKeys(candidate, text),
+      sdk,
+      mockPages,
+      sources,
+      examples
+    };
+  }
+
+  return {
+    schemaVersion: 1,
+    packageId: String(existingPackage?.id || ''),
+    manifestVersion: String(staticReport?.manifest?.version || ''),
+    entries
+  };
+}
+
 /**
  * 判断一条运行时 DOM 文本是否包含 Mock fixture 注入的动态值。
  *
@@ -194,6 +299,14 @@ async function main() {
     .sort((a, b) => b.score - a.score || a.text.localeCompare(b.text));
 
   const oldSeen = [...existing].filter(text => primary.has(text));
+  const contextSidecar = buildContextSidecar({
+    primaryRows,
+    candidates,
+    sdkRows,
+    mockReport,
+    existingPackage,
+    staticReport
+  });
   const summary = {
     manifest: staticReport.manifest || null,
     staticResources: staticReport.fetchedTextResources || 0,
@@ -226,6 +339,7 @@ async function main() {
   await fs.writeFile(path.join(args.outDir, 'secondary-static.json'), JSON.stringify(secondaryRows, null, 2));
   await fs.writeFile(path.join(args.outDir, 'fixture-derived-runtime.json'), JSON.stringify(rejectedFixtureRuntimeText.sort((a, b) => a.localeCompare(b)), null, 2));
   await fs.writeFile(path.join(args.outDir, 'source-breakdown.json'), JSON.stringify(sourceBreakdown, null, 2));
+  await fs.writeFile(path.join(args.outDir, 'context-sidecar.json'), JSON.stringify(contextSidecar, null, 2));
   await fs.writeFile(path.join(args.outDir, 'report.json'), JSON.stringify(summary, null, 2));
   console.log(JSON.stringify(summary, null, 2));
 }
