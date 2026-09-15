@@ -125,9 +125,159 @@ function compactSourceExample(example) {
   const context = normalize(example?.context || '');
   return {
     source: String(example?.source || ''),
+    offset: Number.isFinite(example?.offset) ? example.offset : null,
     // 只保留翻译判断所需的一小段上下文，避免 sidecar 变成生产 bundle 的复制品。
     context: context.length > 420 ? `${context.slice(0, 417)}...` : context
   };
+}
+
+/**
+ * 把作者 i18n catalog 中的条目恢复为“同一文件内的相邻顺序”。
+ *
+ * 为什么要做这一步：
+ * 翻译人员真正需要的上下文通常不是 `Translation-xxx.js` 这个文件名，
+ * 而是“这句话前后还有哪些设置项/提示语”。生产 bundle 虽然被压缩了，
+ * 但字符串在同一个 catalog 对象里的顺序仍然稳定；Harvester 已保存 offset，
+ * 因此可以给每条文案找上一条和下一条，作为接近自然语言阅读体验的上下文。
+ */
+function buildCatalogNeighbors(candidates) {
+  const bySource = new Map();
+
+  for (const candidate of candidates || []) {
+    const text = normalize(candidate?.text);
+    if (!text) continue;
+    for (const example of candidate?.examples || []) {
+      if (classifySource(example?.source) !== 'english-catalog') continue;
+      if (!Number.isFinite(example?.offset)) continue;
+      const source = String(example.source || '');
+      const rows = bySource.get(source) || [];
+      rows.push({ text, offset: example.offset });
+      bySource.set(source, rows);
+    }
+  }
+
+  const neighbors = new Map();
+  for (const rows of bySource.values()) {
+    rows.sort((a, b) => a.offset - b.offset);
+    const deduped = [];
+    for (const row of rows) {
+      if (deduped.at(-1)?.text === row.text) continue;
+      deduped.push(row);
+    }
+    for (let index = 0; index < deduped.length; index++) {
+      const current = deduped[index];
+      if (neighbors.has(current.text)) continue;
+      neighbors.set(current.text, {
+        previous: deduped[index - 1]?.text || '',
+        next: deduped[index + 1]?.text || '',
+      });
+    }
+  }
+  return neighbors;
+}
+
+function humanizeMockPage(pageName) {
+  const raw = String(pageName || '').replace(/^nav:/i, '').trim();
+  const key = raw.toLowerCase();
+  const labels = {
+    main: '主界面',
+    spectre: 'Spectre 页面',
+    presets: '预设页面',
+    defaults: '默认值页面',
+    settings: '设置页面',
+    import: '导入与转换页面',
+  };
+  return labels[key] || raw;
+}
+
+function humanizeI18nArea(i18nKeys) {
+  const key = String(i18nKeys?.[0] || '');
+  if (!key) return '';
+  const [section, subsection] = key.split('.');
+  const sectionLabels = {
+    main: '主界面',
+    settings: '设置',
+    defaults: '默认值',
+    presets: '预设',
+    spectre: 'Spectre',
+    conversion: '导入与转换',
+    notice: '更新公告',
+    wallOps: '墙体操作',
+    doorOps: '门操作',
+    windowOps: '窗户操作',
+    vision: '视野',
+    fog: '迷雾',
+  };
+  const subsectionLabels = {
+    modal: '弹窗',
+    tooltips: '提示说明',
+    aria: '按钮/无障碍提示',
+    errors: '错误提示',
+  };
+  const first = sectionLabels[section] || '';
+  const second = subsectionLabels[subsection] || '';
+  return [first, second].filter(Boolean).join(' → ');
+}
+
+function humanizeSdkLocation(sdkRows) {
+  const ids = new Set((sdkRows || []).map(item => String(item?.messageId || '')));
+  if ([...ids].some(id => id.includes('CONTEXT_MENU'))) return 'Owlbear Rodeo 右键菜单';
+  if ([...ids].some(id => id.includes('TOOL_MODE'))) return 'Owlbear Rodeo 工具栏 → 工具模式';
+  if ([...ids].some(id => id.includes('TOOL_ACTION'))) return 'Owlbear Rodeo 工具栏 → 工具操作';
+  if ([...ids].some(id => id.includes('TOOL_CREATE'))) return 'Owlbear Rodeo 工具栏';
+  if ([...ids].some(id => id.includes('NOTIFICATION'))) return 'Owlbear Rodeo 通知';
+  if ([...ids].some(id => id.includes('MODAL'))) return 'Owlbear Rodeo 弹窗';
+  if ([...ids].some(id => id.includes('POPOVER'))) return 'Owlbear Rodeo 弹出面板';
+  return ids.size > 0 ? 'Owlbear Rodeo 宿主界面' : '';
+}
+
+function describePlaceholder(name) {
+  const labels = {
+    count: '数量',
+    name: '名称/玩家名',
+    message: '运行时提示或错误信息',
+    skippedText: '“已跳过”附加说明',
+    dedupeText: '“已去除重复项”附加说明',
+  };
+  return labels[name] || '运行时动态内容';
+}
+
+/**
+ * 生成直接给翻译人员看的自然语言上下文。
+ *
+ * sidecar 里仍保留 i18n key / SDK messageId / bundle source 等开发信息，
+ * 但这些字段不应该成为 ParaTranz 默认展示内容。这里专门把技术元数据翻译成：
+ * “出现在哪里、附近还有什么文案、占位符代表什么”。
+ */
+function buildTranslatorContext({ i18nKeys, sdk, mockPages, placeholders, neighbors }) {
+  const lines = [];
+  const pageLabels = [...new Set((mockPages || []).map(humanizeMockPage).filter(Boolean))];
+  const sdkLocation = humanizeSdkLocation(sdk);
+  const i18nArea = humanizeI18nArea(i18nKeys);
+
+  if (pageLabels.length > 0) {
+    lines.push(`出现位置：Smoke & Spectre → ${pageLabels.join(' / ')}`);
+  } else if (sdkLocation) {
+    lines.push(`出现位置：${sdkLocation}`);
+  } else if (i18nArea) {
+    lines.push(`出现位置：Smoke & Spectre → ${i18nArea}`);
+  } else {
+    lines.push('出现位置：Smoke & Spectre 界面');
+  }
+
+  const neighborParts = [];
+  if (neighbors?.previous) neighborParts.push(`上一条「${neighbors.previous}」`);
+  if (neighbors?.next) neighborParts.push(`下一条「${neighbors.next}」`);
+  if (neighborParts.length > 0) {
+    lines.push(`相邻文案：${neighborParts.join('；')}`);
+  }
+
+  if ((placeholders || []).length > 0) {
+    const descriptions = placeholders.map(name => `{{${name}}} 表示${describePlaceholder(name)}`);
+    lines.push(`变量说明：${descriptions.join('；')}。翻译时请原样保留变量名。`);
+  }
+
+  return lines.join('\n');
 }
 
 /**
@@ -136,6 +286,7 @@ function compactSourceExample(example) {
  */
 function buildContextSidecar({ primaryRows, candidates, sdkRows, mockReport, existingPackage, staticReport }) {
   const candidateByText = new Map(candidates.map(candidate => [normalize(candidate.text), candidate]));
+  const catalogNeighbors = buildCatalogNeighbors(candidates);
   const sdkByText = new Map();
   for (const row of sdkRows || []) {
     const text = normalize(row?.text);
@@ -174,6 +325,7 @@ function buildContextSidecar({ primaryRows, candidates, sdkRows, mockReport, exi
       .map(compactSourceExample);
     const sdk = sdkByText.get(text) || [];
     const mockPages = [...(mockPagesByText.get(text) || new Set())].sort();
+    const neighbors = catalogNeighbors.get(text) || { previous: '', next: '' };
 
     entries[text] = {
       kind: placeholders.length > 0 ? 'template' : 'literal',
@@ -182,13 +334,21 @@ function buildContextSidecar({ primaryRows, candidates, sdkRows, mockReport, exi
       i18nKeys: extractCatalogKeys(candidate, text),
       sdk,
       mockPages,
+      neighbors,
+      translatorContext: buildTranslatorContext({
+        i18nKeys: extractCatalogKeys(candidate, text),
+        sdk,
+        mockPages,
+        placeholders,
+        neighbors,
+      }),
       sources,
       examples
     };
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     packageId: String(existingPackage?.id || ''),
     manifestVersion: String(staticReport?.manifest?.version || ''),
     entries
