@@ -1,8 +1,8 @@
 {
   "smoke": {
-    "manifestVersion": "5.0.4",
-    "assetGraphHash": "b3da0a457583781b62d3a554eae1bfde9e70644ed2da2085b6bd86027271b9a4",
+    "manifestVersion": "5.0.5",
+    "assetGraphHash": "8bdb44d070e32bf1b13d6c2f06f5a69f1ec2e277a516be85f9f7ba837784e45f",
     "corpusHash": "83873f42e2ebccf4c383c0b9a25740322f2a1a551de73a6a72edba319c254854",
-    "lastChangedAt": "2026-09-25T06:10:25.276Z"
+    "lastChangedAt": "2026-10-11T07:12:29.603Z"
   }
 }
