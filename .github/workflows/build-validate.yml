@@ -69,6 +69,16 @@ jobs:
           console.log('Artifact and permission validation passed.');
           NODE
 
+      - name: Install Playwright Chromium for extension E2E
+        run: |
+          # Playwright 1.57+ 的 `channel: chromium` 使用完整 Chromium 新 headless，
+          # 可以加载 unpacked extension；普通 headless shell 不具备这个能力。
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.63.0
+          npx playwright install --with-deps --no-shell chromium
+
+      - name: Run OverlayLex browser E2E
+        run: node src/tools/overlaylex-browser-e2e.mjs
+
       - name: Package extensions
         run: |
           npm run zip:chrome
